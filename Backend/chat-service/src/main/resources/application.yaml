@@ -1,3 +1,23 @@
 spring:
   application:
     name: chat-service
+
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: unicall_chat_service
+      auto-index-creation: true
+
+server:
+  port: 8083
+  servlet:
+    context-path: /chat-service
+
+api:
+  prefix: /api/v1
+
+logging:
+  level:
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.mongodb.driver.protocol.command: DEBUG
