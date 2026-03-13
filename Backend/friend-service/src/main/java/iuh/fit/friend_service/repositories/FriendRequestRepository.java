@@ -13,18 +13,5 @@ import java.util.Optional;
 
 @Repository
 public interface FriendRequestRepository extends JpaRepository<FriendRequest, Integer> {
-    @Query("SELECT fr FROM FriendRequest fr WHERE fr.idAccountReceive = :idAccountReceive AND fr.status = 'SENT' AND (fr.firstName LIKE %:name% OR fr.lastName LIKE %:name%)")
-    Page<FriendRequest> findAllByIdAccountReceiveAndNotStatusAccepted(
-            @Param("idAccountReceive") int idAccountReceive,
-            @Param("name") String name,
-            Pageable pageable);
-    @Query("SELECT fr FROM FriendRequest fr " +
-            "WHERE fr.idAccountSent = :idAccountSent " +
-            "AND fr.idAccountReceive = :idAccountReceive " +
-            "ORDER BY fr.timeRequest DESC limit 1")
-    Optional<FriendRequest> findLatestFriendRequest(@Param("idAccountSent") int idAccountSent,
-                                                    @Param("idAccountReceive") int idAccountReceive);
-
-
 
 }
