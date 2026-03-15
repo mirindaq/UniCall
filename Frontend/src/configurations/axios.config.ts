@@ -1,26 +1,19 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios"
 import { toast } from "sonner"
-import { API_PREFIX } from "@/constants/api"
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080"
-const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? "/login"
+import { API_BASE_WITH_PREFIX, buildApiUrl } from "@/constants/api"
+import { AUTH_PATH } from "@/constants/auth"
+import { authTokenStore } from "@/stores/auth-token.store"
+import type { ResponseError, ResponseSuccess } from "@/types/api-response"
+import type { AccessTokenResponse } from "@/types/auth"
 
-const ACCESS_TOKEN_KEY = "accessToken"
-const REFRESH_TOKEN_KEY = "refreshToken"
-
-const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY)
-const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY)
-const setAccessToken = (token: string) => localStorage.setItem(ACCESS_TOKEN_KEY, token)
-const setRefreshToken = (token: string) => localStorage.setItem(REFRESH_TOKEN_KEY, token)
-const clearAuthData = () => {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
-}
+const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? AUTH_PATH.LOGIN
 
 const axiosClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_WITH_PREFIX,
   headers: { "Content-Type": "application/json" },
   timeout: 300000,
+  withCredentials: true,
 })
 
 let isRefreshing = false
@@ -40,9 +33,23 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = []
 }
 
+const redirectToLogin = () => {
+  authTokenStore.clear()
+  window.location.href = LOGIN_PATH
+}
+
+const isAuthRequest = (url?: string) =>
+  Boolean(
+    url?.includes("/auth/login") ||
+      url?.includes("/auth/register") ||
+      url?.includes("/auth/callback") ||
+      url?.includes("/auth/refresh") ||
+      url?.includes("/auth/logout")
+  )
+
 axiosClient.interceptors.request.use(
   (config) => {
-    const accessToken = getAccessToken()
+    const accessToken = authTokenStore.get()
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`
     }
@@ -68,27 +75,18 @@ axiosClient.interceptors.response.use(
     }
 
     if (status === 500) {
-      toast.error((error.response.data as { message?: string })?.message ?? "Loi server")
+      toast.error((error.response.data as ResponseError)?.message ?? "Loi server")
       return Promise.reject(error)
     }
 
     if (status === 409) {
-      toast.error((error.response.data as { message?: string })?.message ?? "Xung dot du lieu")
+      toast.error((error.response.data as ResponseError)?.message ?? "Xung dot du lieu")
       return Promise.reject(error)
     }
 
     if (status === 401) {
-      if (originalRequest.url?.includes("/auth/refresh-token") || originalRequest._retry) {
-        toast.error("Phien dang nhap da het han. Vui long dang nhap lai.")
-        clearAuthData()
-        window.location.href = LOGIN_PATH
-        return Promise.reject(error)
-      }
-
-      const refreshToken = getRefreshToken()
-      if (!refreshToken) {
-        clearAuthData()
-        window.location.href = LOGIN_PATH
+      if (isAuthRequest(originalRequest.url) || originalRequest._retry) {
+        redirectToLogin()
         return Promise.reject(error)
       }
 
@@ -109,10 +107,13 @@ axiosClient.interceptors.response.use(
       originalRequest._retry = true
 
       try {
-        const { data } = await axios.post(
-          `${API_BASE_URL}${API_PREFIX}/auth/refresh-token`,
-          { refreshToken },
-          { headers: { "Content-Type": "application/json" } }
+        const { data } = await axios.post<ResponseSuccess<AccessTokenResponse>>(
+          buildApiUrl("/auth/refresh"),
+          {},
+          {
+            withCredentials: true,
+            headers: { "Content-Type": "application/json" },
+          }
         )
 
         const newAccessToken = data?.data?.accessToken
@@ -120,12 +121,7 @@ axiosClient.interceptors.response.use(
           throw new Error("No access token in refresh response")
         }
 
-        setAccessToken(newAccessToken)
-        if (data?.data?.refreshToken) {
-          setRefreshToken(data.data.refreshToken)
-        }
-
-        axiosClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`
+        authTokenStore.set(newAccessToken)
         processQueue(null, newAccessToken)
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
@@ -133,8 +129,7 @@ axiosClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null)
         toast.error("Phien dang nhap da het han. Vui long dang nhap lai.")
-        clearAuthData()
-        window.location.href = LOGIN_PATH
+        redirectToLogin()
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

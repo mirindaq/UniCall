@@ -19,9 +19,9 @@ app:
     keycloak:
       server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
       realm: ${KEYCLOAK_REALM:unicall}
-      client-id: ${KEYCLOAK_CLIENT_ID:unicall-api}
-      client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+      client-id: ${KEYCLOAK_CLIENT_ID:unicall-client}
+      client-secret: ${KEYCLOAK_CLIENT_SECRET:BnaPyiYRiG0LP8sGdQNuCp1eZ32IFIya}
       redirect-uri: ${KEYCLOAK_REDIRECT_URI:http://localhost:8082/identity-service/api/v1/auth/callback}
       scope: ${KEYCLOAK_SCOPE:openid profile email}
-      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
-      admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:change-me}
+      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:unicall-admin-client}
+      admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:qEtqS9STfjKuzU99109MTtlZfCcL8UBi}
