@@ -1,3 +1,27 @@
 spring:
   application:
     name: identity-service
+
+server:
+  servlet:
+    context-path: /identity-service
+  port: 8082
+
+app:
+  prefix: ${API_PREFIX:/api/v1}
+  security:
+    frontend-callback-url: ${FRONTEND_CALLBACK_URL:http://localhost:5173/auth/callback}
+    cookie:
+      secure: ${COOKIE_SECURE:false}
+      same-site: ${COOKIE_SAME_SITE:Strict}
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    keycloak:
+      server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
+      realm: ${KEYCLOAK_REALM:unicall}
+      client-id: ${KEYCLOAK_CLIENT_ID:unicall-api}
+      client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+      redirect-uri: ${KEYCLOAK_REDIRECT_URI:http://localhost:8082/identity-service/api/v1/auth/callback}
+      scope: ${KEYCLOAK_SCOPE:openid profile email}
+      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+      admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:change-me}
