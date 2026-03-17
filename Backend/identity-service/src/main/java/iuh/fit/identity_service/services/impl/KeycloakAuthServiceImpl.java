@@ -1,21 +1,21 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.identity_service.clients.KeycloakIdentityClient;
+import iuh.fit.identity_service.clients.SignupSagaGrpcClient;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.KeycloakAuthService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     private final KeycloakIdentityClient keycloakIdentityClient;
+    private final SignupSagaGrpcClient signupSagaGrpcClient;
 
     @Value("${app.security.keycloak.server-url}")
     private String keycloakServerUrl;
@@ -34,29 +34,7 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
-        String userId = null;
-        try {
-            userId = keycloakIdentityClient.createUser(request);
-            return RegisterResponse.builder()
-                    .userId(userId)
-                    .phoneNumber(request.getPhoneNumber())
-                    .firstName(request.getFirstName())
-                    .lastName(request.getLastName())
-                    .gender(request.getGender())
-                    .dateOfBirth(request.getDateOfBirth())
-                    .message("Registration successful")
-                    .build();
-        } catch (RuntimeException ex) {
-            if (userId != null) {
-                try {
-                    keycloakIdentityClient.deleteUser(userId);
-                    log.warn("Rolled back Keycloak user {}", userId);
-                } catch (Exception rollbackEx) {
-                    log.error("Failed to rollback Keycloak user {}", userId, rollbackEx);
-                }
-            }
-            throw ex;
-        }
+        return signupSagaGrpcClient.register(request);
     }
 
     @Override

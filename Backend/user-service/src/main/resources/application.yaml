@@ -8,8 +8,8 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_user_service?createDatabaseIfNotExist=true
-    username: root
-    password: 1234
+    username: springstudent
+    password: springstudent
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -29,3 +29,7 @@ server:
   servlet:
     context-path: /user-service
   port: 8081
+
+grpc:
+  server:
+    port: ${USER_SERVICE_GRPC_PORT:9091}
