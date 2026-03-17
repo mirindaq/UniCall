@@ -1,0 +1,95 @@
+import { useMemo, useState } from "react"
+import { BellRing } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { groupInvitations } from "@/pages/user/friend_ship/friendship.data"
+import { SeedAvatar, ZeroDataState } from "@/pages/user/friend_ship/shared"
+
+const INITIAL_VISIBLE = 5
+
+export function GroupInvitationsTab() {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
+  const visibleInvitations = useMemo(
+    () => groupInvitations.slice(0, visibleCount),
+    [visibleCount],
+  )
+
+  if (groupInvitations.length === 0) {
+    return (
+      <ZeroDataState
+        title="Không có lời mời vào nhóm và cộng đồng"
+        description="Khi có nhóm hoặc cộng đồng mời bạn tham gia, lời mời sẽ hiển thị tại đây."
+      />
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-slate-200 px-4 py-5 lg:px-6">
+        <h3 className="text-2xl font-semibold text-slate-900">
+          Lời mời vào nhóm và cộng đồng ({groupInvitations.length})
+        </h3>
+      </div>
+
+      <div className="flex-1 overflow-auto px-4 py-4 lg:px-6">
+        <div className="grid gap-4 xl:grid-cols-2">
+          {visibleInvitations.map((invitation) => (
+            <Card
+              key={invitation.id}
+              className="gap-4 rounded-2xl border-0 bg-white py-4 shadow-none ring-1 ring-slate-200"
+            >
+              <CardContent className="space-y-4 px-4">
+                <div className="flex items-start gap-4">
+                  <SeedAvatar fallback={invitation.fallback} tone={invitation.tone} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-lg font-semibold text-slate-900">
+                        {invitation.communityName}
+                      </p>
+                      <Badge className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                        {invitation.typeLabel}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Được mời bởi <span className="font-medium text-slate-700">{invitation.invitedBy}</span>
+                    </p>
+                    <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+                      <BellRing className="size-4" />
+                      {invitation.members} thành viên
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="secondary"
+                    className="h-11 rounded-xl bg-slate-100 text-base font-semibold text-slate-700 hover:bg-slate-200"
+                  >
+                    Từ chối
+                  </Button>
+                  <Button className="h-11 rounded-xl bg-blue-600 text-base font-semibold text-white hover:bg-blue-700">
+                    Tham gia
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {visibleCount < groupInvitations.length ? (
+          <div className="mt-4 flex justify-center">
+            <Button
+              variant="secondary"
+              onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE)}
+              className="h-11 rounded-xl bg-slate-100 px-8 text-base font-semibold text-slate-700 hover:bg-slate-200"
+            >
+              Xem thêm
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
