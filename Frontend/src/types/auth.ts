@@ -1,6 +1,7 @@
 export interface RegisterRequest {
   phoneNumber: string
-  fullName: string
+  firstName: string
+  lastName: string
   gender: "MALE" | "FEMALE" | "OTHER"
   dateOfBirth: string
   password: string
@@ -9,7 +10,8 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   userId: string
   phoneNumber: string
-  fullName: string
+  firstName: string
+  lastName: string
   gender: "MALE" | "FEMALE" | "OTHER"
   dateOfBirth: string
   message: string

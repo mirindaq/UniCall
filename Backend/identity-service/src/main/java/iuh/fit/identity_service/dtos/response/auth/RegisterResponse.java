@@ -15,7 +15,8 @@ import java.time.LocalDate;
 public class RegisterResponse {
     private String userId;
     private String phoneNumber;
-    private String fullName;
+    private String firstName;
+    private String lastName;
     private String gender;
     private LocalDate dateOfBirth;
     private String message;

@@ -26,7 +26,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
     authService.refreshAccessToken()
       .then((response) => {
-        const token = response.data.data.accessToken
+        const token = response.data.accessToken
         if (!token) {
           throw new Error("Missing access token")
         }

@@ -16,7 +16,7 @@ export function AuthCallbackPage() {
     const bootstrapSession = async () => {
       try {
         const response = await authService.refreshAccessToken()
-        const accessToken = response.data.data.accessToken
+        const accessToken = response.data.accessToken
         if (!accessToken) {
           throw new Error("Missing access token")
         }

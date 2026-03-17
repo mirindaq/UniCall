@@ -189,8 +189,8 @@ public class KeycloakIdentityClient {
     private Map<String, Object> buildUser(RegisterRequest request) {
         Map<String, Object> user = new HashMap<>();
         user.put("username", request.getPhoneNumber());
-        user.put("firstName", request.getFullName());
-        user.put("lastName", "");
+        user.put("firstName", request.getFirstName());
+        user.put("lastName", request.getLastName());
         user.put("enabled", true);
         user.put("emailVerified", false);
         user.put("attributes", Map.of(

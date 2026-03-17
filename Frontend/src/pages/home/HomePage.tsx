@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
+import { ADMIN_PATH } from "@/constants/admin"
 import { AUTH_PATH } from "@/constants/auth"
 import { authService } from "@/services/auth/auth.service"
 import { authTokenStore } from "@/stores/auth-token.store"
@@ -35,6 +36,9 @@ export function HomePage() {
         </p>
 
         <div className="mt-6 flex items-center gap-3">
+          <Button onClick={() => navigate(`${ADMIN_PATH.ROOT}/${ADMIN_PATH.DASHBOARD}`)}>
+            Vao admin template
+          </Button>
           <Button variant="secondary" onClick={handleLogout}>
             Dang xuat
           </Button>

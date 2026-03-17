@@ -25,9 +25,13 @@ public class RegisterRequest {
     )
     private String phoneNumber;
 
-    @NotBlank(message = "Full name is required")
-    @Size(max = 150, message = "Full name cannot exceed 150 characters")
-    private String fullName;
+    @NotBlank(message = "First name is required")
+    @Size(max = 100, message = "First name cannot exceed 100 characters")
+    private String firstName;
+
+    @NotBlank(message = "Last name is required")
+    @Size(max = 100, message = "Last name cannot exceed 100 characters")
+    private String lastName;
 
     @NotBlank(message = "Gender is required")
     @Pattern(regexp = "^(MALE|FEMALE|OTHER)$", message = "Gender must be MALE, FEMALE, or OTHER")

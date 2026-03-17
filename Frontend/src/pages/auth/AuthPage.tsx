@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import type { AxiosError } from "axios"
 import { LogIn, UserPlus, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { useLocation, useNavigate } from "react-router"
@@ -11,7 +10,6 @@ import { AUTH_PATH } from "@/constants/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { RegisterRequest } from "@/types/auth"
-import type { ResponseError } from "@/types/api-response"
 
 type AuthTab = "login" | "register"
 
@@ -22,21 +20,17 @@ export function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [registerData, setRegisterData] = useState<RegisterRequest>({
     phoneNumber: "",
-    fullName: "",
+    firstName: "",
+    lastName: "",
     gender: "MALE",
     dateOfBirth: "",
     password: "",
   })
 
   const title = useMemo(() => {
-    return tab === "login" ? "Dang nhap UniCall" : "Dang ky tai khoan UniCall"
+    return tab === "login" ? "Đăng nhập UniCall" : "Đăng ký tài khoản UniCall"
   }, [tab])
 
-  const description = useMemo(() => {
-    return tab === "login"
-      ? "Dang nhap bang luong OAuth2 Authorization Code + PKCE qua identity-service (BFF)."
-      : "Tao tai khoan moi, du lieu duoc dong bo vao Keycloak bang Admin API."
-  }, [tab])
 
   useEffect(() => {
     if (location.pathname === AUTH_PATH.REGISTER) {
@@ -46,87 +40,78 @@ export function AuthPage() {
     setTab("login")
   }, [location.pathname])
 
-  const extractMessage = (error: unknown) => {
-    const axiosError = error as AxiosError<ResponseError>
-    return axiosError.response?.data?.message ?? "Co loi xay ra, vui long thu lai."
-  }
 
   const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSubmitting(true)
     try {
       const response = await authService.register(registerData)
-      toast.success(response.data.message || "Dang ky thanh cong")
+      toast.success(response.message || "Đăng ký thành công")
       navigate(AUTH_PATH.LOGIN)
-    } catch (error) {
-      toast.error(extractMessage(error))
+    } catch {
+      toast.error("Đăng ký thất bại, vui lòng thử lại.")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <main className="min-h-svh bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fafc_40%,#fef3c7_100%)] px-4 py-8">
-      <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-2xl border border-slate-200/70 bg-white/65 p-8 shadow-lg backdrop-blur-sm">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-sky-50 px-4 py-1 text-xs font-semibold tracking-wide text-sky-700 uppercase">
-            <ShieldCheck className="size-4" />
-            Keycloak BFF Auth
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[linear-gradient(145deg,#e0f2fe_0%,#f8fafc_48%,#dbeafe_100%)] px-4 py-8">
+      <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-sky-300/40 blur-3xl" />
+      <div className="pointer-events-none absolute -right-28 -bottom-28 h-80 w-80 rounded-full bg-blue-400/30 blur-3xl" />
+
+      <div className="w-full max-w-md">
+        <div className="mb-4 flex items-center justify-center gap-2 text-sky-700">
+          <div className="inline-flex size-12 items-center justify-center rounded-xl bg-sky-600 text-white shadow-sm">
+            <ShieldCheck className="size-9" />
           </div>
+          <p className="text-3xl font-semibold tracking-tight">UniCall</p>
+        </div>
 
-          <h1 className="text-3xl font-semibold text-slate-900 sm:text-4xl">UniCall Identity</h1>
-          <p className="mt-4 max-w-lg text-sm leading-relaxed text-slate-600">
-            Luong moi khong dung password grant. Frontend redirect sang Keycloak, identity-service exchange code,
-            giu refresh token trong HttpOnly cookie.
-          </p>
-
-          <div className="mt-8 grid gap-3 text-sm text-slate-700">
-            <p>- Dang nhap Keycloak: username = so dien thoai.</p>
-            <p>- Refresh token: HttpOnly Secure cookie.</p>
-            <p>- Frontend chi dung access token ngan han.</p>
-          </div>
-        </section>
-
-        <Card className="border-slate-200/80 bg-white/90 backdrop-blur">
+        <Card className="border-sky-100 bg-white/95 shadow-xl shadow-sky-200/40 backdrop-blur">
           <CardHeader>
-            <div className="mb-2 inline-flex rounded-lg bg-slate-100 p-1">
+            <div className="mb-2 inline-flex rounded-lg bg-sky-50 p-1">
               <Button
                 type="button"
                 variant={tab === "login" ? "default" : "ghost"}
-                className="h-8 px-4"
+                className="h-8 px-4 data-[state=active]:bg-sky-600"
                 onClick={() => navigate(AUTH_PATH.LOGIN)}
               >
                 <LogIn className="size-4" />
-                Dang nhap
+                Đăng nhập
               </Button>
               <Button
                 type="button"
                 variant={tab === "register" ? "default" : "ghost"}
-                className="h-8 px-4"
+                className="h-8 px-4 data-[state=active]:bg-sky-600"
                 onClick={() => navigate(AUTH_PATH.REGISTER)}
               >
                 <UserPlus className="size-4" />
-                Dang ky
+                Đăng ký
               </Button>
             </div>
             <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
+            <CardDescription>
+              {tab === "login"
+                ? "Đăng nhập nhanh qua Keycloak SSO."
+                : "Tạo tài khoản mới để bắt đầu sử dụng UniCall."}
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
             {tab === "login" ? (
               <div className="space-y-4">
                 <p className="text-sm text-slate-600">
-                  Bam nut ben duoi de bat dau dang nhap qua Keycloak. Ban se duoc redirect den trang SSO.
+                  Bấm nút bên dưới để bắt đầu đăng nhập qua Keycloak. Bạn sẽ được chuyển đến trang SSO.
                 </p>
-                <Button type="button" className="w-full" onClick={authService.redirectToLogin}>
-                  Dang nhap voi Keycloak
+                <Button type="button" className="w-full bg-sky-600 hover:bg-sky-700" onClick={authService.redirectToLogin}>
+                  Đăng nhập với Keycloak
                 </Button>
               </div>
             ) : (
               <form className="space-y-4" onSubmit={handleRegister}>
                 <div className="space-y-2">
-                  <Label htmlFor="register-phone">So dien thoai (username)</Label>
+                  <Label htmlFor="register-phone">Số điện thoại (username)</Label>
                   <Input
                     id="register-phone"
                     type="tel"
@@ -137,20 +122,32 @@ export function AuthPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="register-full-name">Ho va ten</Label>
-                  <Input
-                    id="register-full-name"
-                    placeholder="Nguyen Van A"
-                    value={registerData.fullName}
-                    onChange={(event) => setRegisterData({ ...registerData, fullName: event.target.value })}
-                    required
-                  />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-first-name">Tên</Label>
+                    <Input
+                      id="register-first-name"
+                      placeholder="Viet Hoang"
+                      value={registerData.firstName}
+                      onChange={(event) => setRegisterData({ ...registerData, firstName: event.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-last-name">Họ</Label>
+                    <Input
+                      id="register-last-name"
+                      placeholder="Giap"
+                      value={registerData.lastName}
+                      onChange={(event) => setRegisterData({ ...registerData, lastName: event.target.value })}
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="register-gender">Gioi tinh</Label>
+                    <Label htmlFor="register-gender">Giới tính</Label>
                     <select
                       id="register-gender"
                       value={registerData.gender}
@@ -164,13 +161,13 @@ export function AuthPage() {
                       required
                     >
                       <option value="MALE">Nam</option>
-                      <option value="FEMALE">Nu</option>
-                      <option value="OTHER">Khac</option>
+                      <option value="FEMALE">Nữ</option>
+                      <option value="OTHER">Khác</option>
                     </select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="register-date-of-birth">Ngay sinh</Label>
+                    <Label htmlFor="register-date-of-birth">Ngày sinh</Label>
                     <Input
                       id="register-date-of-birth"
                       type="date"
@@ -191,7 +188,7 @@ export function AuthPage() {
                   <Input
                     id="register-password"
                     type="password"
-                    placeholder="Toi thieu 6 ky tu"
+                    placeholder="Tối thiểu 6 ký tự"
                     value={registerData.password}
                     onChange={(event) => setRegisterData({ ...registerData, password: event.target.value })}
                     required
@@ -199,8 +196,8 @@ export function AuthPage() {
                   />
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Dang xu ly..." : "Tao tai khoan"}
+                <Button type="submit" className="w-full bg-sky-600 hover:bg-sky-700" disabled={isSubmitting}>
+                  {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
                 </Button>
               </form>
             )}
