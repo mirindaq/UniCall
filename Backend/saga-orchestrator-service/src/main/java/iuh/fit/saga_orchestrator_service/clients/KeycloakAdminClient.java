@@ -72,7 +72,7 @@ public class KeycloakAdminClient {
     }
 
     private String getAdminToken() {
-        Map<String, Object> tokenMap = keycloakWebClient.post()
+        Map tokenMap = keycloakWebClient.post()
                 .uri("/realms/{realm}/protocol/openid-connect/token", realm)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData("client_id", adminClientId)

@@ -3,6 +3,7 @@ package iuh.fit.identity_service.clients;
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -74,7 +75,7 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
-    private Map<String, Object> requestToken(BodyInserters.FormInserter<String> formData) {
+    private @Nullable Map requestToken(BodyInserters.FormInserter<String> formData) {
         BodyInserters.FormInserter<String> finalForm = formData;
         if (authClientSecret != null && !authClientSecret.isBlank()) {
             finalForm = finalForm.with("client_secret", authClientSecret);

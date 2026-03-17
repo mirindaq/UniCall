@@ -12,6 +12,7 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -29,7 +30,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
+            .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/api/v1/public/**").permitAll()
                 .anyRequest().authenticated()
@@ -47,12 +48,9 @@ public class SecurityConfig {
     }
 
     private Collection<GrantedAuthority> extractAuthorities(Jwt jwt) {
-        Set<GrantedAuthority> authorities = new HashSet<>();
         JwtGrantedAuthoritiesConverter defaultConverter = new JwtGrantedAuthoritiesConverter();
         Collection<GrantedAuthority> defaultAuthorities = defaultConverter.convert(jwt);
-        if (defaultAuthorities != null) {
-            authorities.addAll(defaultAuthorities);
-        }
+        Set<GrantedAuthority> authorities = new HashSet<>(defaultAuthorities);
 
         Map<String, Object> realmAccess = jwt.getClaim("realm_access");
         if (realmAccess != null) {
