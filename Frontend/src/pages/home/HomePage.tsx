@@ -5,6 +5,7 @@ import { useNavigate } from "react-router"
 import { Button } from "@/components/ui/button"
 import { ADMIN_PATH } from "@/constants/admin"
 import { AUTH_PATH } from "@/constants/auth"
+import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
 import { authTokenStore } from "@/stores/auth-token.store"
 
@@ -35,7 +36,10 @@ export function HomePage() {
           Ban da dang nhap thanh cong bang Keycloak. Co the tiep tuc xay dung dashboard/chuc nang nghiep vu tu day.
         </p>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex items-center gap-3 text-black">
+          <Button variant="outline" onClick={() => navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)}>
+            Vao user layout
+          </Button>
           <Button onClick={() => navigate(`${ADMIN_PATH.ROOT}/${ADMIN_PATH.DASHBOARD}`)}>
             Vao admin template
           </Button>
