@@ -1,7 +1,7 @@
 package iuh.fit.saga_orchestrator_service.services.impl;
 
 import iuh.fit.saga_orchestrator_service.clients.KeycloakAdminClient;
-import iuh.fit.saga_orchestrator_service.clients.UserRegistrationGrpcClient;
+import iuh.fit.saga_orchestrator_service.clients.GrpcUserClient;
 import iuh.fit.saga_orchestrator_service.services.SignupSagaOrchestrationService;
 import iuh.fit.unicall.grpc.saga.signup.v1.SignupSagaRequest;
 import iuh.fit.unicall.grpc.saga.signup.v1.SignupSagaResponse;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SignupSagaOrchestrationServiceImpl implements SignupSagaOrchestrationService {
     private final KeycloakAdminClient keycloakAdminClient;
-    private final UserRegistrationGrpcClient userRegistrationGrpcClient;
+    private final GrpcUserClient grpcUserClient;
 
     @Override
     public SignupSagaResponse register(SignupSagaRequest request) {
@@ -24,7 +24,7 @@ public class SignupSagaOrchestrationServiceImpl implements SignupSagaOrchestrati
 
         try {
             keycloakUserId = keycloakAdminClient.createUser(request);
-            userRegistrationGrpcClient.createUserProfile(
+            grpcUserClient.createUserProfile(
                     keycloakUserId,
                     request.getPhoneNumber(),
                     request.getFirstName(),
@@ -53,7 +53,7 @@ public class SignupSagaOrchestrationServiceImpl implements SignupSagaOrchestrati
     private void compensate(String keycloakUserId, boolean userProfileCreated) {
         if (userProfileCreated && keycloakUserId != null && !keycloakUserId.isBlank()) {
             try {
-                userRegistrationGrpcClient.deleteUserProfile(keycloakUserId);
+                grpcUserClient.deleteUserProfile(keycloakUserId);
                 log.warn("Compensated user profile for keycloakUserId={}", keycloakUserId);
             } catch (Exception compensationEx) {
                 log.error("Failed compensating user profile for keycloakUserId={}", keycloakUserId, compensationEx);

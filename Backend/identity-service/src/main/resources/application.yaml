@@ -9,6 +9,9 @@ server:
 
 app:
   prefix: ${API_PREFIX:/api/v1}
+  grpc:
+    saga-orchestrator:
+      deadline-ms: ${SAGA_ORCHESTRATOR_GRPC_DEADLINE_MS:5000}
   security:
     frontend-callback-url: ${FRONTEND_CALLBACK_URL:http://localhost:5173/auth/callback}
     cookie:
@@ -27,7 +30,7 @@ app:
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:qEtqS9STfjKuzU99109MTtlZfCcL8UBi}
 
 grpc:
-  saga-orchestrator:
-    host: ${SAGA_ORCHESTRATOR_GRPC_HOST:localhost}
-    port: ${SAGA_ORCHESTRATOR_GRPC_PORT:9096}
-    deadline-ms: ${SAGA_ORCHESTRATOR_GRPC_DEADLINE_MS:5000}
+  client:
+    saga-orchestrator:
+      address: static://${SAGA_ORCHESTRATOR_GRPC_HOST:localhost}:${SAGA_ORCHESTRATOR_GRPC_PORT:9096}
+      negotiationType: plaintext

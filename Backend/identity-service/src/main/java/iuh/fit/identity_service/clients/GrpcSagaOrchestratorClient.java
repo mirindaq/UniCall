@@ -7,29 +7,22 @@ import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.unicall.grpc.saga.signup.v1.SignupSagaRequest;
 import iuh.fit.unicall.grpc.saga.signup.v1.SignupSagaResponse;
 import iuh.fit.unicall.grpc.saga.signup.v1.SignupSagaServiceGrpc;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import jakarta.annotation.PreDestroy;
+import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class SignupSagaGrpcClient {
-    private final ManagedChannel channel;
-    private final SignupSagaServiceGrpc.SignupSagaServiceBlockingStub signupSagaStub;
+public class GrpcSagaOrchestratorClient {
+    @GrpcClient("saga-orchestrator")
+    private SignupSagaServiceGrpc.SignupSagaServiceBlockingStub signupSagaStub;
+
     private final long deadlineMs;
 
-    public SignupSagaGrpcClient(
-            @Value("${grpc.saga-orchestrator.host:localhost}") String host,
-            @Value("${grpc.saga-orchestrator.port:9096}") int port,
-            @Value("${grpc.saga-orchestrator.deadline-ms:5000}") long deadlineMs
-    ) {
-        this.channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
-        this.signupSagaStub = SignupSagaServiceGrpc.newBlockingStub(channel);
+    public GrpcSagaOrchestratorClient(@Value("${app.grpc.saga-orchestrator.deadline-ms:5000}") long deadlineMs) {
         this.deadlineMs = deadlineMs;
     }
 
@@ -77,10 +70,5 @@ public class SignupSagaGrpcClient {
         }
 
         return new RuntimeException(message, ex);
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        channel.shutdown();
     }
 }

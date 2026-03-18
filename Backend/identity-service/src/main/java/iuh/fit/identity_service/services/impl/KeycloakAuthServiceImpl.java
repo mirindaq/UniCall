@@ -1,7 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.identity_service.clients.KeycloakIdentityClient;
-import iuh.fit.identity_service.clients.SignupSagaGrpcClient;
+import iuh.fit.identity_service.clients.GrpcSagaOrchestratorClient;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
@@ -15,7 +15,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequiredArgsConstructor
 public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     private final KeycloakIdentityClient keycloakIdentityClient;
-    private final SignupSagaGrpcClient signupSagaGrpcClient;
+    private final GrpcSagaOrchestratorClient grpcSagaOrchestratorClient;
 
     @Value("${app.security.keycloak.server-url}")
     private String keycloakServerUrl;
@@ -34,7 +34,7 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
-        return signupSagaGrpcClient.register(request);
+        return grpcSagaOrchestratorClient.register(request);
     }
 
     @Override

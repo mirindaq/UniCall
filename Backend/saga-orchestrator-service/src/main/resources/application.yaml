@@ -6,6 +6,9 @@ server:
   port: 8086
 
 app:
+  grpc:
+    user-service:
+      deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:3000}
   security:
     keycloak:
       server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
@@ -16,7 +19,7 @@ app:
 grpc:
   server:
     port: ${SAGA_ORCHESTRATOR_GRPC_PORT:9096}
-  user-service:
-    host: ${USER_SERVICE_GRPC_HOST:localhost}
-    port: ${USER_SERVICE_GRPC_PORT:9091}
-    deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:3000}
+  client:
+    user-service:
+      address: static://${USER_SERVICE_GRPC_HOST:localhost}:${USER_SERVICE_GRPC_PORT:9091}
+      negotiationType: plaintext

@@ -3,31 +3,26 @@ package iuh.fit.saga_orchestrator_service.clients;
 import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
+import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileRequest;
+import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.UserRegistrationServiceGrpc;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import jakarta.annotation.PreDestroy;
+import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class UserRegistrationGrpcClient {
-    private final ManagedChannel channel;
-    private final UserRegistrationServiceGrpc.UserRegistrationServiceBlockingStub userRegistrationStub;
+public class GrpcUserClient {
+    @GrpcClient("user-service")
+    private UserRegistrationServiceGrpc.UserRegistrationServiceBlockingStub userStub;
+
     private final long deadlineMs;
 
-    public UserRegistrationGrpcClient(
-            @Value("${grpc.user-service.host:localhost}") String host,
-            @Value("${grpc.user-service.port:9091}") int port,
-            @Value("${grpc.user-service.deadline-ms:3000}") long deadlineMs
-    ) {
-        this.channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
-        this.userRegistrationStub = UserRegistrationServiceGrpc.newBlockingStub(channel);
+    public GrpcUserClient(@Value("${app.grpc.user-service.deadline-ms:3000}") long deadlineMs) {
         this.deadlineMs = deadlineMs;
     }
 
@@ -48,9 +43,12 @@ public class UserRegistrationGrpcClient {
                 .setDateOfBirth(dateOfBirth)
                 .build();
         try {
-            userRegistrationStub
+            CreateUserProfileResponse response = userStub
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .createUserProfile(request);
+            if (response.getId() <= 0) {
+                throw new RuntimeException("User service returned invalid profile id");
+            }
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
         }
@@ -61,9 +59,12 @@ public class UserRegistrationGrpcClient {
                 .setIdentityUserId(identityUserId)
                 .build();
         try {
-            userRegistrationStub
+            DeleteUserProfileResponse response = userStub
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .deleteUserProfile(request);
+            if (!response.getDeleted()) {
+                throw new RuntimeException("User service did not delete user profile");
+            }
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
         }
@@ -85,10 +86,5 @@ public class UserRegistrationGrpcClient {
         }
 
         return new RuntimeException(message, ex);
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        channel.shutdown();
     }
 }
