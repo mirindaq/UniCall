@@ -14,21 +14,22 @@ import { messageStorageFileGroups } from "@/mock/message-data"
 
 export default function StorageFiles() {
   return (
-    <div className="flex flex-col">
+    // Đổi thẻ div ngoài cùng
+    <div className="flex w-full min-w-0 flex-col">
       <div className="p-3 pb-2">
         <div className="relative mb-3 flex items-center">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Tim kiem file" className="rounded-full pl-9" />
+          <Input placeholder="Tìm kiếm file" className="rounded-full pl-9" />
         </div>
         <div className="custom-scrollbar flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">
           <Button variant="secondary" className="h-8 rounded-full">
-            Loai <ChevronDown className="h-4 w-4" />
+            Loại <ChevronDown className="h-4 w-4" />
           </Button>
           <Button variant="secondary" className="h-8 rounded-full">
-            Nguoi gui <ChevronDown className="h-4 w-4" />
+            Người gửi <ChevronDown className="h-4 w-4" />
           </Button>
           <Button variant="secondary" className="h-8 rounded-full">
-            Ngay gui <ChevronDown className="h-4 w-4" />
+            Ngày gửi <ChevronDown className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -62,25 +63,25 @@ export default function StorageFiles() {
                   {file.state === "saved" && (
                     <Badge
                       variant="secondary"
-                      className="h-4 rounded-sm px-1 text-[10px] text-green-700"
+                      className="h-4 rounded-sm px-1 text-[11px] text-green-700"
                     >
-                      Da co tren may
+                      Đã có trên máy
                     </Badge>
                   )}
                   {file.state === "download" && (
                     <Badge
                       variant="secondary"
-                      className="h-4 rounded-sm px-1 text-[10px] text-blue-700"
+                      className="h-4 rounded-sm px-1 text-[11px] text-blue-700"
                     >
-                      Tai ve de xem lau dai
+                      Tải về để xem lâu dài
                     </Badge>
                   )}
                   {file.state === "missing" && (
                     <Badge
                       variant="outline"
-                      className="h-4 rounded-sm px-1 text-[10px]"
+                      className="h-4 rounded-sm px-1 text-[11px]"
                     >
-                      File khong ton tai
+                      File không tồn tại
                     </Badge>
                   )}
                 </div>

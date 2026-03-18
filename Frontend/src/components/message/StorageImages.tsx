@@ -12,13 +12,13 @@ export default function StorageImages() {
           variant="secondary"
           className="h-8 flex-1 justify-between rounded-full"
         >
-          Nguoi gui <ChevronDown className="h-4 w-4" />
+          Người gửi <ChevronDown className="h-4 w-4" />
         </Button>
         <Button
           variant="secondary"
           className="h-8 flex-1 justify-between rounded-full"
         >
-          Ngay gui <ChevronDown className="h-4 w-4" />
+          Ngày gửi <ChevronDown className="h-4 w-4" />
         </Button>
       </div>
 
@@ -31,7 +31,7 @@ export default function StorageImages() {
           <div className="grid grid-cols-3 gap-1">
             {group.images.length === 0 && (
               <div className="flex aspect-square w-full items-center justify-center rounded border bg-muted text-xs text-muted-foreground">
-                Khong co anh
+                Không tồn tại
               </div>
             )}
             {group.images.map((image) => (

@@ -30,14 +30,14 @@ export default function ChatSidebar() {
           <div className="relative flex-1">
             <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="TÃƒÂ¬m kiÃ¡ÂºÂ¿m"
+              placeholder="Tìm kiếm"
               className="border-transparent bg-muted pl-9"
             />
           </div>
-          <Button variant="ghost" size="icon-sm" title="ThÃƒÂªm bÃ¡ÂºÂ¡n">
+          <Button variant="ghost" size="icon-sm" title="Thêm bạn">
             <UserPlus className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="TÃ¡ÂºÂ¡o nhÃƒÂ³m">
+          <Button variant="ghost" size="icon-sm" title="Tạo nhóm">
             <Users className="h-5 w-5" />
           </Button>
         </div>
@@ -50,16 +50,16 @@ export default function ChatSidebar() {
           >
             <TabsList variant="line" className="h-9 p-0">
               <TabsTrigger value="all" className="px-2">
-                TÃ¡ÂºÂ¥t cÃ¡ÂºÂ£
+                Tất cả
               </TabsTrigger>
               <TabsTrigger value="unread" className="px-2">
-                ChÃ†Â°a Ã„â€˜Ã¡Â»Âc
+                Chưa đọc
               </TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-1 text-xs">
             <Button variant="ghost" size="sm" className="h-8">
-              PhÃƒÂ¢n loÃ¡ÂºÂ¡i{" "}
+              Phân loại
               <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
             </Button>
             <Button variant="ghost" size="icon-sm">
@@ -98,7 +98,7 @@ export default function ChatSidebar() {
                     {chat.lastMessage}
                   </p>
                   {chat.unread > 0 && (
-                    <Badge className="min-w-[18px] justify-center rounded-full px-1.5 py-0.5 text-[10px]">
+                    <Badge className="min-w-[18px] justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px]">
                       {chat.unread > 5 ? "5+" : chat.unread}
                     </Badge>
                   )}

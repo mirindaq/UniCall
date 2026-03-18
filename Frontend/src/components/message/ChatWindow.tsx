@@ -45,42 +45,28 @@ export default function ChatWindow() {
           </Avatar>
           <div>
             <h2 className="text-base font-semibold text-foreground">
-              NguyÃ¡Â»â€¦n Ã„ÂÃ¡Â»Â©c HÃƒÂ¹ng
+              Nguyễn Đức Hùng
             </h2>
-            <p className="text-xs text-green-500">
-              VÃ¡Â»Â«a mÃ¡Â»â€ºi truy cÃ¡ÂºÂ­p
-            </p>
+            <p className="text-xs text-green-500">Vừa mới truy cập</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="TÃƒÂ¬m kiÃ¡ÂºÂ¿m tin nhÃ¡ÂºÂ¯n"
-          >
+          <Button variant="ghost" size="icon-sm" title="Tìm kiếm">
             <Search className="h-5 w-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="CuÃ¡Â»â„¢c gÃ¡Â»Âi thoÃ¡ÂºÂ¡i"
-          >
+          <Button variant="ghost" size="icon-sm" title="Cuộc gọi thoại">
             <Phone className="h-5 w-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="CuÃ¡Â»â„¢c gÃ¡Â»Âi video"
-          >
+          <Button variant="ghost" size="icon-sm" title="Cuộc gọi video">
             <Video className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
             className="text-primary"
-            title="ThÃƒÂ´ng tin hÃ¡Â»â„¢i thoÃ¡ÂºÂ¡i"
+            title="Thông tin hội thoại"
           >
-            <PanelRight className="h-5 w-5" />
+            <PanelRight className="h-5 w-5 text-blue-600" />
           </Button>
         </div>
       </div>
@@ -120,7 +106,7 @@ export default function ChatWindow() {
                   </div>
                 ) : (
                   <div className="flex w-64 items-center gap-3 rounded-lg border bg-background p-3 shadow-xs">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary p-2 text-sm font-bold text-primary-foreground">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-blue-600 p-2 text-sm font-bold text-primary-foreground">
                       W
                     </div>
                     <div className="overflow-hidden">
@@ -144,13 +130,13 @@ export default function ChatWindow() {
 
       <div className="shrink-0 border-t bg-background p-3">
         <div className="mb-2 flex gap-1">
-          <Button variant="ghost" size="icon-sm" title="GÃ¡Â»Â­i sticker">
+          <Button variant="ghost" size="icon-sm" title="Gửi sticker">
             <Sticker className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="GÃ¡Â»Â­i Ã¡ÂºÂ£nh">
+          <Button variant="ghost" size="icon-sm" title="Gửi ảnh">
             <ImageIcon className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Ã„ÂÃƒÂ­nh kÃƒÂ¨m file">
+          <Button variant="ghost" size="icon-sm" title="Đính kèm tệp">
             <Paperclip className="h-5 w-5" />
           </Button>
         </div>
@@ -160,7 +146,7 @@ export default function ChatWindow() {
             <Textarea
               ref={textareaRef}
               onInput={handleInput}
-              placeholder="NhÃ¡ÂºÂ­p @, tin nhÃ¡ÂºÂ¯n tÃ¡Â»â€ºi NguyÃ¡Â»â€¦n Ã„ÂÃ¡Â»Â©c HÃƒÂ¹ng"
+              placeholder="Nhập tin nhắn tới Nguyễn Đức Hùng"
               rows={1}
               className="custom-scrollbar max-h-32 min-h-[38px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
@@ -169,13 +155,13 @@ export default function ChatWindow() {
               variant="ghost"
               size="icon-sm"
               className="mb-1 ml-1"
-              title="ChÃ¡Â»Ân biÃ¡Â»Æ’u tÃ†Â°Ã¡Â»Â£ng cÃ¡ÂºÂ£m xÃƒÂºc"
+              title="Biểu cảm"
             >
               <Smile className="h-5 w-5" />
             </Button>
           </div>
 
-          <Button size="icon" className="rounded-full" title="GÃ¡Â»Â­i">
+          <Button size="icon" className="rounded-full bg-blue-600" title="Gửi">
             <Send className="h-4 w-4" />
           </Button>
         </div>

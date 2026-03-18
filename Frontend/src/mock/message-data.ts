@@ -78,14 +78,14 @@ export const messageInfoPreviewFiles = [
     name: "NhomKTPM.docx",
     size: "276 KB",
     time: "Hôm qua",
-    icon: "DOCX",
+    icon: "W",
     color: "bg-blue-500",
   },
   {
     name: "hehe.docx",
     size: "624 KB",
     time: "09/03/2026",
-    icon: "DOCX",
+    icon: "W",
     color: "bg-blue-500",
   },
   {
