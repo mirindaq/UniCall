@@ -1,16 +1,17 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios"
 import { toast } from "sonner"
 
-import { API_BASE_WITH_PREFIX, buildApiUrl } from "@/constants/api"
+import { API_BASE_URL, buildApiUrl } from "@/constants/api"
 import { AUTH_PATH } from "@/constants/auth"
 import { authTokenStore } from "@/stores/auth-token.store"
 import type { ResponseError, ResponseSuccess } from "@/types/api-response"
 import type { AccessTokenResponse } from "@/types/auth"
 
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? AUTH_PATH.LOGIN
+const AUTH_API_PREFIX = "/identity-service/api/v1/auth"
 
 const axiosClient = axios.create({
-  baseURL: API_BASE_WITH_PREFIX,
+  baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
   timeout: 300000,
   withCredentials: true,
@@ -40,11 +41,10 @@ const redirectToLogin = () => {
 
 const isAuthRequest = (url?: string) =>
   Boolean(
-    url?.includes("/auth/login") ||
-      url?.includes("/auth/register") ||
-      url?.includes("/auth/callback") ||
-      url?.includes("/auth/refresh") ||
-      url?.includes("/auth/logout")
+    url?.includes(`${AUTH_API_PREFIX}/login`) ||
+      url?.includes(`${AUTH_API_PREFIX}/register`) ||
+      url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
+      url?.includes(`${AUTH_API_PREFIX}/logout`)
   )
 
 axiosClient.interceptors.request.use(
@@ -108,7 +108,7 @@ axiosClient.interceptors.response.use(
 
       try {
         const { data } = await axios.post<ResponseSuccess<AccessTokenResponse>>(
-          buildApiUrl("/auth/refresh"),
+          buildApiUrl(`${AUTH_API_PREFIX}/refresh`),
           {},
           {
             withCredentials: true,

@@ -4,27 +4,27 @@ package unicall.saga.signup.v1;
 
 option java_multiple_files = true;
 option java_package = "iuh.fit.unicall.grpc.saga.signup.v1";
-option java_outer_classname = "SignupSagaProto";
+option java_outer_classname = "UserProto";
 
-service SignupSagaService {
-  rpc RegisterUser(SignupSagaRequest) returns (SignupSagaResponse);
+service UserService {
+  rpc RegisterUser(UserRequest) returns (UserResponse);
 }
 
-message SignupSagaRequest {
-  string phone_number = 1;
-  string first_name = 2;
-  string last_name = 3;
-  string gender = 4;
-  string date_of_birth = 5;
-  string password = 6;
-}
-
-message SignupSagaResponse {
-  string user_id = 1;
-  string phone_number = 2;
-  string first_name = 3;
-  string last_name = 4;
+message UserRequest {
+  string identityUserId = 1;
+  string phoneNumber = 2;
+  string firstName = 3;
+  string lastName = 4;
   string gender = 5;
-  string date_of_birth = 6;
+  string dateOfBirth = 6;
+}
+
+message UserResponse {
+  string userId = 1;
+  string phoneNumber = 2;
+  string firstName = 3;
+  string lastName = 4;
+  string gender = 5;
+  string dateOfBirth = 6;
   string message = 7;
 }

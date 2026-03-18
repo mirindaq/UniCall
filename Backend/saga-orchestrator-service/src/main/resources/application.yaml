@@ -3,20 +3,21 @@ spring:
     name: saga-orchestrator-service
 
 server:
+  servlet:
+    context-path: /saga-orchestrator-service
   port: 8086
 
-app:
-  security:
-    keycloak:
-      server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
-      realm: ${KEYCLOAK_REALM:unicall}
-      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:unicall-admin-client}
-      admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:qEtqS9STfjKuzU99109MTtlZfCcL8UBi}
-
 grpc:
+  client:
+    user-service:
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
+      negotiationType: plaintext
   server:
     port: ${SAGA_ORCHESTRATOR_GRPC_PORT:9096}
   user-service:
-    host: ${USER_SERVICE_GRPC_HOST:localhost}
-    port: ${USER_SERVICE_GRPC_PORT:9091}
     deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:3000}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}

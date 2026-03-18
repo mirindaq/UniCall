@@ -7,6 +7,11 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface LoginRequest {
+  phoneNumber: string
+  password: string
+}
+
 export interface RegisterResponse {
   userId: string
   phoneNumber: string

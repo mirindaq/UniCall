@@ -5,7 +5,7 @@ import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileResponse;
-import iuh.fit.unicall.grpc.user.v1.UserRegistrationServiceGrpc;
+import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import iuh.fit.user_service.services.UserProfileService;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -17,7 +17,7 @@ import java.time.format.DateTimeParseException;
 
 @Component
 @RequiredArgsConstructor
-public class UserRegistrationGrpcService extends UserRegistrationServiceGrpc.UserRegistrationServiceImplBase {
+public class GrpcUserService extends UserServiceGrpc.UserServiceImplBase {
     private final UserProfileService userProfileService;
 
     @Override
@@ -44,7 +44,7 @@ public class UserRegistrationGrpcService extends UserRegistrationServiceGrpc.Use
         } catch (ConflictException ex) {
             responseObserver.onError(Status.ALREADY_EXISTS.withDescription(ex.getMessage()).asRuntimeException());
         } catch (DateTimeParseException ex) {
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Invalid date_of_birth format").asRuntimeException());
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Invalid dateOfBirth format").asRuntimeException());
         } catch (Exception ex) {
             responseObserver.onError(Status.INTERNAL.withDescription("Unable to create user profile").asRuntimeException());
         }
