@@ -1,5 +1,9 @@
 import { ChevronLeft } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import StorageFiles from "./StorageFiles"
 import StorageImages from "./StorageImages"
 import StorageLinks from "./StorageLinks"
@@ -16,49 +20,53 @@ export default function ChatStorage({
   setActiveTab,
 }: ChatStorageProps) {
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-gray-200 bg-white">
-      {/* Header Kho lưu trữ */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4">
-        <button
-          onClick={onBack}
-          className="rounded p-1 text-gray-600 transition hover:bg-gray-100"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </button>
-        <h2 className="text-base font-semibold text-gray-800">Kho lưu trữ</h2>
-        <button className="text-sm font-medium text-blue-600 hover:text-blue-700">
-          Chọn
-        </button>
+    <div className="flex h-full w-[340px] shrink-0 flex-col border-l bg-background">
+      <div className="flex shrink-0 items-center justify-between border-b px-4 py-4">
+        <Button onClick={onBack} variant="ghost" size="icon">
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <h2 className="text-base font-semibold text-foreground">
+          Kho lÆ°u trá»¯
+        </h2>
+        <Button variant="ghost" className="text-primary">
+          Chá»n
+        </Button>
       </div>
 
-      {/* Tabs Kho lưu trữ */}
-      <div className="flex shrink-0 border-b border-gray-200 px-2">
-        <button
-          onClick={() => setActiveTab("images")}
-          className={`flex-1 border-b-2 py-3 text-sm font-medium transition-colors ${activeTab === "images" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as "images" | "files" | "links")
+        }
+        className="h-full"
+      >
+        <TabsList
+          variant="line"
+          className="h-auto w-full rounded-none border-b bg-transparent p-0"
         >
-          Ảnh/Video
-        </button>
-        <button
-          onClick={() => setActiveTab("files")}
-          className={`flex-1 border-b-2 py-3 text-sm font-medium transition-colors ${activeTab === "files" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-        >
-          Files
-        </button>
-        <button
-          onClick={() => setActiveTab("links")}
-          className={`flex-1 border-b-2 py-3 text-sm font-medium transition-colors ${activeTab === "links" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-        >
-          Links
-        </button>
-      </div>
+          <TabsTrigger value="images" className="rounded-none py-3">
+            áº¢nh/Video
+          </TabsTrigger>
+          <TabsTrigger value="files" className="rounded-none py-3">
+            Files
+          </TabsTrigger>
+          <TabsTrigger value="links" className="rounded-none py-3">
+            Links
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Nội dung cuộn của Kho lưu trữ */}
-      <div className="custom-scrollbar flex-1 overflow-y-auto">
-        {activeTab === "images" && <StorageImages />}
-        {activeTab === "files" && <StorageFiles />}
-        {activeTab === "links" && <StorageLinks />}
-      </div>
+        <ScrollArea className="h-[calc(100%-49px)]">
+          <TabsContent value="images">
+            <StorageImages />
+          </TabsContent>
+          <TabsContent value="files">
+            <StorageFiles />
+          </TabsContent>
+          <TabsContent value="links">
+            <StorageLinks />
+          </TabsContent>
+        </ScrollArea>
+      </Tabs>
     </div>
   )
 }
