@@ -4,29 +4,29 @@ package unicall.user.v1;
 
 option java_multiple_files = true;
 option java_package = "iuh.fit.unicall.grpc.user.v1";
-option java_outer_classname = "UserRegistrationProto";
+option java_outer_classname = "UserProto";
 
-service UserRegistrationService {
+service UserService {
   rpc CreateUserProfile(CreateUserProfileRequest) returns (CreateUserProfileResponse);
   rpc DeleteUserProfile(DeleteUserProfileRequest) returns (DeleteUserProfileResponse);
 }
 
 message CreateUserProfileRequest {
-  string identity_user_id = 1;
-  string phone_number = 2;
-  string first_name = 3;
-  string last_name = 4;
+  string identityUserId = 1;
+  string phoneNumber = 2;
+  string firstName = 3;
+  string lastName = 4;
   string gender = 5;
-  string date_of_birth = 6;
+  string dateOfBirth = 6;
 }
 
 message CreateUserProfileResponse {
   int64 id = 1;
-  string identity_user_id = 2;
+  string identityUserId = 2;
 }
 
 message DeleteUserProfileRequest {
-  string identity_user_id = 1;
+  string identityUserId = 1;
 }
 
 message DeleteUserProfileResponse {

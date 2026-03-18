@@ -1,11 +1,6 @@
 spring:
   application:
     name: user-service
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_user_service?createDatabaseIfNotExist=true
     username: springstudent
@@ -21,10 +16,6 @@ spring:
     open-in-view: false
 api:
   prefix: /api/v1
-app:
-  security:
-    keycloak:
-      client-id: ${KEYCLOAK_CLIENT_ID:unicall-api}
 server:
   servlet:
     context-path: /user-service
@@ -33,3 +24,8 @@ server:
 grpc:
   server:
     port: ${USER_SERVICE_GRPC_PORT:9091}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}

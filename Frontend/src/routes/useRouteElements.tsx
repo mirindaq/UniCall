@@ -13,7 +13,6 @@ import { AdminModerationPage } from "@/pages/admin/AdminModerationPage"
 import { AdminReportsPage } from "@/pages/admin/AdminReportsPage"
 import { AdminSupportPage } from "@/pages/admin/AdminSupportPage"
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage"
-import { AuthCallbackPage } from "@/pages/auth/AuthCallbackPage"
 import { AuthPage } from "@/pages/auth/AuthPage"
 import { HomePage } from "@/pages/home/HomePage"
 import { UserChatPage } from "@/pages/user/UserChatPage"
@@ -43,10 +42,6 @@ export default function useRouteElements() {
           <AuthPage />
         </GuestRoute>
       ),
-    },
-    {
-      path: AUTH_PATH.CALLBACK,
-      element: <AuthCallbackPage />,
     },
     {
       path: AUTH_PATH.HOME,
