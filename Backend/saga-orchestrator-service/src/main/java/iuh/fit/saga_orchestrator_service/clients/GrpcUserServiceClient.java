@@ -6,7 +6,7 @@ import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileResponse;
-import iuh.fit.unicall.grpc.user.v1.UserRegistrationServiceGrpc;
+import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import net.devh.boot.grpc.client.inject.GrpcClient;
@@ -16,13 +16,13 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class GrpcUserClient {
+public class GrpcUserServiceClient {
     @GrpcClient("user-service")
-    private UserRegistrationServiceGrpc.UserRegistrationServiceBlockingStub userStub;
+    private UserServiceGrpc.UserServiceBlockingStub userStub;
 
     private final long deadlineMs;
 
-    public GrpcUserClient(@Value("${app.grpc.user-service.deadline-ms:3000}") long deadlineMs) {
+    public GrpcUserServiceClient(@Value("${grpc.user-service.deadline-ms:3000}") long deadlineMs) {
         this.deadlineMs = deadlineMs;
     }
 
@@ -46,8 +46,8 @@ public class GrpcUserClient {
             CreateUserProfileResponse response = userStub
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .createUserProfile(request);
-            if (response.getId() <= 0) {
-                throw new RuntimeException("User service returned invalid profile id");
+            if (response.getIdentityUserId().isBlank()) {
+                throw new RuntimeException("User service returned an empty identityUserId");
             }
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
@@ -63,7 +63,7 @@ public class GrpcUserClient {
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .deleteUserProfile(request);
             if (!response.getDeleted()) {
-                throw new RuntimeException("User service did not delete user profile");
+                throw new RuntimeException("User service did not confirm profile deletion");
             }
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);

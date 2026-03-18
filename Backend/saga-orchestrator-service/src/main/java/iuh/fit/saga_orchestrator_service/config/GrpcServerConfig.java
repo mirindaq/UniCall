@@ -1,6 +1,6 @@
 package iuh.fit.saga_orchestrator_service.config;
 
-import iuh.fit.saga_orchestrator_service.grpc.SignupSagaGrpcService;
+import iuh.fit.saga_orchestrator_service.grpc.GrpcUserService;
 import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,10 +13,10 @@ public class GrpcServerConfig {
     @Bean(initMethod = "start", destroyMethod = "shutdown")
     public Server grpcServer(
             @Value("${grpc.server.port:9096}") int grpcPort,
-            SignupSagaGrpcService signupSagaGrpcService
+            GrpcUserService grpcUserService
     ) {
         return NettyServerBuilder.forPort(grpcPort)
-                .addService(signupSagaGrpcService)
+                .addService(grpcUserService)
                 .build();
     }
 }

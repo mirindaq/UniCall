@@ -7,9 +7,7 @@ import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 public interface KeycloakAuthService {
     RegisterResponse register(RegisterRequest request);
 
-    String buildAuthorizationUrl(String state, String codeChallenge);
-
-    AuthTokenResponse exchangeAuthorizationCode(String code, String codeVerifier);
+    AuthTokenResponse login(String phoneNumber, String password);
 
     AuthTokenResponse refreshToken(String refreshToken);
 

@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AUTH_PATH } from "@/constants/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { RegisterRequest } from "@/types/auth"
+import { authTokenStore } from "@/stores/auth-token.store"
+import type { LoginRequest, RegisterRequest } from "@/types/auth"
 
 type AuthTab = "login" | "register"
 
@@ -18,6 +19,10 @@ export function AuthPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<AuthTab>("login")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loginData, setLoginData] = useState<LoginRequest>({
+    phoneNumber: "",
+    password: "",
+  })
   const [registerData, setRegisterData] = useState<RegisterRequest>({
     phoneNumber: "",
     firstName: "",
@@ -31,7 +36,6 @@ export function AuthPage() {
     return tab === "login" ? "Đăng nhập UniCall" : "Đăng ký tài khoản UniCall"
   }, [tab])
 
-
   useEffect(() => {
     if (location.pathname === AUTH_PATH.REGISTER) {
       setTab("register")
@@ -39,7 +43,6 @@ export function AuthPage() {
     }
     setTab("login")
   }, [location.pathname])
-
 
   const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -50,6 +53,26 @@ export function AuthPage() {
       navigate(AUTH_PATH.LOGIN)
     } catch {
       toast.error("Đăng ký thất bại, vui lòng thử lại.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsSubmitting(true)
+    try {
+      const response = await authService.login(loginData)
+      const accessToken = response.data.accessToken
+      if (!accessToken) {
+        throw new Error("Missing access token")
+      }
+      authTokenStore.set(accessToken)
+      toast.success(response.message || "Đăng nhập thành công")
+      navigate(AUTH_PATH.HOME)
+    } catch {
+      authTokenStore.clear()
+      toast.error("Đăng nhập thất bại, vui lòng kiểm tra số điện thoại và mật khẩu.")
     } finally {
       setIsSubmitting(false)
     }
@@ -93,21 +116,40 @@ export function AuthPage() {
             <CardTitle>{title}</CardTitle>
             <CardDescription>
               {tab === "login"
-                ? "Đăng nhập nhanh qua Keycloak SSO."
+                ? "Đăng nhập qua hệ thống xác thực tập trung."
                 : "Tạo tài khoản mới để bắt đầu sử dụng UniCall."}
             </CardDescription>
           </CardHeader>
 
           <CardContent>
             {tab === "login" ? (
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600">
-                  Bấm nút bên dưới để bắt đầu đăng nhập qua Keycloak. Bạn sẽ được chuyển đến trang SSO.
-                </p>
-                <Button type="button" className="w-full bg-sky-600 hover:bg-sky-700" onClick={authService.redirectToLogin}>
-                  Đăng nhập với Keycloak
+              <form className="space-y-4" onSubmit={handleLogin}>
+                <div className="space-y-2">
+                  <Label htmlFor="login-phone">Số điện thoại</Label>
+                  <Input
+                    id="login-phone"
+                    type="tel"
+                    placeholder="VD: 0987654321"
+                    value={loginData.phoneNumber}
+                    onChange={(event) => setLoginData({ ...loginData, phoneNumber: event.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="login-password">Mật khẩu</Label>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="Nhập mật khẩu"
+                    value={loginData.password}
+                    onChange={(event) => setLoginData({ ...loginData, password: event.target.value })}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full bg-sky-600 hover:bg-sky-700" disabled={isSubmitting}>
+                  {isSubmitting ? "Đang xử lý..." : "Đăng nhập"}
                 </Button>
-              </div>
+              </form>
             ) : (
               <form className="space-y-4" onSubmit={handleRegister}>
                 <div className="space-y-2">

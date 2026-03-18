@@ -9,28 +9,27 @@ server:
 
 app:
   prefix: ${API_PREFIX:/api/v1}
-  grpc:
-    saga-orchestrator:
-      deadline-ms: ${SAGA_ORCHESTRATOR_GRPC_DEADLINE_MS:5000}
   security:
-    frontend-callback-url: ${FRONTEND_CALLBACK_URL:http://localhost:5173/auth/callback}
     cookie:
       secure: ${COOKIE_SECURE:false}
       same-site: ${COOKIE_SAME_SITE:Strict}
-    cors:
-      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
     keycloak:
       server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
       realm: ${KEYCLOAK_REALM:unicall}
       client-id: ${KEYCLOAK_CLIENT_ID:unicall-client}
       client-secret: ${KEYCLOAK_CLIENT_SECRET:BnaPyiYRiG0LP8sGdQNuCp1eZ32IFIya}
-      redirect-uri: ${KEYCLOAK_REDIRECT_URI:http://localhost:8082/identity-service/api/v1/auth/callback}
-      scope: ${KEYCLOAK_SCOPE:openid profile email}
       admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:unicall-admin-client}
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:qEtqS9STfjKuzU99109MTtlZfCcL8UBi}
 
 grpc:
   client:
-    saga-orchestrator:
-      address: static://${SAGA_ORCHESTRATOR_GRPC_HOST:localhost}:${SAGA_ORCHESTRATOR_GRPC_PORT:9096}
+    saga-orchestrator-service:
+      address: ${SAGA_ORCHESTRATOR_GRPC_ADDRESS:static://localhost:9096}
       negotiationType: plaintext
+  saga-orchestrator:
+    deadline-ms: ${SAGA_ORCHESTRATOR_GRPC_DEADLINE_MS:5000}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
