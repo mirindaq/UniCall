@@ -1,25 +1,34 @@
 import { useMemo, useState } from "react"
-import { ArrowUpDown, Search } from "lucide-react"
+import { ArrowUpDown } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { friendList } from "@/pages/user/friend_ship/friendship.data"
+import { friendList } from "@/mock/friendship.data"
 import {
   FriendshipEmptyState,
+  FriendshipFilterChips,
+  FriendshipIconSelect,
+  FriendshipSearchInput,
+  FriendshipTabTitle,
   InlineMoreButton,
   SeedAvatar,
+  type SelectOption,
   ZeroDataState,
-} from "@/pages/user/friend_ship/shared"
+} from "@/components/friend_ship"
 
 type FriendFilter = "all" | "close" | "business"
 type FriendSort = "name" | "recent" | "business"
+
+const friendSortOptions: SelectOption[] = [
+  { value: "name", label: "Tên (A-Z)" },
+  { value: "recent", label: "Tương tác gần đây" },
+  { value: "business", label: "Ưu tiên Business" },
+]
+
+const friendFilterOptions: SelectOption[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "close", label: "Bạn thân" },
+  { value: "business", label: "Business" },
+]
 
 export function FriendsListTab() {
   const [search, setSearch] = useState("")
@@ -81,148 +90,49 @@ export function FriendsListTab() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200 px-4 py-5 lg:px-6">
-        <h3 className="text-2xl font-semibold text-slate-900">
-          Bạn bè ({filteredFriends.length})
-        </h3>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <FriendshipTabTitle title={`Bạn bè (${filteredFriends.length})`} />
 
-      <div className="flex-1 overflow-auto px-4 py-4 lg:px-6">
-        <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <div className="flex-1 min-h-0 px-2 py-2 lg:px-3">
+        <div className="flex h-full min-h-0 flex-col rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px_320px]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm bạn"
-                className="h-11 rounded-xl border-slate-200 pl-10 shadow-none"
-              />
-            </div>
+            <FriendshipSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Tìm bạn"
+            />
 
-            <div className="relative">
-              <span className="pointer-events-none absolute inset-y-0 left-3 flex -translate-y-[1px] items-center justify-center text-slate-500">
-                <ArrowUpDown className="size-4" />
-              </span>
-              <Select
-                value={sortBy}
-                onValueChange={(value) => setSortBy(value as FriendSort)}
-              >
-                <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white pl-10 shadow-none">
-                  <SelectValue placeholder="Tên (A-Z)" />
-                </SelectTrigger>
-                <SelectContent
-                  position="popper"
-                  side="bottom"
-                  sideOffset={6}
-                  avoidCollisions={false}
-                  align="start"
-                  className="min-w-[var(--radix-select-trigger-width)]"
-                >
-                  <SelectItem
-                    value="name"
-                    className="focus:bg-slate-50 focus:text-slate-700"
-                  >
-                    Tên (A-Z)
-                  </SelectItem>
-                  <SelectItem
-                    value="recent"
-                    className="focus:bg-slate-50 focus:text-slate-700"
-                  >
-                    Tương tác gần đây
-                  </SelectItem>
-                  <SelectItem
-                    value="business"
-                    className="focus:bg-slate-50 focus:text-slate-700"
-                  >
-                    Ưu tiên Business
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <FriendshipIconSelect
+              icon={ArrowUpDown}
+              value={sortBy}
+              onValueChange={(value) => setSortBy(value as FriendSort)}
+              placeholder="Tên (A-Z)"
+              options={friendSortOptions}
+            />
 
-            <Select
+            <FriendshipIconSelect
               value={filterBy}
               onValueChange={(value) => setFilterBy(value as FriendFilter)}
-            >
-              <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white shadow-none">
-                <SelectValue placeholder="Tất cả" />
-              </SelectTrigger>
-              <SelectContent
-                position="popper"
-                side="bottom"
-                sideOffset={6}
-                avoidCollisions={false}
-                align="start"
-                className="min-w-[var(--radix-select-trigger-width)]"
-              >
-                <SelectItem
-                  value="all"
-                  className="focus:bg-slate-50 focus:text-slate-700"
-                >
-                  Tất cả
-                </SelectItem>
-                <SelectItem
-                  value="close"
-                  className="focus:bg-slate-50 focus:text-slate-700"
-                >
-                  Bạn thân
-                </SelectItem>
-                <SelectItem
-                  value="business"
-                  className="focus:bg-slate-50 focus:text-slate-700"
-                >
-                  Business
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              placeholder="Tất cả"
+              options={friendFilterOptions}
+            />
           </div>
 
-          <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-3">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium text-slate-500">Sắp xếp:</span>
-              {[
-                { value: "name", label: "Tên (A-Z)" },
-                { value: "recent", label: "Tương tác gần đây" },
-                { value: "business", label: "Ưu tiên Business" },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setSortBy(option.value as FriendSort)}
-                  className={`rounded-full px-3 py-1.5 text-sm transition ${
-                    sortBy === option.value
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-700"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium text-slate-500">Lọc:</span>
-              {[
-                { value: "all", label: "Tất cả" },
-                { value: "close", label: "Bạn thân" },
-                { value: "business", label: "Business" },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setFilterBy(option.value as FriendFilter)}
-                  className={`rounded-full px-3 py-1.5 text-sm transition ${
-                    filterBy === option.value
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-700"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
+            <FriendshipFilterChips
+              title="Sắp xếp:"
+              value={sortBy}
+              onValueChange={(value) => setSortBy(value as FriendSort)}
+              options={friendSortOptions}
+              activeClassName="bg-blue-600 text-white"
+            />
+            <FriendshipFilterChips
+              title="Lọc:"
+              value={filterBy}
+              onValueChange={(value) => setFilterBy(value as FriendFilter)}
+              options={friendFilterOptions}
+              activeClassName="bg-slate-900 text-white"
+            />
           </div>
 
           {groupedFriends.length === 0 ? (
@@ -231,7 +141,7 @@ export function FriendsListTab() {
               description="Hãy thử thay đổi từ khóa tìm kiếm hoặc bộ lọc để xem nhiều kết quả hơn."
             />
           ) : (
-            <div className="mt-5 space-y-8">
+            <div className="mt-4 flex-1 min-h-0 space-y-6 overflow-auto pr-1">
               {groupedFriends.map(([letter, items]) => (
                 <section key={letter} className="space-y-4">
                   <h4 className="text-3xl font-semibold tracking-tight text-slate-800">
@@ -244,10 +154,7 @@ export function FriendsListTab() {
                         className="flex items-center justify-between rounded-2xl px-2 py-3 transition hover:bg-slate-50"
                       >
                         <div className="flex min-w-0 items-center gap-4">
-                          <SeedAvatar
-                            fallback={friend.fallback}
-                            tone={friend.tone}
-                          />
+                          <SeedAvatar fallback={friend.fallback} tone={friend.tone} />
                           <div className="min-w-0 space-y-1">
                             <p className="truncate text-[28px] font-semibold tracking-tight text-slate-900 lg:text-[18px]">
                               {friend.name}

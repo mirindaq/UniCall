@@ -1,11 +1,17 @@
 import { useMemo, useState } from "react"
-import { ChevronDown, ChevronUp, Inbox, MessageSquareMore } from "lucide-react"
+import { Inbox, MessageSquareMore } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { friendSuggestions, sentFriendInvitations } from "@/pages/user/friend_ship/friendship.data"
-import { SuggestionCard, SeedAvatar, ZeroDataState } from "@/pages/user/friend_ship/shared"
+import { friendSuggestions, sentFriendInvitations } from "@/mock/friendship.data"
+import {
+  FriendshipCollapsibleTitle,
+  FriendshipLoadMoreButton,
+  SeedAvatar,
+  SuggestionCard,
+  ZeroDataState,
+} from "@/components/friend_ship"
 
 const INITIAL_VISIBLE = 5
 
@@ -36,8 +42,8 @@ export function FriendInvitationsTab() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="grid gap-8 px-4 py-5 lg:px-6">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="grid gap-6 overflow-auto px-3 py-3 lg:px-4 lg:py-4">
         {sentFriendInvitations.length === 0 ? (
           <div className="rounded-[28px] bg-slate-100 py-8">
             <Empty className="border-0 py-10">
@@ -45,21 +51,20 @@ export function FriendInvitationsTab() {
                 <EmptyMedia className="flex size-28 items-center justify-center rounded-full bg-blue-50 text-blue-300">
                   <Inbox className="size-14" />
                 </EmptyMedia>
-                <EmptyTitle className="text-xl text-slate-700">Bạn không có lời mời đã gửi nào</EmptyTitle>
+                <EmptyTitle className="text-xl text-slate-700">
+                  Bạn không có lời mời đã gửi nào
+                </EmptyTitle>
               </EmptyHeader>
             </Empty>
           </div>
         ) : (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowSentList((value) => !value)}
-                className="flex items-center gap-2 text-left text-xl font-semibold text-slate-900"
-              >
-                <span>Lời mời đã gửi ({sentFriendInvitations.length})</span>
-                {showSentList ? <ChevronUp className="size-5 text-slate-500" /> : <ChevronDown className="size-5 text-slate-500" />}
-              </button>
+              <FriendshipCollapsibleTitle
+                title={`Lời mời đã gửi (${sentFriendInvitations.length})`}
+                expanded={showSentList}
+                onToggle={() => setShowSentList((value) => !value)}
+              />
             </div>
 
             {showSentList ? (
@@ -82,7 +87,11 @@ export function FriendInvitationsTab() {
                             </div>
                           </div>
 
-                          <Button variant="ghost" size="icon-sm" className="rounded-full text-slate-400 hover:text-slate-700">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="rounded-full text-slate-400 hover:text-slate-700"
+                          >
                             <MessageSquareMore className="size-4" />
                           </Button>
                         </div>
@@ -100,13 +109,11 @@ export function FriendInvitationsTab() {
 
                 {visibleSentCount < sentFriendInvitations.length ? (
                   <div className="flex justify-center pt-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setVisibleSentCount((count) => count + INITIAL_VISIBLE)}
-                      className="h-11 rounded-xl bg-slate-100 px-8 text-base font-semibold text-slate-700 hover:bg-slate-200"
-                    >
-                      Xem thêm
-                    </Button>
+                    <FriendshipLoadMoreButton
+                      onClick={() =>
+                        setVisibleSentCount((count) => count + INITIAL_VISIBLE)
+                      }
+                    />
                   </div>
                 ) : null}
               </>
@@ -122,18 +129,11 @@ export function FriendInvitationsTab() {
         ) : (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowSuggestionList((value) => !value)}
-                className="flex items-center gap-2 text-left text-xl font-semibold text-slate-900"
-              >
-                <span>Gợi ý kết bạn ({friendSuggestions.length})</span>
-                {showSuggestionList ? (
-                  <ChevronUp className="size-5 text-slate-500" />
-                ) : (
-                  <ChevronDown className="size-5 text-slate-500" />
-                )}
-              </button>
+              <FriendshipCollapsibleTitle
+                title={`Gợi ý kết bạn (${friendSuggestions.length})`}
+                expanded={showSuggestionList}
+                onToggle={() => setShowSuggestionList((value) => !value)}
+              />
             </div>
 
             {showSuggestionList ? (
@@ -151,13 +151,11 @@ export function FriendInvitationsTab() {
 
                 {visibleSuggestionCount < friendSuggestions.length ? (
                   <div className="flex justify-center pt-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setVisibleSuggestionCount((count) => count + INITIAL_VISIBLE)}
-                      className="h-11 rounded-xl bg-slate-100 px-8 text-base font-semibold text-slate-700 hover:bg-slate-200"
-                    >
-                      Xem thêm
-                    </Button>
+                    <FriendshipLoadMoreButton
+                      onClick={() =>
+                        setVisibleSuggestionCount((count) => count + INITIAL_VISIBLE)
+                      }
+                    />
                   </div>
                 ) : null}
               </>

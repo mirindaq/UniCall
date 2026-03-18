@@ -1,44 +1,9 @@
-export type AvatarSeed = {
-  image?: string
-  fallback: string
-  tone?: string
-}
-
-export type FriendItem = AvatarSeed & {
-  id: string
-  name: string
-  label?: string
-  status: "all" | "close" | "business"
-  recentOrder: number
-}
-
-export type CommunityItem = {
-  id: string
-  name: string
-  members: number
-  category: "study" | "sports" | "technology" | "club"
-  activityLabel: string
-  activityOrder: number
-  avatars: AvatarSeed[]
-  extraMembers?: number
-}
-
-export type InvitationItem = AvatarSeed & {
-  id: string
-  name: string
-  sentAt?: string
-  mutualGroups?: number
-}
-
-export type GroupInvitationItem = {
-  id: string
-  communityName: string
-  invitedBy: string
-  members: number
-  typeLabel: "Nhóm học tập" | "Cộng đồng" | "Nhóm thể thao"
-  fallback: string
-  tone?: string
-}
+import type {
+  CommunityItem,
+  FriendItem,
+  GroupInvitationItem,
+  InvitationItem,
+} from "@/types/friendship"
 
 export const friendList: FriendItem[] = [
   { id: "f1", name: "A A Minh Thành Hifriendz", label: "Business", status: "business", fallback: "MT", tone: "bg-sky-100 text-sky-700", recentOrder: 4 },
@@ -181,7 +146,7 @@ export const communityList: CommunityItem[] = [
 
 export const sentFriendInvitations: InvitationItem[] = [
   { id: "s1", name: "Đặng Thiện", sentAt: "09/03", fallback: "DT", tone: "bg-orange-100 text-orange-700" },
-  { id: "s2", name: "Hệ Thống Dùng Phong Tâm Phong", sentAt: "24/02", fallback: "TP", tone: "bg-red-100 text-red-700" },
+  { id: "s2", name: "Hệ Thống Dũng Phong Tâm Phong", sentAt: "24/02", fallback: "TP", tone: "bg-red-100 text-red-700" },
   { id: "s3", name: "Vua Tóc Giả", sentAt: "21/01", fallback: "VT", tone: "bg-slate-100 text-slate-700" },
   { id: "s4", name: "Lâm Hoàng", sentAt: "20/01", fallback: "LH", tone: "bg-indigo-100 text-indigo-700" },
   { id: "s5", name: "Duy Long", sentAt: "18/01", fallback: "DL", tone: "bg-teal-100 text-teal-700" },
