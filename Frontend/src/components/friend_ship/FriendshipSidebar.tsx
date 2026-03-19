@@ -1,7 +1,14 @@
-import { MessageCircleMore, Search, UserPlus, type LucideIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import type { LucideIcon } from "lucide-react"
 
-import { Input } from "@/components/ui/input"
+import { SearchUserAccountDialog } from "@/components/shared/SearchUserAccountDialog"
+import { TopSidebarSearch } from "@/components/shared/TopSidebarSearch"
+import { UserSearchResultList } from "@/components/shared/UserSearchResultList"
+import { useQuery } from "@/hooks/useQuery"
 import { cn } from "@/lib/utils"
+import { userService } from "@/services/user/user.service"
+import type { PageResponse, ResponseSuccess } from "@/types/api-response"
+import type { UserSearchItem } from "@/types/user.type"
 
 export type FriendshipTabItem<T extends string> = {
   value: T
@@ -18,63 +25,137 @@ export function FriendshipSidebar<T extends string>({
   activeTab: T
   onChangeTab: (tab: T) => void
 }) {
+  const [searchValue, setSearchValue] = useState("")
+  const normalizedKeyword = useMemo(() => searchValue.trim(), [searchValue])
+  const [debouncedKeyword, setDebouncedKeyword] = useState("")
+  const [searchPage, setSearchPage] = useState(1)
+  const [allSearchedUsers, setAllSearchedUsers] = useState<UserSearchItem[]>([])
+  const shouldSearch = debouncedKeyword.length > 0
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(normalizedKeyword)
+    }, 500)
+
+    return () => window.clearTimeout(timer)
+  }, [normalizedKeyword])
+
+  const { data: myProfileResponse } = useQuery(() => userService.getMyProfile(), {
+    onError: () => undefined,
+  })
+  const currentIdentityUserId = myProfileResponse?.data?.identityUserId ?? null
+
+  const {
+    data: searchUsersResponse,
+    isLoading: isSearchingUsers,
+    error: searchUsersError,
+  } = useQuery<ResponseSuccess<PageResponse<UserSearchItem>>>(
+    () =>
+      userService.searchUsers({
+        keyword: debouncedKeyword,
+        page: searchPage,
+        limit: 5,
+      }),
+    {
+      enabled: shouldSearch,
+      deps: [debouncedKeyword, searchPage],
+      onError: () => undefined,
+    },
+  )
+
+  useEffect(() => {
+    if (!shouldSearch) {
+      setSearchPage(1)
+      setAllSearchedUsers([])
+      return
+    }
+
+    setSearchPage(1)
+    setAllSearchedUsers([])
+  }, [debouncedKeyword, shouldSearch])
+
+  useEffect(() => {
+    const items = searchUsersResponse?.data?.items ?? []
+    if (!shouldSearch || items.length === 0) {
+      return
+    }
+
+    setAllSearchedUsers((prev) => {
+      if (searchPage === 1) {
+        return items
+      }
+
+      const existingIds = new Set(prev.map((item) => item.identityUserId))
+      const appended = items.filter((item) => !existingIds.has(item.identityUserId))
+      return [...prev, ...appended]
+    })
+  }, [searchPage, searchUsersResponse?.data?.items, shouldSearch])
+
+  const searchedUsers = shouldSearch ? allSearchedUsers : []
+  const currentPage = searchUsersResponse?.data?.page ?? 1
+  const totalPage = searchUsersResponse?.data?.totalPage ?? 1
+  const hasMoreSearchResult = shouldSearch && currentPage < totalPage
+  const isSearchMode = searchValue.trim().length > 0
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<UserSearchItem | null>(null)
+
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:w-[340px] lg:border-r lg:border-b-0">
-      <div className="space-y-4 border-b border-slate-100 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Tìm kiếm"
-              className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-9 text-sm shadow-none"
-            />
-          </div>
+      <div className="border-b border-slate-100 px-4 py-4">
+        <TopSidebarSearch value={searchValue} onChange={setSearchValue} placeholder="Tìm kiếm" />
+      </div>
 
-          <SidebarActionButton title="Lời mời kết bạn" icon={UserPlus} />
-          <SidebarActionButton title="Tin nhắn" icon={MessageCircleMore} />
+      {isSearchMode ? (
+        <div className="flex-1 overflow-auto p-3">
+          <UserSearchResultList
+            title="Tìm bạn theo tên hoặc số điện thoại"
+            users={searchedUsers}
+            isLoading={isSearchingUsers && searchPage === 1}
+            isLoadingMore={isSearchingUsers && searchPage > 1}
+            error={searchUsersError}
+            hasMore={hasMoreSearchResult}
+            onLoadMore={() => {
+              if (!isSearchingUsers && hasMoreSearchResult) {
+                setSearchPage((prev) => prev + 1)
+              }
+            }}
+            onSelectUser={(user) => {
+              setSelectedUser(user)
+              setIsAccountDialogOpen(true)
+            }}
+          />
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-2 px-3 py-0">
+          {tabs.map((tab) => {
+            const TabIcon = tab.icon
 
-      <div className="flex flex-col gap-2 p-3">
-        {tabs.map((tab) => {
-          const TabIcon = tab.icon
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => onChangeTab(tab.value)}
+                className={cn(
+                  "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition",
+                  activeTab === tab.value
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-700 hover:bg-slate-50",
+                )}
+              >
+                <TabIcon className="size-5 shrink-0" />
+                <span className="line-clamp-2">{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => onChangeTab(tab.value)}
-              className={cn(
-                "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition",
-                activeTab === tab.value
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-700 hover:bg-slate-50",
-              )}
-            >
-              <TabIcon className="size-5 shrink-0" />
-              <span className="line-clamp-2">{tab.label}</span>
-            </button>
-          )
-        })}
-      </div>
+      <SearchUserAccountDialog
+        open={isAccountDialogOpen}
+        onOpenChange={setIsAccountDialogOpen}
+        selectedUser={selectedUser}
+        currentIdentityUserId={currentIdentityUserId}
+      />
     </aside>
-  )
-}
-
-function SidebarActionButton({
-  title,
-  icon: Icon,
-}: {
-  title: string
-  icon: LucideIcon
-}) {
-  return (
-    <button
-      type="button"
-      className="flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-      title={title}
-    >
-      <Icon className="size-5" />
-    </button>
   )
 }

@@ -14,7 +14,7 @@ export interface ResponseError {
 
 export interface PageResponse<T> {
   page: number
-  size: number
+  limit: number
   totalPage: number
   totalItem: number
   items: T[]

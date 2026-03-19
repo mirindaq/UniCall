@@ -29,6 +29,8 @@ export function FriendInvitationsTab() {
     () => friendSuggestions.slice(0, visibleSuggestionCount),
     [visibleSuggestionCount],
   )
+  const hasMoreSentInvitations = visibleSentCount < sentFriendInvitations.length
+  const hasMoreSuggestions = visibleSuggestionCount < friendSuggestions.length
 
   const hasAnyData = sentFriendInvitations.length > 0 || friendSuggestions.length > 0
 
@@ -107,11 +109,13 @@ export function FriendInvitationsTab() {
                   ))}
                 </div>
 
-                {visibleSentCount < sentFriendInvitations.length ? (
+                {hasMoreSentInvitations ? (
                   <div className="flex justify-center pt-2">
                     <FriendshipLoadMoreButton
                       onClick={() =>
-                        setVisibleSentCount((count) => count + INITIAL_VISIBLE)
+                        setVisibleSentCount((count) =>
+                          Math.min(sentFriendInvitations.length, count + INITIAL_VISIBLE),
+                        )
                       }
                     />
                   </div>
@@ -149,11 +153,13 @@ export function FriendInvitationsTab() {
                   ))}
                 </div>
 
-                {visibleSuggestionCount < friendSuggestions.length ? (
+                {hasMoreSuggestions ? (
                   <div className="flex justify-center pt-2">
                     <FriendshipLoadMoreButton
                       onClick={() =>
-                        setVisibleSuggestionCount((count) => count + INITIAL_VISIBLE)
+                        setVisibleSuggestionCount((count) =>
+                          Math.min(friendSuggestions.length, count + INITIAL_VISIBLE),
+                        )
                       }
                     />
                   </div>

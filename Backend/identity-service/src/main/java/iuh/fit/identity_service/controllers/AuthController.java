@@ -29,22 +29,19 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ResponseSuccess<RegisterResponse>> register(@Valid @RequestBody RegisterRequest request) {
         RegisterResponse data = authService.register(request);
-        return new ResponseEntity<>(
-                new ResponseSuccess<>(HttpStatus.CREATED, "Register success", data),
-                HttpStatus.CREATED
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                new ResponseSuccess<>(HttpStatus.CREATED, "Register success", data)
         );
     }
 
     @PostMapping("/login")
     public ResponseEntity<ResponseSuccess<AccessTokenResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthService.LoginResult result = authService.login(request);
-        HttpHeaders headers = new HttpHeaders();
-        headers.add(HttpHeaders.SET_COOKIE, result.refreshCookie().toString());
-        return new ResponseEntity<>(
-                new ResponseSuccess<>(HttpStatus.OK, "Login success", result.accessTokenResponse()),
-                headers,
-                HttpStatus.OK
-        );
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, result.refreshCookie().toString())
+                .body(
+                        new ResponseSuccess<>(HttpStatus.OK, "Login success", result.accessTokenResponse())
+                );
     }
 
     @PostMapping("/refresh")
@@ -52,13 +49,11 @@ public class AuthController {
             @CookieValue(value = REFRESH_COOKIE_NAME, required = false) String refreshToken
     ) {
         AuthService.RefreshResult result = authService.refresh(refreshToken);
-        HttpHeaders headers = new HttpHeaders();
-        headers.add(HttpHeaders.SET_COOKIE, result.refreshCookie().toString());
-        return new ResponseEntity<>(
-                new ResponseSuccess<>(HttpStatus.OK, "Refresh token success", result.accessTokenResponse()),
-                headers,
-                HttpStatus.OK
-        );
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, result.refreshCookie().toString())
+                .body(
+                        new ResponseSuccess<>(HttpStatus.OK, "Refresh token success", result.accessTokenResponse())
+                );
     }
 
     @PostMapping("/logout")
@@ -67,12 +62,8 @@ public class AuthController {
             HttpServletRequest request
     ) {
         AuthService.LogoutResult result = authService.logout(refreshToken, request);
-        HttpHeaders headers = new HttpHeaders();
-        result.clearCookies().forEach(cookie -> headers.add(HttpHeaders.SET_COOKIE, cookie.toString()));
-        return new ResponseEntity<>(
-                new ResponseSuccess<>(HttpStatus.OK, "Logout success"),
-                headers,
-                HttpStatus.OK
-        );
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
+        result.clearCookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
+        return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Logout success"));
     }
 }

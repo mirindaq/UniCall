@@ -2,7 +2,6 @@ export { AvatarStack } from "@/components/friend_ship/AvatarStack"
 export {
   FriendshipFilterChips,
   FriendshipIconSelect,
-  FriendshipSearchInput,
   type SelectOption,
 } from "@/components/friend_ship/FriendshipFilters"
 export { FriendshipEmptyState } from "@/components/friend_ship/FriendshipEmptyState"

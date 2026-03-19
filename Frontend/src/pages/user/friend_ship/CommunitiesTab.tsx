@@ -7,7 +7,6 @@ import {
   FriendshipEmptyState,
   FriendshipFilterChips,
   FriendshipIconSelect,
-  FriendshipSearchInput,
   FriendshipTabTitle,
   InlineMoreButton,
   type SelectOption,
@@ -32,29 +31,24 @@ const communityFilterOptions: SelectOption[] = [
 ]
 
 export function CommunitiesTab() {
-  const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<CommunitySort>("recent")
   const [filterBy, setFilterBy] = useState<CommunityFilter>("all")
 
   const filteredCommunities = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("vi")
-
-    const result = communityList
-      .filter((community) => filterBy === "all" || community.category === filterBy)
-      .filter((community) =>
-        community.name.toLocaleLowerCase("vi").includes(normalizedSearch),
-      )
+    const result = communityList.filter(
+      (community) => filterBy === "all" || community.category === filterBy,
+    )
 
     if (sortBy === "members") {
-      return result.toSorted((a, b) => b.members - a.members)
+      return [...result].sort((a, b) => b.members - a.members)
     }
 
     if (sortBy === "name") {
-      return result.toSorted((a, b) => a.name.localeCompare(b.name, "vi"))
+      return [...result].sort((a, b) => a.name.localeCompare(b.name, "vi"))
     }
 
-    return result.toSorted((a, b) => a.activityOrder - b.activityOrder)
-  }, [filterBy, search, sortBy])
+    return [...result].sort((a, b) => a.activityOrder - b.activityOrder)
+  }, [filterBy, sortBy])
 
   if (communityList.length === 0) {
     return (
@@ -71,13 +65,7 @@ export function CommunitiesTab() {
 
       <div className="flex min-h-0 flex-1 p-4">
         <div className="flex h-full min-h-0 w-full flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px_320px]">
-            <FriendshipSearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Tìm kiếm..."
-            />
-
+          <div className="grid gap-3 lg:grid-cols-[320px_320px]">
             <FriendshipIconSelect
               icon={ArrowUpDown}
               value={sortBy}
