@@ -1,6 +1,7 @@
 package iuh.fit.user_service.services.impl;
 
 import iuh.fit.common_service.exceptions.ConflictException;
+import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.user_service.entities.User;
 import iuh.fit.user_service.repositories.UserRepository;
 import iuh.fit.user_service.services.UserProfileService;
@@ -52,5 +53,11 @@ public class UserProfileServiceImpl implements UserProfileService {
         }
         userRepository.deleteByIdentityUserId(identityUserId);
         return true;
+    }
+
+    @Override
+    public User getUserProfileByIdentityUserId(String identityUserId) {
+        return userRepository.findByIdentityUserId(identityUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
     }
 }

@@ -170,6 +170,64 @@ Khi review PR co lien quan flow moi:
 3. Neu `>= 2 step` qua nhieu service -> yeu cau saga design (state + compensation + idempotency).
 4. Bat buoc co test cho scenario fail/timeout.
 
+## 6) Lay user da xac thuc o API Gateway
+
+Theo code hien tai cua UniCall:
+- Gateway dung `oauth2ResourceServer().jwt(...)` de xac thuc bearer token.
+- Sau khi xac thuc, `JwtHeaderInjectionFilter` inject:
+  - `X-User-Id` = `sub` cua JWT
+  - `X-User-Role` = role dau tien tim thay trong `roles` hoac `realm_access.roles`
+
+Tham chieu:
+- `Backend/api-gateway/src/main/java/iuh/fit/api_gateway/config/SecurityConfig.java`
+- `Backend/api-gateway/src/main/java/iuh/fit/api_gateway/config/JwtHeaderInjectionFilter.java`
+
+### Cach dung o service phia sau gateway
+
+Controller co the doc truc tiep header:
+
+```java
+@GetMapping("/me")
+public ResponseEntity<?> me(
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        @RequestHeader(value = "X-User-Role", required = false) String userRole
+) {
+    if (userId == null || userId.isBlank()) {
+        throw new UnauthenticatedException("Missing authenticated user header");
+    }
+    return ResponseEntity.ok(Map.of("userId", userId, "role", userRole));
+}
+```
+
+### API that trong `user-service` de service khac goi
+
+Da them 2 endpoint:
+1. `GET /api/v1/users/me`
+- Dung cho request di qua gateway.
+- `user-service` doc `X-User-Id` va tra profile cua chinh user dang dang nhap.
+
+2. `GET /api/v1/users/identity/{identityUserId}`
+- Dung cho service-to-service noi bo khi da biet `identityUserId`.
+- Tra profile theo `identityUserId`.
+
+Them gRPC cho service-to-service:
+- `UserService/GetUserProfileByIdentity`
+- Request: `identityUserId`
+- Response: profile day du (`id`, `identityUserId`, `phoneNumber`, `firstName`, `lastName`, `gender`, `dateOfBirth`, `avatar`, `isActive`)
+
+Khuyen dung:
+1. Frontend qua gateway: goi `GET /api/v1/users/me` (gateway se co `X-User-Id`).
+2. Service-to-service: uu tien gRPC `GetUserProfileByIdentity`.
+
+Neu can lay profile day du cua user trong chat-service:
+- Goi `user-service /api/v1/users/me` (forward `X-User-Id`), hoac
+- Goi `user-service /api/v1/users/identity/{identityUserId}`
+
+Rule khuyen dung:
+1. Chi tin header `X-User-*` khi request di qua API Gateway noi bo.
+2. Khong expose service backend truc tiep ra internet neu dang dung co che header nay.
+3. Neu endpoint can role, check role tai service duoi truoc khi xu ly business logic.
+
 ---
 
 Tai lieu nay uu tien tinh thuc dung cho UniCall. Neu architecture doi, cap nhat file nay truoc khi mo rong flow moi.
