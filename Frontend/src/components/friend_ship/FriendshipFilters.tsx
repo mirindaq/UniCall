@@ -1,7 +1,4 @@
 import type { LucideIcon } from "lucide-react"
-import { Search } from "lucide-react"
-
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -13,28 +10,6 @@ import {
 export type SelectOption = {
   value: string
   label: string
-}
-
-export function FriendshipSearchInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-}) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-slate-400" />
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-10 rounded-xl border-slate-200 pl-10 text-sm shadow-none"
-      />
-    </div>
-  )
 }
 
 export function FriendshipIconSelect({

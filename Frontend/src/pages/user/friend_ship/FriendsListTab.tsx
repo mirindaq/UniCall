@@ -7,7 +7,6 @@ import {
   FriendshipEmptyState,
   FriendshipFilterChips,
   FriendshipIconSelect,
-  FriendshipSearchInput,
   FriendshipTabTitle,
   InlineMoreButton,
   SeedAvatar,
@@ -31,33 +30,10 @@ const friendFilterOptions: SelectOption[] = [
 ]
 
 export function FriendsListTab() {
-  const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<FriendSort>("name")
   const [filterBy, setFilterBy] = useState<FriendFilter>("all")
 
-  const filteredFriends = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("vi")
-
-    const result = friendList
-      .filter((friend) => filterBy === "all" || friend.status === filterBy)
-      .filter((friend) =>
-        friend.name.toLocaleLowerCase("vi").includes(normalizedSearch),
-      )
-
-    if (sortBy === "recent") {
-      return result.toSorted((a, b) => a.recentOrder - b.recentOrder)
-    }
-
-    if (sortBy === "business") {
-      return result.toSorted((a, b) => {
-        if (a.status === "business" && b.status !== "business") return -1
-        if (a.status !== "business" && b.status === "business") return 1
-        return a.name.localeCompare(b.name, "vi")
-      })
-    }
-
-    return result.toSorted((a, b) => a.name.localeCompare(b.name, "vi"))
-  }, [filterBy, search, sortBy])
+  const filteredFriends = useMemo(() => friendList, [])
 
   const groupedFriends = useMemo(
     () =>
@@ -95,13 +71,7 @@ export function FriendsListTab() {
 
       <div className="flex min-h-0 flex-1 p-4">
         <div className="flex h-full min-h-0 w-full flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px_320px]">
-            <FriendshipSearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Tìm bạn"
-            />
-
+          <div className="grid gap-3 lg:grid-cols-[320px_320px]">
             <FriendshipIconSelect
               icon={ArrowUpDown}
               value={sortBy}

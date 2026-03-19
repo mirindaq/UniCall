@@ -20,6 +20,7 @@ export function GroupInvitationsTab() {
     () => groupInvitations.slice(0, visibleCount),
     [visibleCount],
   )
+  const hasMoreInvitations = visibleCount < groupInvitations.length
 
   if (groupInvitations.length === 0) {
     return (
@@ -82,10 +83,14 @@ export function GroupInvitationsTab() {
           ))}
         </div>
 
-        {visibleCount < groupInvitations.length ? (
+        {hasMoreInvitations ? (
           <div className="mt-4 flex justify-center">
             <FriendshipLoadMoreButton
-              onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE)}
+              onClick={() =>
+                setVisibleCount((count) =>
+                  Math.min(groupInvitations.length, count + INITIAL_VISIBLE),
+                )
+              }
             />
           </div>
         ) : null}

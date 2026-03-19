@@ -228,6 +228,104 @@ Rule khuyen dung:
 2. Khong expose service backend truc tiep ra internet neu dang dung co che header nay.
 3. Neu endpoint can role, check role tai service duoi truoc khi xu ly business logic.
 
+## 7) Pattern Search/Sort (bat buoc follow)
+
+Muc tieu:
+- Search/sort giua cac service phai dong nhat.
+- Coder moi vao team co mau de copy nhanh.
+
+### 7.1 Quy uoc query param
+
+Ap dung cho REST list API (vi du user search):
+- `page`: trang bat dau tu `1`
+- `limit`: so item moi trang
+- `sortBy`: kieu `field:asc` hoac `field:desc`
+- `search`: filter nang cao theo parser cua `common-service`
+- `keyword`: keyword nhanh cho UI search box
+
+Vi du request:
+
+```http
+GET /api/v1/users/search?page=1&limit=5&sortBy=firstName:asc&keyword=091196
+```
+
+### 7.2 Pattern backend (service)
+
+Follow mau hien tai o `user-service`:
+1. Validate input (`keyword` hoac `search` phai co gia tri).
+2. Merge `keyword` vao chuoi `search`.
+3. Parse specification bang `SearchQueryParser.parse(...)`.
+4. Them filter he thong (vd `isActive=true`).
+5. Parse sort bang `SortUtils.parseSort(sortBy)`.
+6. Tra `PageResponse.fromPage(...)`.
+
+Pseudo-code:
+
+```java
+String mergedSearch = mergeSearchWithKeyword(search, keyword);
+SpecificationBuildQuery<User> buildQuery = SearchQueryParser.parse(mergedSearch);
+buildQuery.withCustom((root, query, cb) -> cb.isTrue(root.get("isActive")));
+
+Pageable pageable = PageRequest.of(page - 1, limit, SortUtils.parseSort(sortBy));
+Page<User> userPage = userRepository.findAll(buildQuery.build(), pageable);
+
+return PageResponse.fromPage(userPage, UserSearchResponse::from);
+```
+
+### 7.3 Pattern sortBy
+
+Khuyen dung:
+- Mac dinh: `firstName:asc`
+- Truyen tu FE vao service qua query string.
+- Khong hard-code sort trong repository query neu da co `SortUtils`.
+
+Vi du:
+- `sortBy=firstName:asc`
+- `sortBy=createdAt:desc`
+
+### 7.3.1 Quy uoc parse `search` (toan tu)
+
+Theo parser trong `common-service`, team dung nhanh cac toan tu sau:
+- `field:value`: so sanh bang (exact match)
+- `field~value`: tim gan dung/chua chuoi (contains)
+- `,`: AND condition
+- `'`: OR condition
+
+Vi du:
+
+```text
+phoneNumber:0911964350
+```
+- Nghia: `phoneNumber` bang dung `0911964350`.
+
+```text
+firstName~viet
+```
+- Nghia: `firstName` co chua `viet`.
+
+```text
+isActive:true,gender:male
+```
+- Nghia: `isActive = true` AND `gender = male`.
+
+```text
+phoneNumber~091196'firstName~viet'lastName~giap
+```
+- Nghia: match theo phone OR firstName OR lastName.
+
+Quy tac chon toan tu:
+- Tim exact theo id/phone duy nhat: uu tien `:`.
+- Tim theo ten/keyword linh hoat: dung `~`.
+
+
+### 7.4 Checklist PR cho API search/sort
+
+1. Response list phai la `PageResponse<T>`.
+2. `sortBy` phai parse qua `SortUtils`.
+3. Search parser phai di qua `SearchQueryParser`.
+4. FE phai co debounce + append khi load more.
+5. Nut `Xem them` chi hien khi con trang.
+
 ---
 
 Tai lieu nay uu tien tinh thuc dung cho UniCall. Neu architecture doi, cap nhat file nay truoc khi mo rong flow moi.
