@@ -24,7 +24,7 @@ app:
 grpc:
   client:
     user-service:
-      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9093}
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
       negotiationType: plaintext
   user-service:
     deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:5000}
