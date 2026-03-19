@@ -23,11 +23,11 @@ app:
 
 grpc:
   client:
-    saga-orchestrator-service:
-      address: ${SAGA_ORCHESTRATOR_GRPC_ADDRESS:static://localhost:9096}
+    user-service:
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9093}
       negotiationType: plaintext
-  saga-orchestrator:
-    deadline-ms: ${SAGA_ORCHESTRATOR_GRPC_DEADLINE_MS:5000}
+  user-service:
+    deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:5000}
 
 eureka:
   client:

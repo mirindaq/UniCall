@@ -1,5 +1,5 @@
 import { Bell, MessageCircle, Settings, Users } from "lucide-react"
-import { Link, NavLink, Outlet, useLocation } from "react-router"
+import { Link, NavLink, Outlet } from "react-router"
 
 import { USER_PATH } from "@/constants/user"
 
@@ -22,8 +22,6 @@ const userTabs = [
 ]
 
 export function UserLayout() {
-  const location = useLocation()
-  const activeTab = userTabs.find((tab) => location.pathname.startsWith(tab.to))
 
   return (
     // 1. Đổi min-h-svh thành h-screen và thêm overflow-hidden để khóa chặt màn hình
@@ -72,18 +70,7 @@ export function UserLayout() {
 
       {/* Thêm min-w-0 để fix lỗi tràn ngang nếu có nội dung quá dài */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* 2. Thêm shrink-0 cho header để nó giữ nguyên chiều cao */}
-        <header className="shrink-0 border-b bg-white px-6 py-4">
-          <h1 className="text-lg font-semibold text-slate-800">
-            {activeTab?.label ?? "User Layout"}
-          </h1>
-          <p className="text-sm text-slate-500">
-            Mock giao dien tab ben trai theo yeu cau
-          </p>
-        </header>
-
-        {/* 3. BỎ p-6 để giao diện tràn viền, THÊM overflow-hidden để Outlet cuộn độc lập */}
-        <section className="flex-1 overflow-hidden bg-white">
+        <section className="flex-1 overflow-hidden bg-white py-1">
           <Outlet />
         </section>
       </main>
