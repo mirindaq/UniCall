@@ -4,9 +4,9 @@ import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
-import iuh.fit.unicall.grpc.saga.signup.v1.UserRequest;
-import iuh.fit.unicall.grpc.saga.signup.v1.UserResponse;
-import iuh.fit.unicall.grpc.saga.signup.v1.UserServiceGrpc;
+import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
+import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
+import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import net.devh.boot.grpc.client.inject.GrpcClient;
@@ -17,17 +17,17 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class GrpcUserServiceClient {
-    @GrpcClient("saga-orchestrator-service")
+    @GrpcClient("user-service")
     private UserServiceGrpc.UserServiceBlockingStub userStub;
 
     private final long deadlineMs;
 
-    public GrpcUserServiceClient(@Value("${grpc.saga-orchestrator.deadline-ms:5000}") long deadlineMs) {
+    public GrpcUserServiceClient(@Value("${grpc.user-service.deadline-ms:5000}") long deadlineMs) {
         this.deadlineMs = deadlineMs;
     }
 
     public RegisterResponse register(RegisterRequest request, String identityUserId) {
-        UserRequest grpcRequest = UserRequest.newBuilder()
+        CreateUserProfileRequest grpcRequest = CreateUserProfileRequest.newBuilder()
                 .setIdentityUserId(identityUserId)
                 .setPhoneNumber(request.getPhoneNumber())
                 .setFirstName(request.getFirstName())
@@ -36,18 +36,23 @@ public class GrpcUserServiceClient {
                 .setDateOfBirth(request.getDateOfBirth().toString())
                 .build();
         try {
-            UserResponse response = userStub
+            CreateUserProfileResponse response = userStub
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
-                    .registerUser(grpcRequest);
+                    .createUserProfile(grpcRequest);
+
+            String persistedIdentityUserId = response.getIdentityUserId();
+            if (persistedIdentityUserId == null || persistedIdentityUserId.isBlank()) {
+                throw new RuntimeException("User service returned an empty identityUserId");
+            }
 
             return RegisterResponse.builder()
-                    .userId(identityUserId)
-                    .phoneNumber(response.getPhoneNumber())
-                    .firstName(response.getFirstName())
-                    .lastName(response.getLastName())
-                    .gender(response.getGender())
+                    .userId(persistedIdentityUserId)
+                    .phoneNumber(request.getPhoneNumber())
+                    .firstName(request.getFirstName())
+                    .lastName(request.getLastName())
+                    .gender(request.getGender())
                     .dateOfBirth(request.getDateOfBirth())
-                    .message(response.getMessage())
+                    .message("Registration successful")
                     .build();
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
