@@ -9,13 +9,13 @@ import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
 import { authTokenStore } from "@/stores/auth-token.store"
 
-import { Header } from "@/components/zalo/header"
-import { Hero } from "@/components/zalo/hero"
-import { Features } from "@/components/zalo/features"
-import { Stats } from "@/components/zalo/stats"
-import { Ecosystem } from "@/components/zalo/ecosystem"
-import { News } from "@/components/zalo/news"
-import { Footer } from "@/components/zalo/footer"
+import { Header } from "@/components/home/header"
+import { Hero } from "@/components/home/hero"
+import { Features } from "@/components/home/features"
+import { Stats } from "@/components/home/stats"
+import { Ecosystem } from "@/components/home/ecosystem"
+import { News } from "@/components/home/news"
+import { Footer } from "@/components/home/footer"
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -44,16 +44,6 @@ export function HomePage() {
 
       <main>
         <Hero />
-        
-        <section className="py-10 bg-slate-50 flex justify-center gap-4 border-y border-gray-200">
-            <Button variant="outline" onClick={() => navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)}>
-                Vào user layout
-            </Button>
-            <Button onClick={() => navigate(`${ADMIN_PATH.ROOT}/${ADMIN_PATH.DASHBOARD}`)}>
-                Vào admin template
-            </Button>
-        </section>
-
         <Features />
         <Stats />
         <Ecosystem />

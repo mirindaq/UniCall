@@ -32,7 +32,7 @@ const footerLinks = {
 export function Footer() {
   return (
     <footer className="bg-background border-border" id="about">
-      <div className="bg-[#f6f7f9] max-w-6xl mx-auto px-6 md:px-12 py-16 lg:py-20">
+      <div className="bg-[#f6f7f9] max-w-7xl mx-auto px-12 py-10">
         
         {/* Khối Logo & Địa chỉ */}
         <div className="mb-16">
