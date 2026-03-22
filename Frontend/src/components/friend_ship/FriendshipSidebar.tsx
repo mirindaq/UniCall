@@ -44,6 +44,8 @@ export function FriendshipSidebar<T extends string>({
     onError: () => undefined,
   })
   const currentIdentityUserId = myProfileResponse?.data?.identityUserId ?? null
+  const myFirstName = myProfileResponse?.data?.firstName ?? ""
+  const myLastName = myProfileResponse?.data?.lastName ?? ""
 
   const {
     data: searchUsersResponse,
@@ -155,6 +157,8 @@ export function FriendshipSidebar<T extends string>({
         onOpenChange={setIsAccountDialogOpen}
         selectedUser={selectedUser}
         currentIdentityUserId={currentIdentityUserId}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
       />
     </aside>
   )
