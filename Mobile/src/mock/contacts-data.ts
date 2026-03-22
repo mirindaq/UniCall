@@ -4,8 +4,8 @@ export type ContactsSubTab = 'friends' | 'groups' | 'oa';
 
 export interface FriendActionItem {
   id: string;
+  type: 'invite' | 'birthday';
   title: string;
-  icon: 'person-add' | 'gift';
   countText?: string;
 }
 
@@ -32,8 +32,8 @@ export interface OaContactItem {
 }
 
 export const friendActions: FriendActionItem[] = [
-  { id: 'invite', title: 'Lời mời kết bạn', icon: 'person-add', countText: '4' },
-  { id: 'birthday', title: 'Sinh nhật', icon: 'gift' },
+  { id: 'invite', type: 'invite', title: 'Lời mời kết bạn', countText: '4' },
+  { id: 'birthday', type: 'birthday', title: 'Sinh nhật' },
 ];
 
 export const friendContacts: FriendContactItem[] = [

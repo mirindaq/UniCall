@@ -11,8 +11,6 @@ export interface FeedPost {
   galleryLabels?: string[];
 }
 
-export const feedComposerActions = ['Ảnh', 'Video', 'Album', 'Nền chữ'];
-
 export const feedPosts: FeedPost[] = [
   {
     id: 'p1',
@@ -36,4 +34,3 @@ export const feedPosts: FeedPost[] = [
     galleryLabels: ['Ảnh bài viết'],
   },
 ];
-

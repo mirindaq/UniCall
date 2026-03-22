@@ -27,7 +27,8 @@ const getTabLabel = (key: TabKey) => {
   if (key === 'messages') return 'Tin nhắn';
   if (key === 'contacts') return 'Danh bạ';
   if (key === 'feeds') return 'Tường nhà';
-  return 'Ẩn';
+  if (key === 'profile') return 'Cá nhân';
+  return '';
 };
 
 export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTabsProps) {
@@ -44,6 +45,10 @@ export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTab
     }
     if (tab === 'feeds') {
       router.replace('/feeds');
+      return;
+    }
+    if (tab === 'profile') {
+      router.replace('/profile');
     }
   };
 
