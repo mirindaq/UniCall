@@ -16,7 +16,11 @@ export default function MessagesScreen() {
     <View className="flex-1 bg-[#f3f4f6]">
       <AppStatusBarBlue />
       <SafeAreaView edges={['top']} className="bg-[#1e98f3]" />
-      <MessagesHeader />
+      <MessagesHeader
+        onPressSearch={() => {
+          router.push('/message/search');
+        }}
+      />
 
       <View className="flex-1">
         <FlatList

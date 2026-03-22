@@ -1,18 +1,21 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import React from "react";
-import { Pressable, Text, View } from "react-native";
+import Ionicons from '@expo/vector-icons/Ionicons';
+import React from 'react';
+import { Pressable, Text, View } from 'react-native';
 
-export function MessagesHeader() {
+interface MessagesHeaderProps {
+  onPressSearch: () => void;
+}
+
+export function MessagesHeader({ onPressSearch }: MessagesHeaderProps) {
   return (
     <View className="bg-[#1e98f3] px-5 pb-2.5 pt-2.5">
       <View className="flex-row items-center">
-        <Pressable className="mr-2 h-10 w-10 items-center justify-center rounded-full">
-          <Ionicons name="search-outline" size={28} color="#ffffff" />
+        <Pressable className="mr-2 h-[44px] flex-1 flex-row items-center rounded-2xl bg-[#2ea2f5] px-4" onPress={onPressSearch}>
+          <Ionicons name="search-outline" size={27} color="#ffffff" />
+          <Text allowFontScaling={false} className="ml-3 text-[17px] text-sky-100">
+            Tìm kiếm
+          </Text>
         </Pressable>
-
-        <View className="flex-1">
-          <Text className="text-[18px] text-sky-100">Tìm kiếm</Text>
-        </View>
 
         <Pressable className="h-10 w-10 items-center justify-center rounded-full">
           <Ionicons name="qr-code-outline" size={24} color="#ffffff" />
