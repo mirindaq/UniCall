@@ -1,98 +1,58 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+const PAGE_DOTS = 5;
+const ACTIVE_DOT_INDEX = 4;
 
 export default function HomeScreen() {
+  const router = useRouter();
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <SafeAreaView className="flex-1 bg-slate-100 px-6 pb-5" edges={['top', 'bottom']}>
+      <View className="mt-2 items-end">
+        <Pressable className="flex-row items-center gap-2.5 rounded-full border border-slate-300 bg-slate-50 px-4 py-2">
+          <Text className="text-base font-medium text-slate-800">Tiếng Việt</Text>
+          <Text className="-mt-1 text-lg text-slate-800">v</Text>
+        </Pressable>
+      </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <View className="relative flex-1 items-center justify-center">
+        <View className="absolute left-[50px] top-[150px] h-[22px] w-[52px] rounded-full border border-slate-200" />
+        <View className="absolute -left-3 top-[280px] h-[22px] w-[52px] rounded-full border border-slate-200" />
+        <View className="absolute right-0 top-[250px] h-[22px] w-[52px] rounded-full border border-slate-200" />
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+        <Text className="mb-4 text-[82px] font-bold tracking-wide text-blue-600">Unicall</Text>
+
+        <View className="absolute -left-8 -right-8 bottom-[72px] h-[84px] flex-row items-end justify-between border-t border-slate-200 px-4">
+          <View className="h-[68px] w-[34px] rounded-t-sm border border-b-0 border-slate-200" />
+          <View className="h-[52px] w-[34px] rounded-t-sm border border-b-0 border-slate-200" />
+          <View className="h-[40px] w-[34px] rounded-t-sm border border-b-0 border-slate-200" />
+          <View className="h-[46px] w-[48px] rounded-t-sm border border-b-0 border-slate-200" />
+          <View className="h-[52px] w-[34px] rounded-t-sm border border-b-0 border-slate-200" />
+          <View className="h-[68px] w-[34px] rounded-t-sm border border-b-0 border-slate-200" />
+        </View>
+      </View>
+
+      <View className="mb-11 flex-row self-center gap-2.5">
+        {Array.from({ length: PAGE_DOTS }).map((_, index) => (
+          <View
+            key={index}
+            className={`h-2.5 w-2.5 rounded-full ${index === ACTIVE_DOT_INDEX ? 'bg-blue-600' : 'bg-slate-300'}`}
           />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+        ))}
+      </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <View className="gap-3.5">
+        <Pressable className="items-center justify-center rounded-full bg-blue-600 py-4" onPress={() => router.push('/login')}>
+          <Text className="text-xl font-semibold text-white">Đăng nhập</Text>
+        </Pressable>
+
+        <Pressable className="items-center justify-center rounded-full bg-slate-200 py-4" onPress={() => router.push('/register')}>
+          <Text className="text-xl font-semibold text-slate-900">Tạo tài khoản mới</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});
