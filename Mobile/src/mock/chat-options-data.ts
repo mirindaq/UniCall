@@ -62,4 +62,3 @@ export const chatOptionSections: ChatOptionItem[][] = [
     { id: 'clear-history', label: 'Xóa lịch sử trò chuyện', icon: 'trash-outline', danger: true },
   ],
 ];
-

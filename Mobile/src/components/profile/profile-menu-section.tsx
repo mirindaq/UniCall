@@ -1,6 +1,6 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import React from "react";
-import { Pressable, Text, View } from "react-native";
+import Ionicons from '@expo/vector-icons/Ionicons';
+import React from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 interface StaticMenuItem {
   id: string;
@@ -8,44 +8,51 @@ interface StaticMenuItem {
   description: string;
 }
 
+interface ProfileMenuSectionProps {
+  onOpenMyDocuments: () => void;
+  onLogout: () => void;
+}
+
 const MAIN_ITEMS: StaticMenuItem[] = [
   {
-    id: "documents",
-    title: "My Documents",
-    description: "Lưu trữ các tin nhắn quan trọng",
+    id: 'documents',
+    title: 'My Documents',
+    description: 'Lưu trữ các tin nhắn quan trọng',
   },
 ];
 
 const ACCOUNT_ITEMS: StaticMenuItem[] = [
   {
-    id: "security",
-    title: "Tài khoản và bảo mật",
-    description: "",
+    id: 'security',
+    title: 'Tài khoản và bảo mật',
+    description: '',
   },
   {
-    id: "privacy",
-    title: "Quyền riêng tư",
-    description: "",
+    id: 'privacy',
+    title: 'Quyền riêng tư',
+    description: '',
   },
 ];
 
 const iconByItemId: Record<string, keyof typeof Ionicons.glyphMap> = {
-  documents: "folder-open-outline",
-  security: "shield-checkmark-outline",
-  privacy: "lock-closed-outline",
+  documents: 'folder-open-outline',
+  security: 'shield-checkmark-outline',
+  privacy: 'lock-closed-outline',
 };
 
 function MenuItem({
   item,
   showDivider,
+  onPress,
 }: {
   item: StaticMenuItem;
   showDivider: boolean;
+  onPress?: () => void;
 }) {
-  const iconName = iconByItemId[item.id] ?? "ellipse-outline";
+  const iconName = iconByItemId[item.id] ?? 'ellipse-outline';
 
   return (
-    <View className="bg-white px-5">
+    <Pressable className="bg-white px-5" onPress={onPress}>
       <View className="flex-row items-center py-4">
         <View className="h-9 w-9 items-center justify-center rounded-full">
           <Ionicons name={iconName} size={26} color="#1e64cc" />
@@ -56,10 +63,7 @@ function MenuItem({
             {item.title}
           </Text>
           {item.description ? (
-            <Text
-              allowFontScaling={false}
-              className="mt-0.5 text-[14px] text-slate-500"
-            >
+            <Text allowFontScaling={false} className="mt-0.5 text-[14px] text-slate-500">
               {item.description}
             </Text>
           ) : null}
@@ -69,11 +73,17 @@ function MenuItem({
       </View>
 
       {showDivider ? <View className="ml-[54px] h-px bg-slate-200" /> : null}
-    </View>
+    </Pressable>
   );
 }
 
-function MenuGroup({ items }: { items: StaticMenuItem[] }) {
+function MenuGroup({
+  items,
+  onPressItem,
+}: {
+  items: StaticMenuItem[];
+  onPressItem?: (item: StaticMenuItem) => void;
+}) {
   return (
     <View className="mt-3">
       {items.map((item, itemIndex) => (
@@ -81,24 +91,31 @@ function MenuGroup({ items }: { items: StaticMenuItem[] }) {
           key={item.id}
           item={item}
           showDivider={itemIndex < items.length - 1}
+          onPress={() => onPressItem?.(item)}
         />
       ))}
     </View>
   );
 }
 
-export function ProfileMenuSection() {
+export function ProfileMenuSection({ onOpenMyDocuments, onLogout }: ProfileMenuSectionProps) {
   return (
     <View>
-      <MenuGroup items={MAIN_ITEMS} />
+      <MenuGroup
+        items={MAIN_ITEMS}
+        onPressItem={(item) => {
+          if (item.id === 'documents') {
+            onOpenMyDocuments();
+          }
+        }}
+      />
       <MenuGroup items={ACCOUNT_ITEMS} />
 
       <View className="mt-3 bg-white px-5 py-3">
-        <Pressable className="h-[46px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
-          <Text
-            allowFontScaling={false}
-            className="text-[16px] font-semibold text-gray-600"
-          >
+        <Pressable
+          className="h-[46px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50"
+          onPress={onLogout}>
+          <Text allowFontScaling={false} className="text-[16px] font-semibold text-gray-600">
             Đăng xuất
           </Text>
         </Pressable>
@@ -106,3 +123,4 @@ export function ProfileMenuSection() {
     </View>
   );
 }
+

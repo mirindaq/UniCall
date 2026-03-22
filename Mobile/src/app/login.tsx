@@ -2,15 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -86,7 +78,6 @@ export default function LoginScreen() {
       }
 
       authTokenStore.set(accessToken);
-      Toast.show({ type: 'success', text1: 'Đăng nhập thành công' });
       router.replace('/message');
     } catch (error) {
       authTokenStore.clear();
@@ -103,13 +94,8 @@ export default function LoginScreen() {
   return (
     <SafeAreaView className="flex-1 bg-slate-100" edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
-        <ScrollView
-          className="flex-1 px-6"
-          contentContainerClassName="grow pb-6"
-          keyboardShouldPersistTaps="handled">
-          <Pressable
-            className="mt-1 h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white"
-            onPress={() => router.back()}>
+        <ScrollView className="flex-1 px-6" contentContainerClassName="grow pb-6" keyboardShouldPersistTaps="handled">
+          <Pressable className="mt-1 h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white" onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color="#111827" />
           </Pressable>
 
@@ -140,9 +126,7 @@ export default function LoginScreen() {
             />
 
             <Pressable
-              className={`mt-2 items-center justify-center rounded-full py-4 ${
-                canSubmit ? 'bg-blue-600' : 'bg-slate-300'
-              }`}
+              className={`mt-2 items-center justify-center rounded-full py-4 ${canSubmit ? 'bg-blue-600' : 'bg-slate-300'}`}
               onPress={handleLogin}
               disabled={!canSubmit}>
               <Text className="text-xl font-bold text-white">{isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}</Text>
