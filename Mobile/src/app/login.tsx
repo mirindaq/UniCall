@@ -87,7 +87,7 @@ export default function LoginScreen() {
 
       authTokenStore.set(accessToken);
       Toast.show({ type: 'success', text1: 'Đăng nhập thành công' });
-      router.replace('/welcome');
+      router.replace('/message');
     } catch (error) {
       authTokenStore.clear();
       Toast.show({

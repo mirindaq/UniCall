@@ -38,18 +38,6 @@ const normalizePhone = (value: string) => {
 
 const isValidPhoneNumber = (value: string) => /^(0|\+84)\d{9}$/.test(value);
 
-const splitFullName = (fullName: string) => {
-  const parts = fullName.trim().replace(/\s+/g, ' ').split(' ');
-  if (parts.length < 2) {
-    return null;
-  }
-
-  return {
-    lastName: parts.slice(0, -1).join(' '),
-    firstName: parts[parts.length - 1],
-  };
-};
-
 const formatDateISO = (date: Date) => {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -80,7 +68,8 @@ const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
 export default function RegisterScreen() {
   const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [gender, setGender] = useState<Gender>('MALE');
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
   const [password, setPassword] = useState('');
@@ -92,14 +81,15 @@ export default function RegisterScreen() {
   const canSubmit = useMemo(() => {
     return (
       phoneNumber.trim().length > 0 &&
-      fullName.trim().length > 0 &&
+      lastName.trim().length > 0 &&
+      firstName.trim().length > 0 &&
       dateOfBirth !== null &&
       password.trim().length >= 6 &&
       acceptedTerm1 &&
       acceptedTerm2 &&
       !isSubmitting
     );
-  }, [acceptedTerm1, acceptedTerm2, dateOfBirth, fullName, isSubmitting, password, phoneNumber]);
+  }, [acceptedTerm1, acceptedTerm2, dateOfBirth, firstName, isSubmitting, lastName, password, phoneNumber]);
 
   const handleRegister = async () => {
     const normalizedPhoneNumber = normalizePhone(phoneNumber);
@@ -142,12 +132,11 @@ export default function RegisterScreen() {
       return;
     }
 
-    const nameParts = splitFullName(fullName);
-    if (!nameParts) {
+    if (!lastName.trim() || !firstName.trim()) {
       Toast.show({
         type: 'error',
         text1: 'Họ tên chưa hợp lệ',
-        text2: 'Vui lòng nhập đầy đủ họ và tên.',
+        text2: 'Vui lòng nhập đầy đủ cả họ và tên.',
       });
       return;
     }
@@ -165,8 +154,8 @@ export default function RegisterScreen() {
     try {
       const response = await authService.register({
         phoneNumber: normalizedPhoneNumber,
-        firstName: nameParts.firstName,
-        lastName: nameParts.lastName,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         gender,
         dateOfBirth: formatDateISO(dateOfBirth),
         password: password.trim(),
@@ -219,13 +208,23 @@ export default function RegisterScreen() {
               />
             </View>
 
-            <TextInput
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder="Họ và tên"
-              placeholderTextColor="#9ca3af"
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
-            />
+            <View className="flex-row gap-2.5">
+              <TextInput
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Họ"
+                placeholderTextColor="#9ca3af"
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
+              />
+
+              <TextInput
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Tên"
+                placeholderTextColor="#9ca3af"
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
+              />
+            </View>
 
             <View className="flex-row gap-2.5">
               <GenderOption label="Nam" selected={gender === 'MALE'} onPress={() => setGender('MALE')} />
