@@ -27,6 +27,13 @@ export default function ConversationDetailScreen() {
         onBack={() => {
           router.back();
         }}
+        onOpenOptions={() => {
+          if (conversationId) {
+            router.push(`/message/options/${conversationId}`);
+            return;
+          }
+          router.push('/message/options/hung');
+        }}
       />
 
       <ChatDetailContent messages={thread.messages} otherAvatar={avatar} inputPlaceholder={thread.inputPlaceholder} />

@@ -5,9 +5,10 @@ import { Pressable, Text, View } from "react-native";
 interface ChatDetailHeaderProps {
   title: string;
   onBack: () => void;
+  onOpenOptions: () => void;
 }
 
-export function ChatDetailHeader({ title, onBack }: ChatDetailHeaderProps) {
+export function ChatDetailHeader({ title, onBack, onOpenOptions }: ChatDetailHeaderProps) {
   return (
     <View className="bg-[#1e98f3] px-3.5 pb-2.5 pt-2.5">
       <View className="flex-row items-center">
@@ -32,7 +33,7 @@ export function ChatDetailHeader({ title, onBack }: ChatDetailHeaderProps) {
         <Pressable className="ml-2.5 h-9 w-9 items-center justify-center rounded-full">
           <Ionicons name="videocam-outline" size={24} color="#ffffff" />
         </Pressable>
-        <Pressable className="ml-2.5 h-9 w-9 items-center justify-center rounded-full">
+        <Pressable className="ml-2.5 h-9 w-9 items-center justify-center rounded-full" onPress={onOpenOptions}>
           <Ionicons name="list-outline" size={25} color="#ffffff" />
         </Pressable>
       </View>
