@@ -15,7 +15,7 @@ interface TabItem {
 const tabs: TabItem[] = [
   { key: 'messages', icon: 'chatbubble-ellipses-outline', activeIcon: 'chatbubble-ellipses' },
   { key: 'contacts', icon: 'person-add-outline', activeIcon: 'person-add' },
-  { key: 'feeds', icon: 'newspaper-outline', activeIcon: 'newspaper', badgeText: 'N' },
+  { key: 'feeds', icon: 'card-outline', activeIcon: 'card' },
   { key: 'profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
@@ -26,6 +26,7 @@ interface MessagesBottomTabsProps {
 const getTabLabel = (key: TabKey) => {
   if (key === 'messages') return 'Tin nhắn';
   if (key === 'contacts') return 'Danh bạ';
+  if (key === 'feeds') return 'Tường nhà';
   return 'Ẩn';
 };
 
@@ -39,6 +40,10 @@ export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTab
     }
     if (tab === 'contacts') {
       router.replace('/contacts');
+      return;
+    }
+    if (tab === 'feeds') {
+      router.replace('/feeds');
     }
   };
 
@@ -73,4 +78,3 @@ export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTab
     </View>
   );
 }
-
