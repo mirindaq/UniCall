@@ -1,0 +1,31 @@
+package iuh.fit.user_service.services;
+
+import iuh.fit.user_service.entities.User;
+import org.springframework.data.domain.Page;
+
+import java.time.LocalDate;
+
+public interface UserProfileService {
+    Long createUserProfile(
+            String identityUserId,
+            String phoneNumber,
+            String firstName,
+            String lastName,
+            String gender,
+            LocalDate dateOfBirth
+    );
+
+    boolean deleteUserProfileByIdentityUserId(String identityUserId);
+
+    User getAuthenticatedUserProfile(String identityUserId);
+
+    User getUserProfileByIdentityUserId(String identityUserId);
+
+    Page<User> searchUsers(
+            int page,
+            int limit,
+            String sortBy,
+            String search,
+            String keyword
+    );
+}

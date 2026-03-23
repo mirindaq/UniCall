@@ -1,83 +1,34 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.identity_service.clients.KeycloakIdentityClient;
+import iuh.fit.identity_service.clients.GrpcUserServiceClient;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.KeycloakAuthService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     private final KeycloakIdentityClient keycloakIdentityClient;
-
-    @Value("${app.security.keycloak.server-url}")
-    private String keycloakServerUrl;
-
-    @Value("${app.security.keycloak.realm}")
-    private String realm;
-
-    @Value("${app.security.keycloak.client-id}")
-    private String clientId;
-
-    @Value("${app.security.keycloak.redirect-uri}")
-    private String redirectUri;
-
-    @Value("${app.security.keycloak.scope:openid profile email}")
-    private String scope;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
-        String userId = null;
+        String identityUserId = keycloakIdentityClient.createUser(request);
         try {
-            userId = keycloakIdentityClient.createUser(request);
-            return RegisterResponse.builder()
-                    .userId(userId)
-                    .phoneNumber(request.getPhoneNumber())
-                    .firstName(request.getFirstName())
-                    .lastName(request.getLastName())
-                    .gender(request.getGender())
-                    .dateOfBirth(request.getDateOfBirth())
-                    .message("Registration successful")
-                    .build();
+            return grpcUserServiceClient.register(request, identityUserId);
         } catch (RuntimeException ex) {
-            if (userId != null) {
-                try {
-                    keycloakIdentityClient.deleteUser(userId);
-                    log.warn("Rolled back Keycloak user {}", userId);
-                } catch (Exception rollbackEx) {
-                    log.error("Failed to rollback Keycloak user {}", userId, rollbackEx);
-                }
-            }
+            keycloakIdentityClient.deleteUser(identityUserId);
             throw ex;
         }
     }
 
     @Override
-    public String buildAuthorizationUrl(String state, String codeChallenge) {
-        return UriComponentsBuilder.fromUriString(keycloakServerUrl)
-                .path("/realms/{realm}/protocol/openid-connect/auth")
-                .queryParam("client_id", clientId)
-                .queryParam("response_type", "code")
-                .queryParam("redirect_uri", redirectUri)
-                .queryParam("scope", scope)
-                .queryParam("state", state)
-                .queryParam("code_challenge", codeChallenge)
-                .queryParam("code_challenge_method", "S256")
-                .buildAndExpand(realm)
-                .encode()
-                .toUriString();
-    }
-
-    @Override
-    public AuthTokenResponse exchangeAuthorizationCode(String code, String codeVerifier) {
-        return keycloakIdentityClient.exchangeAuthorizationCode(code, codeVerifier);
+    public AuthTokenResponse login(String phoneNumber, String password) {
+        return keycloakIdentityClient.login(phoneNumber, password);
     }
 
     @Override

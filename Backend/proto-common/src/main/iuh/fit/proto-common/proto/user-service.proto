@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package unicall.user.v1;
+
+option java_multiple_files = true;
+option java_package = "iuh.fit.unicall.grpc.user.v1";
+option java_outer_classname = "UserServiceProto";
+
+service UserService {
+  rpc CreateUserProfile(CreateUserProfileRequest) returns (CreateUserProfileResponse);
+  rpc DeleteUserProfile(DeleteUserProfileRequest) returns (DeleteUserProfileResponse);
+  rpc GetUserProfileByIdentity(GetUserProfileByIdentityRequest) returns (GetUserProfileByIdentityResponse);
+}
+
+message CreateUserProfileRequest {
+  string identityUserId = 1;
+  string phoneNumber = 2;
+  string firstName = 3;
+  string lastName = 4;
+  string gender = 5;
+  string dateOfBirth = 6;
+}
+
+message CreateUserProfileResponse {
+  int64 id = 1;
+  string identityUserId = 2;
+}
+
+message DeleteUserProfileRequest {
+  string identityUserId = 1;
+}
+
+message DeleteUserProfileResponse {
+  bool deleted = 1;
+}
+
+message GetUserProfileByIdentityRequest {
+  string identityUserId = 1;
+}
+
+message GetUserProfileByIdentityResponse {
+  int64 id = 1;
+  string identityUserId = 2;
+  string phoneNumber = 3;
+  string firstName = 4;
+  string lastName = 5;
+  string gender = 6;
+  string dateOfBirth = 7;
+  string avatar = 8;
+  bool isActive = 9;
+}

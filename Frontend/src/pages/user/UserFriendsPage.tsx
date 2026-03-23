@@ -1,9 +1,68 @@
+import { useState } from "react"
+import { BellPlus, Users, UserPlus, UsersRound } from "lucide-react"
+
+import {
+  FriendshipPageHeader,
+  FriendshipSidebar,
+  type FriendshipTabItem,
+} from "@/components/friend_ship"
+import { CommunitiesTab } from "@/pages/user/friend_ship/CommunitiesTab"
+import { FriendInvitationsTab } from "@/pages/user/friend_ship/FriendInvitationsTab"
+import { FriendsListTab } from "@/pages/user/friend_ship/FriendsListTab"
+import { GroupInvitationsTab } from "@/pages/user/friend_ship/GroupInvitationsTab"
+
+type FriendTab = "friends" | "communities" | "friend-requests" | "group-requests"
+
+const friendTabs: FriendshipTabItem<FriendTab>[] = [
+  {
+    value: "friends",
+    label: "Danh sách bạn bè",
+    icon: Users,
+  },
+  {
+    value: "communities",
+    label: "Danh sách nhóm và cộng đồng",
+    icon: UsersRound,
+  },
+  {
+    value: "friend-requests",
+    label: "Lời mời kết bạn",
+    icon: UserPlus,
+  },
+  {
+    value: "group-requests",
+    label: "Lời mời vào nhóm và cộng đồng",
+    icon: BellPlus,
+  },
+]
+
 export function UserFriendsPage() {
+  const [activeTab, setActiveTab] = useState<FriendTab>("friends")
+  const selectedTab = friendTabs.find((tab) => tab.value === activeTab) ?? friendTabs[0]
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case "friends":
+        return <FriendsListTab />
+      case "communities":
+        return <CommunitiesTab />
+      case "friend-requests":
+        return <FriendInvitationsTab />
+      case "group-requests":
+        return <GroupInvitationsTab />
+      default:
+        return <FriendsListTab />
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-slate-800">Tab Ban be</h2>
-      <p className="text-slate-600">Day la trang mock quan ly ban be. Icon ban be tren thanh xanh se highlight khi dang o trang nay.</p>
-      <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700">Mock danh sach ban + loi moi ket ban.</div>
+    <div className="flex h-full w-full min-h-0 overflow-hidden bg-background lg:flex-row">
+      <FriendshipSidebar tabs={friendTabs} activeTab={activeTab} onChangeTab={setActiveTab} />
+
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <FriendshipPageHeader title={selectedTab.label} icon={selectedTab.icon} />
+        <div className="flex-1 min-h-0 overflow-hidden">{renderContent()}</div>
+      </section>
     </div>
   )
 }

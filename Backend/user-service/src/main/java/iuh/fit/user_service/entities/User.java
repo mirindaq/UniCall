@@ -20,21 +20,28 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String fullName;
+    @Column(nullable = false, unique = true, length = 100)
+    private String identityUserId;
 
-    private String email;
+    @Column(nullable = false, unique = true, length = 20)
+    private String phoneNumber;
 
-    private String phone;
+    @Column(nullable = false, length = 100)
+    private String firstName;
 
-    private LocalDate dob;
+    @Column(nullable = false, length = 100)
+    private String lastName;
 
-    private Boolean gender;
+    @Column(nullable = false, length = 20)
+    private String gender;
 
+    @Column(nullable = false)
+    private LocalDate dateOfBirth;
+
+    @Column
     private String avatar;
 
-    private Boolean isActive;
-
-    @ManyToOne
-    @JoinColumn(name = "role_id")
-    private Role role;
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
 }

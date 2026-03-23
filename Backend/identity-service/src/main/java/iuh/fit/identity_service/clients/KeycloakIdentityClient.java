@@ -5,6 +5,7 @@ import iuh.fit.common_service.exceptions.UnauthenticatedException;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,20 +27,17 @@ public class KeycloakIdentityClient {
     @Value("${app.security.keycloak.realm}")
     private String realm;
 
-    @Value("${app.security.keycloak.admin-client-id}")
-    private String adminClientId;
-
-    @Value("${app.security.keycloak.admin-client-secret}")
-    private String adminClientSecret;
-
     @Value("${app.security.keycloak.client-id}")
     private String authClientId;
 
     @Value("${app.security.keycloak.client-secret:}")
     private String authClientSecret;
 
-    @Value("${app.security.keycloak.redirect-uri}")
-    private String redirectUri;
+    @Value("${app.security.keycloak.admin-client-id}")
+    private String adminClientId;
+
+    @Value("${app.security.keycloak.admin-client-secret}")
+    private String adminClientSecret;
 
     public String createUser(RegisterRequest request) {
         String token = getAdminToken();
@@ -64,9 +62,6 @@ public class KeycloakIdentityClient {
                                     if (body.contains("username")) {
                                         return Mono.error(new ConflictException("Phone number already exists"));
                                     }
-                                    if (body.contains("email")) {
-                                        return Mono.error(new ConflictException("Email already exists"));
-                                    }
                                     return Mono.error(new ConflictException("User already exists"));
                                 });
                     }
@@ -77,6 +72,9 @@ public class KeycloakIdentityClient {
     }
 
     public void deleteUser(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
         String token = getAdminToken();
         keycloakWebClient.delete()
                 .uri("/admin/realms/{realm}/users/{id}", realm, userId)
@@ -86,16 +84,15 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
-    public AuthTokenResponse exchangeAuthorizationCode(String code, String codeVerifier) {
+    public AuthTokenResponse login(String phoneNumber, String password) {
         try {
             Map<String, Object> tokenMap = requestToken(BodyInserters.fromFormData("client_id", authClientId)
-                    .with("grant_type", "authorization_code")
-                    .with("code", code)
-                    .with("redirect_uri", redirectUri)
-                    .with("code_verifier", codeVerifier));
+                    .with("grant_type", "password")
+                    .with("username", phoneNumber)
+                    .with("password", password));
             return toAuthTokenResponse(tokenMap);
         } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized e) {
-            throw new UnauthenticatedException("Authorization code is invalid or expired");
+            throw new UnauthenticatedException("Phone number or password is invalid");
         }
     }
 
@@ -131,7 +128,7 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
-    private Map<String, Object> requestToken(BodyInserters.FormInserter<String> formData) {
+    private @Nullable Map<String, Object> requestToken(BodyInserters.FormInserter<String> formData) {
         BodyInserters.FormInserter<String> finalForm = formData;
         if (authClientSecret != null && !authClientSecret.isBlank()) {
             finalForm = finalForm.with("client_secret", authClientSecret);
@@ -142,8 +139,7 @@ public class KeycloakIdentityClient {
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(finalForm)
                 .retrieve()
-                .bodyToMono(Map.class)
-                .cast(Map.class)
+                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                 .block();
     }
 
@@ -155,35 +151,13 @@ public class KeycloakIdentityClient {
                         .with("client_secret", adminClientSecret)
                         .with("grant_type", "client_credentials"))
                 .retrieve()
-                .bodyToMono(Map.class)
-                .cast(Map.class)
+                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                 .block();
 
         if (tokenMap == null || tokenMap.get("access_token") == null) {
             throw new IllegalStateException("Unable to obtain admin token from Keycloak");
         }
         return tokenMap.get("access_token").toString();
-    }
-
-    private AuthTokenResponse toAuthTokenResponse(Map<String, Object> tokenMap) {
-        return AuthTokenResponse.builder()
-                .accessToken((String) tokenMap.get("access_token"))
-                .refreshToken((String) tokenMap.get("refresh_token"))
-                .tokenType((String) tokenMap.get("token_type"))
-                .expiresIn(toInt(tokenMap.get("expires_in")))
-                .refreshExpiresIn(toInt(tokenMap.get("refresh_expires_in")))
-                .scope((String) tokenMap.get("scope"))
-                .build();
-    }
-
-    private Integer toInt(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        return Integer.parseInt(value.toString());
     }
 
     private Map<String, Object> buildUser(RegisterRequest request) {
@@ -206,5 +180,26 @@ public class KeycloakIdentityClient {
                 )
         ));
         return user;
+    }
+
+    private AuthTokenResponse toAuthTokenResponse(Map<String, Object> tokenMap) {
+        return AuthTokenResponse.builder()
+                .accessToken((String) tokenMap.get("access_token"))
+                .refreshToken((String) tokenMap.get("refresh_token"))
+                .tokenType((String) tokenMap.get("token_type"))
+                .expiresIn(toInt(tokenMap.get("expires_in")))
+                .refreshExpiresIn(toInt(tokenMap.get("refresh_expires_in")))
+                .scope((String) tokenMap.get("scope"))
+                .build();
+    }
+
+    private Integer toInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(value.toString());
     }
 }
