@@ -60,12 +60,12 @@
                             ]
                         },
                         "url": {
-                            "raw": "http://localhost:8090/realms/unicall/protocol/openid-connect/token",
+                            "raw": "http://localhost:8080/realms/unicall/protocol/openid-connect/token",
                             "protocol": "http",
                             "host": [
                                 "localhost"
                             ],
-                            "port": "8090",
+                            "port": "8080",
                             "path": [
                                 "realms",
                                 "unicall",

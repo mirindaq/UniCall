@@ -64,6 +64,11 @@ public class FriendRequestServiceImpl implements FriendRequestService {
     @Override
     public PageResponse<FriendRequestResponse> getAllFriendRequestsByIdAccount(String idAccount,
             int page, int size, String sortDirection) {
+        // Validate sortDirection
+        if (!sortDirection.equalsIgnoreCase("asc") && !sortDirection.equalsIgnoreCase("desc")) {
+            throw new InvalidParamException("sortDirection phải là 'asc' hoặc 'desc'");
+        }
+
         Sort sort = "asc".equalsIgnoreCase(sortDirection)
                 ? Sort.by("timeRequest").ascending()
                 : Sort.by("timeRequest").descending();
@@ -94,16 +99,14 @@ public class FriendRequestServiceImpl implements FriendRequestService {
         }
 
         Specification<FriendRequest> spec = (root, query, cb) -> cb.or(
-               cb.and(
-                       cb.equal(root.get("idAccountSent"), idAccountSent),
-                       cb.equal(root.get("idAccountReceive"), idAccountTarget)),
-               cb.and(
-                       cb.equal(root.get("idAccountSent"), idAccountTarget),
-                       cb.equal(root.get("idAccountReceive"), idAccountSent)),
-               cb.and(
-                       cb.equal(root.get("status"), FriendRequestEnum.SENT)
-               )
-       );
+                cb.and(
+                        cb.equal(root.get("idAccountSent"), idAccountSent),
+                        cb.equal(root.get("idAccountReceive"), idAccountTarget)),
+                cb.and(
+                        cb.equal(root.get("idAccountSent"), idAccountTarget),
+                        cb.equal(root.get("idAccountReceive"), idAccountSent)),
+                cb.and(
+                        cb.equal(root.get("status"), FriendRequestEnum.SENT)));
 
         FriendRequest friendRequest = friendRequestRepository.findOne(spec).orElse(null);
 
