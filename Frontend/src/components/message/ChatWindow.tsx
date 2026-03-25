@@ -19,8 +19,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { messageWindowMessages } from "@/mock/message-data"
 
-export default function ChatWindow() {
+export default function ChatWindow({
+  conversationName,
+  conversationAvatar,
+}: {
+  conversationName?: string
+  conversationAvatar?: string
+}) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const currentConversationName = conversationName || "Nguoi dung"
 
   const handleInput = () => {
     const textarea = textareaRef.current
@@ -38,33 +45,36 @@ export default function ChatWindow() {
         <div className="flex items-center gap-3">
           <Avatar size="lg">
             <AvatarImage
-              src="https://avatarngau.sbs/wp-content/uploads/2025/05/avatar-phong-canh-17.jpg"
-              alt="Avatar"
+              src={
+                conversationAvatar ||
+                "https://avatarngau.sbs/wp-content/uploads/2025/05/avatar-phong-canh-17.jpg"
+              }
+              alt={currentConversationName}
             />
-            <AvatarFallback>NH</AvatarFallback>
+            <AvatarFallback>{currentConversationName.slice(0, 2)}</AvatarFallback>
           </Avatar>
           <div>
             <h2 className="text-base font-semibold text-foreground">
-              Nguyễn Đức Hùng
+              {currentConversationName}
             </h2>
-            <p className="text-xs text-green-500">Vừa mới truy cập</p>
+            <p className="text-xs text-green-500">Vua moi truy cap</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" title="Tìm kiếm">
+          <Button variant="ghost" size="icon-sm" title="Tim kiem">
             <Search className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Cuộc gọi thoại">
+          <Button variant="ghost" size="icon-sm" title="Cuoc goi thoai">
             <Phone className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Cuộc gọi video">
+          <Button variant="ghost" size="icon-sm" title="Cuoc goi video">
             <Video className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
             className="text-primary"
-            title="Thông tin hội thoại"
+            title="Thong tin hoi thoai"
           >
             <PanelRight className="h-5 w-5 text-blue-600" />
           </Button>
@@ -84,7 +94,7 @@ export default function ChatWindow() {
               {msg.sender === "them" && (
                 <Avatar size="sm" className="mb-1 self-end">
                   <AvatarImage src={msg.avatar} alt="Avatar" />
-                  <AvatarFallback>NH</AvatarFallback>
+                  <AvatarFallback>{currentConversationName.slice(0, 2)}</AvatarFallback>
                 </Avatar>
               )}
               <div
@@ -130,13 +140,13 @@ export default function ChatWindow() {
 
       <div className="shrink-0 border-t bg-background p-3">
         <div className="mb-2 flex gap-1">
-          <Button variant="ghost" size="icon-sm" title="Gửi sticker">
+          <Button variant="ghost" size="icon-sm" title="Gui sticker">
             <Sticker className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Gửi ảnh">
+          <Button variant="ghost" size="icon-sm" title="Gui anh">
             <ImageIcon className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Đính kèm tệp">
+          <Button variant="ghost" size="icon-sm" title="Dinh kem tep">
             <Paperclip className="h-5 w-5" />
           </Button>
         </div>
@@ -146,7 +156,7 @@ export default function ChatWindow() {
             <Textarea
               ref={textareaRef}
               onInput={handleInput}
-              placeholder="Nhập tin nhắn tới Nguyễn Đức Hùng"
+              placeholder={`Nhap tin nhan toi ${currentConversationName}`}
               rows={1}
               className="custom-scrollbar max-h-32 min-h-[38px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
@@ -155,13 +165,13 @@ export default function ChatWindow() {
               variant="ghost"
               size="icon-sm"
               className="mb-1 ml-1"
-              title="Biểu cảm"
+              title="Bieu cam"
             >
               <Smile className="h-5 w-5" />
             </Button>
           </div>
 
-          <Button size="icon" className="rounded-full bg-blue-600" title="Gửi">
+          <Button size="icon" className="rounded-full bg-blue-600" title="Gui">
             <Send className="h-4 w-4" />
           </Button>
         </div>

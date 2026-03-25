@@ -1,25 +1,43 @@
-import {
-  ChevronDown,
-  MoreHorizontal,
-} from "lucide-react"
+import { ChevronDown, MoreHorizontal } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
+import { CreateGroupDialog } from "@/components/message/CreateGroupDialog"
 import { SearchUserAccountDialog } from "@/components/shared/SearchUserAccountDialog"
 import { TopSidebarSearch } from "@/components/shared/TopSidebarSearch"
 import { UserSearchResultList } from "@/components/shared/UserSearchResultList"
-import { useQuery } from "@/hooks/useQuery"
-import { userService } from "@/services/user/user.service"
-import type { PageResponse, ResponseSuccess } from "@/types/api-response"
-import type { UserSearchItem } from "@/types/user.type"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useQuery } from "@/hooks/useQuery"
 import { cn } from "@/lib/utils"
 import { messageSidebarChats } from "@/mock/message-data"
+import { userService } from "@/services/user/user.service"
+import type { PageResponse, ResponseSuccess } from "@/types/api-response"
+import type { CreateGroupConversationResponse } from "@/types/chat"
+import type { UserSearchItem } from "@/types/user.type"
 
-export default function ChatSidebar() {
+type SidebarChat = {
+  id: string
+  name: string
+  lastMessage: string
+  time: string
+  unread: number
+  avatar?: string
+}
+
+export type ConversationSelection = {
+  id: string
+  name: string
+  avatar?: string
+}
+
+export default function ChatSidebar({
+  onConversationSelect,
+}: {
+  onConversationSelect?: (conversation: ConversationSelection) => void
+}) {
   const [tab, setTab] = useState<"all" | "unread">("all")
   const [searchKeyword, setSearchKeyword] = useState("")
   const normalizedKeyword = useMemo(() => searchKeyword.trim(), [searchKeyword])
@@ -27,6 +45,19 @@ export default function ChatSidebar() {
   const [searchPage, setSearchPage] = useState(1)
   const [allSearchedUsers, setAllSearchedUsers] = useState<UserSearchItem[]>([])
   const shouldSearch = debouncedKeyword.length > 0
+  const [sidebarChats, setSidebarChats] = useState<SidebarChat[]>(
+    messageSidebarChats.map((chat) => ({
+      id: String(chat.id),
+      name: chat.name,
+      lastMessage: chat.lastMessage,
+      time: chat.time,
+      unread: chat.unread,
+      avatar: chat.avatar,
+    }))
+  )
+  const [selectedConversationId, setSelectedConversationId] = useState<string>(
+    String(messageSidebarChats[0]?.id ?? "")
+  )
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -56,7 +87,7 @@ export default function ChatSidebar() {
       enabled: shouldSearch,
       deps: [debouncedKeyword, searchPage],
       onError: () => undefined,
-    },
+    }
   )
 
   useEffect(() => {
@@ -94,23 +125,61 @@ export default function ChatSidebar() {
 
   const chats =
     tab === "unread"
-      ? messageSidebarChats.filter((chat) => chat.unread > 0)
-      : messageSidebarChats
+      ? sidebarChats.filter((chat) => chat.unread > 0)
+      : sidebarChats
   const isSearchMode = searchKeyword.trim().length > 0
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserSearchItem | null>(null)
+  const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = useState(false)
+
+  useEffect(() => {
+    if (!selectedConversationId || sidebarChats.length === 0) {
+      return
+    }
+
+    const selectedChat = sidebarChats.find(
+      (chat) => chat.id === selectedConversationId
+    )
+    if (!selectedChat) {
+      return
+    }
+
+    onConversationSelect?.({
+      id: selectedChat.id,
+      name: selectedChat.name,
+      avatar: selectedChat.avatar,
+    })
+  }, [onConversationSelect, selectedConversationId, sidebarChats])
+
+  const handleGroupCreated = (createdGroup: CreateGroupConversationResponse) => {
+    const newChat: SidebarChat = {
+      id: createdGroup.idConversation,
+      name: createdGroup.name,
+      lastMessage: "Nhom vua duoc tao",
+      time: "Vua xong",
+      unread: 0,
+    }
+
+    setSidebarChats((prev) => {
+      const withoutDuplicate = prev.filter((chat) => chat.id !== newChat.id)
+      return [newChat, ...withoutDuplicate]
+    })
+    setSelectedConversationId(newChat.id)
+    setTab("all")
+    setSearchKeyword("")
+  }
 
   return (
     <div className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:w-[340px] lg:border-r lg:border-b-0">
-      
       <div className="border-b border-slate-100 px-4 py-4">
         <TopSidebarSearch
           value={searchKeyword}
           onChange={setSearchKeyword}
-          placeholder="Tìm kiếm"
+          placeholder="Tim kiem"
+          onCreateGroup={() => setIsCreateGroupDialogOpen(true)}
         />
         {!isSearchMode ? (
-          <div className="flex items-center justify-between gap-2  mt-4">
+          <div className="mt-4 flex items-center justify-between gap-2">
             <Tabs
               value={tab}
               onValueChange={(value) => setTab(value as "all" | "unread")}
@@ -118,16 +187,16 @@ export default function ChatSidebar() {
             >
               <TabsList variant="line" className="h-9 p-0">
                 <TabsTrigger value="all" className="px-2">
-                  Tất cả
+                  Tat ca
                 </TabsTrigger>
                 <TabsTrigger value="unread" className="px-2">
-                  Chưa đọc
+                  Chua doc
                 </TabsTrigger>
               </TabsList>
             </Tabs>
             <div className="flex items-center gap-1 text-xs">
               <Button variant="ghost" size="sm" className="h-8">
-                Phân loại
+                Phan loai
                 <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
               </Button>
               <Button variant="ghost" size="icon-sm">
@@ -142,7 +211,7 @@ export default function ChatSidebar() {
         {isSearchMode ? (
           <div className="p-2">
             <UserSearchResultList
-              title="Kết quả tìm kiếm"
+              title="Ket qua tim kiem"
               users={searchedUsers}
               isLoading={isSearchingUsers && searchPage === 1}
               isLoadingMore={isSearchingUsers && searchPage > 1}
@@ -165,9 +234,10 @@ export default function ChatSidebar() {
               <button
                 key={chat.id}
                 type="button"
+                onClick={() => setSelectedConversationId(chat.id)}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-md p-3 text-left transition-colors hover:bg-muted",
-                  chat.id === 1 && "bg-muted"
+                  chat.id === selectedConversationId && "bg-muted"
                 )}
               >
                 <Avatar size="lg">
@@ -205,6 +275,13 @@ export default function ChatSidebar() {
         onOpenChange={setIsAccountDialogOpen}
         selectedUser={selectedUser}
         currentIdentityUserId={currentIdentityUserId}
+      />
+
+      <CreateGroupDialog
+        open={isCreateGroupDialogOpen}
+        onOpenChange={setIsCreateGroupDialogOpen}
+        currentIdentityUserId={currentIdentityUserId}
+        onCreatedGroup={handleGroupCreated}
       />
     </div>
   )

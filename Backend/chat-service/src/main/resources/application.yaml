@@ -4,9 +4,10 @@ spring:
 
   data:
     mongodb:
-      host: localhost
-      port: 27017
-      database: unicall_chat_service
+      # host: localhost
+      # port: 27017
+      # database: unicall_chat_service
+      uri: mongodb://localhost:27017/unicall_chat_service
       auto-index-creation: true
 
 server:
