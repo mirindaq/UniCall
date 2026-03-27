@@ -2,7 +2,7 @@ spring:
   application:
     name: user-service
   datasource:
-    url: jdbc:mysql://localhost:3306/unicall_user_service?createDatabaseIfNotExist=true
+    url: jdbc:mysql://172.16.80.111:3306/unicall_user_service?createDatabaseIfNotExist=true
     username: springstudent
     password: springstudent
     driver-class-name: com.mysql.cj.jdbc.Driver

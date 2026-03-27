@@ -14,6 +14,7 @@ import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
@@ -23,11 +24,26 @@ import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
 import { chatApiService } from "@/services/chat/chat-api.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
-import type { ChatMessageResponse } from "@/types/chat"
+import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
 
 const MESSAGE_PAGE_SIZE = 30
 const LOAD_MORE_THRESHOLD_PX = 80
+const EMOJIS = ["😀", "😂", "😍", "🥰", "😭", "😡", "👍", "🙏", "🎉", "❤️", "🔥", "🤝"]
+const STICKERS = [
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f63a.png",
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f436.png",
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f43c.png",
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f431.png",
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f438.png",
+  "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f98a.png",
+]
+const GIFS = [
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT9IgG50Fb7Mi0prBC/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0HUpt2s9Pclgt9Vm/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26ufdipQqU2lhNA4g/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7aD2saalBwwftBIY/giphy.gif",
+]
 
 export default function ChatWindow() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -200,6 +216,9 @@ export default function ChatWindow() {
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const [stickerOpen, setStickerOpen] = useState(false)
+  const [gifOpen, setGifOpen] = useState(false)
 
   const handleInput = () => {
     const textarea = textareaRef.current
@@ -211,9 +230,13 @@ export default function ChatWindow() {
     textarea.style.height = `${textarea.scrollHeight}px`
   }
 
-  const sendText = async () => {
-    const text = draft.trim()
-    if (!text || !selectedConversationId || !currentUserId) {
+  const sendMessage = async (
+    content: string,
+    type: ChatMessageResponse["type"] = "TEXT",
+    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
+  ) => {
+    const normalized = content.trim()
+    if (!normalized || !selectedConversationId || !currentUserId) {
       return
     }
 
@@ -221,9 +244,9 @@ export default function ChatWindow() {
     try {
       const client = chatSocketService.getClient()
       if (client?.connected) {
-        chatSocketService.sendMessage(selectedConversationId, text)
+        chatSocketService.sendMessage(selectedConversationId, normalized, type, attachments)
       } else {
-        const res = await chatApiService.sendMessageRest(selectedConversationId, text)
+        const res = await chatApiService.sendMessageRest(selectedConversationId, normalized, type, attachments)
         setSocketExtras((prev) => {
           if (prev.some((x) => x.idMessage === res.data.idMessage)) {
             return prev
@@ -232,15 +255,34 @@ export default function ChatWindow() {
         })
         pendingScrollToBottomRef.current = true
       }
-      setDraft("")
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto"
-      }
     } catch {
       toast.error("Gửi tin nhắn thất bại")
     } finally {
       setIsSending(false)
     }
+  }
+
+  const sendText = async () => {
+    await sendMessage(draft, "TEXT")
+    setDraft("")
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+    }
+  }
+
+  const sendEmoji = async (emoji: string) => {
+    await sendMessage(emoji, "TEXT")
+    setEmojiOpen(false)
+  }
+
+  const sendSticker = async (stickerUrl: string) => {
+    await sendMessage("Đã gửi sticker", "NONTEXT", [{ type: "STICKER", url: stickerUrl, order: 0 }])
+    setStickerOpen(false)
+  }
+
+  const sendGif = async (gifUrl: string) => {
+    await sendMessage("Đã gửi GIF", "NONTEXT", [{ type: "GIF", url: gifUrl, order: 0 }])
+    setGifOpen(false)
   }
 
   if (!selectedConversationId || !selectedConversation) {
@@ -304,6 +346,7 @@ export default function ChatWindow() {
               {displayMessages.map((msg) => {
                 const isMe = msg.idAccountSent === currentUserId
                 const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
+                const firstAttachment = msg.attachments?.[0]
 
                 return (
                   <div
@@ -333,6 +376,14 @@ export default function ChatWindow() {
                         >
                           {msg.content}
                         </div>
+                      ) : firstAttachment?.type === "STICKER" ? (
+                        <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
+                          <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
+                        </div>
+                      ) : firstAttachment?.type === "GIF" ? (
+                        <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
+                          <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
+                        </div>
                       ) : (
                         <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
                           {msg.content}
@@ -354,12 +405,50 @@ export default function ChatWindow() {
 
       <div className="shrink-0 border-t bg-background p-3">
         <div className="mb-2 flex gap-1">
-          <Button variant="ghost" size="icon-sm" title="Gửi sticker" type="button">
-            <Sticker className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon-sm" title="Gửi ảnh" type="button">
-            <ImageIcon className="h-5 w-5" />
-          </Button>
+          <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon-sm" title="Gửi sticker" type="button">
+                <Sticker className="h-5 w-5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="start">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn sticker</div>
+              <div className="grid grid-cols-3 gap-2">
+                {STICKERS.map((stickerUrl) => (
+                  <button
+                    key={stickerUrl}
+                    type="button"
+                    className="rounded-md bg-amber-50 p-1 hover:bg-amber-100"
+                    onClick={() => void sendSticker(stickerUrl)}
+                  >
+                    <img src={stickerUrl} alt="sticker" className="mx-auto h-12 w-12 object-contain" />
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover open={gifOpen} onOpenChange={setGifOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon-sm" title="Gửi GIF" type="button">
+                <ImageIcon className="h-5 w-5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-3" align="start">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn GIF</div>
+              <div className="grid grid-cols-2 gap-2">
+                {GIFS.map((gifUrl) => (
+                  <button
+                    key={gifUrl}
+                    type="button"
+                    className="overflow-hidden rounded-md border hover:opacity-90"
+                    onClick={() => void sendGif(gifUrl)}
+                  >
+                    <img src={gifUrl} alt="gif" className="h-20 w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Button variant="ghost" size="icon-sm" title="Đính kèm tệp" type="button">
             <Paperclip className="h-5 w-5" />
           </Button>
@@ -384,15 +473,34 @@ export default function ChatWindow() {
               className="custom-scrollbar max-h-32 min-h-[38px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
             <Separator orientation="vertical" className="h-5 self-center" />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="mb-1 ml-1"
-              title="Biểu cảm"
-              type="button"
-            >
-              <Smile className="h-5 w-5" />
-            </Button>
+            <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="mb-1 ml-1"
+                  title="Biểu cảm"
+                  type="button"
+                >
+                  <Smile className="h-5 w-5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="end">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Biểu cảm</div>
+                <div className="grid grid-cols-6 gap-2">
+                  {EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="rounded-md py-1 text-2xl hover:bg-muted"
+                      onClick={() => void sendEmoji(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Button

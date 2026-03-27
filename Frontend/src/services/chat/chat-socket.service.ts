@@ -2,7 +2,7 @@ import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs"
 
 import { buildChatStompBrokerUrl } from "@/constants/api"
 import { authTokenStore } from "@/stores/auth-token.store"
-import type { ChatMessageResponse } from "@/types/chat"
+import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 
 let sharedClient: Client | null = null
 
@@ -63,10 +63,15 @@ export const chatSocketService = {
     })
   },
 
-  sendMessage(conversationId: string, content: string, type: ChatMessageResponse["type"] = "TEXT") {
+  sendMessage(
+    conversationId: string,
+    content: string,
+    type: ChatMessageResponse["type"] = "TEXT",
+    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>
+  ) {
     sharedClient?.publish({
       destination: "/app/chat.send",
-      body: JSON.stringify({ conversationId, content, type }),
+      body: JSON.stringify({ conversationId, content, type, attachments }),
       headers: { "content-type": "application/json" },
     })
   },

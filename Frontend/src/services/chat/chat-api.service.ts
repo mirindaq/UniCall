@@ -1,6 +1,6 @@
 import axiosClient from "@/configurations/axios.config"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
-import type { ChatMessageResponse, ConversationResponse } from "@/types/chat"
+import type { ChatAttachment, ChatMessageResponse, ConversationResponse } from "@/types/chat"
 
 const CHAT_PREFIX = "/chat-service/api/v1/chat"
 
@@ -26,10 +26,15 @@ export const chatApiService = {
     return data
   },
 
-  sendMessageRest: async (conversationId: string, content: string, type: ChatMessageResponse["type"] = "TEXT") => {
+  sendMessageRest: async (
+    conversationId: string,
+    content: string,
+    type: ChatMessageResponse["type"] = "TEXT",
+    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>
+  ) => {
     const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { content, type }
+      { content, type, attachments }
     )
     return data
   },

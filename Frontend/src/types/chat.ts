@@ -1,4 +1,5 @@
 export type MessageType = "TEXT" | "NONTEXT" | "MIX"
+export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI"
 
 export type MessageEnum = "SENT" | "RECEIVED" | "DELETED" | "FAILED"
 
@@ -13,6 +14,15 @@ export interface ChatMessageResponse {
   timeUpdate: string
   replyToMessageId?: string
   edited: boolean
+  attachments?: ChatAttachment[]
+}
+
+export interface ChatAttachment {
+  idAttachment: string
+  type: AttachmentType
+  url: string
+  size?: string
+  order?: number
 }
 
 export type ConversationType = "DOUBLE" | "GROUP"
