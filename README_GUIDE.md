@@ -328,4 +328,40 @@ Quy tac chon toan tu:
 
 ---
 
+## 8) Chat: REST + WebSocket STOMP (chat-service)
+
+Muc tieu:
+- REST lay lich su / tao hoi thoai; real-time gui/nhan bang WebSocket + STOMP (mau pho bien voi Spring Boot, tuong tu nhieu du an Hanh-Chinh / portal).
+
+### 8.1 REST (qua API Gateway)
+
+Tat ca request di qua gateway, Bearer JWT nhu cac API khac. `chat-service` doc `X-User-Id` (gateway inject sau khi xac thuc).
+
+| Method | Path (sau prefix gateway) | Mo ta |
+|--------|---------------------------|-------|
+| GET | `/chat-service/api/v1/chat/conversations` | Danh sach hoi thoai cua user |
+| POST | `/chat-service/api/v1/chat/conversations/direct` | Body `{ "otherUserId": "<sub doi phuong>" }` — lay hoac tao hoi thoai 1-1 |
+| GET | `/chat-service/api/v1/chat/conversations/{id}/messages?page=1&limit=20` | Trang tin nhan |
+| POST | `/chat-service/api/v1/chat/conversations/{id}/messages` | Body `{ "content": "...", "type": "TEXT" }` |
+
+Frontend da co `chatApiService` (`Frontend/src/services/chat/chat-api.service.ts`) goi cac endpoint tren qua `axiosClient`.
+
+### 8.2 WebSocket / STOMP
+
+- Endpoint WebSocket (native, **khong** SockJS): broker URL = `ws` hoac `wss` tu `VITE_API_BASE_URL`, duong dan: `/chat-service/ws`.
+- Vi trinh duyet khong gui duoc header `Authorization` khi bat tay WebSocket, gateway co filter `WebSocketAccessTokenQueryGatewayFilter`: truyen JWT bang query `access_token`, gateway se gan `Authorization: Bearer ...` truoc JWT resource server.
+- Sau khi noi WebSocket, STOMP:
+  - Subscribe: `/topic/conversations.{conversationId}.messages`
+  - Gui tin: destination `/app/chat.send`, body JSON, header `content-type: application/json`:
+    `{ "conversationId", "content", "type": "TEXT" }`
+- Ban bat tay WebSocket phai di qua gateway de co `X-User-Id`; `chat-service` `UserIdHandshakeInterceptor` luu `sub` vao session STOMP.
+
+Frontend:
+- `buildChatStompBrokerUrl` trong `Frontend/src/constants/api.ts`
+- `chatSocketService` + hook `useChatSocket` trong `Frontend/src/services/chat/chat-socket.service.ts`, `Frontend/src/hooks/useChatSocket.ts`
+
+**Luu y:** `authTokenStore` khong lam React re-render; sau login can mount lai component dung hook hoac doi `key` de kich hoat ket noi moi.
+
+---
+
 Tai lieu nay uu tien tinh thuc dung cho UniCall. Neu architecture doi, cap nhat file nay truoc khi mo rong flow moi.

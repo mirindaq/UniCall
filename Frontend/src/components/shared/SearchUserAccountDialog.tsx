@@ -14,11 +14,15 @@ export function SearchUserAccountDialog({
   onOpenChange,
   selectedUser,
   currentIdentityUserId,
+  onStartChat,
+  isStartingChat = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   selectedUser: UserSearchItem | null
   currentIdentityUserId: string | null
+  onStartChat?: (user: UserSearchItem) => void | Promise<void>
+  isStartingChat?: boolean
 }) {
   const identityUserId = selectedUser?.identityUserId ?? ""
   const isSelf = currentIdentityUserId != null && currentIdentityUserId === identityUserId
@@ -74,8 +78,12 @@ export function SearchUserAccountDialog({
               <Button
                 type="button"
                 className="h-10 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
+                disabled={isStartingChat}
+                onClick={
+                  selectedUser && onStartChat ? () => void onStartChat(selectedUser) : undefined
+                }
               >
-                Nhắn tin
+                {isStartingChat ? "Đang mở…" : "Nhắn tin"}
               </Button>
             </div>
           ) : null}

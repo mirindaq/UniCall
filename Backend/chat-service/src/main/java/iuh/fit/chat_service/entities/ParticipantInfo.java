@@ -6,12 +6,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import org.springframework.data.mongodb.core.mapping.Document;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "participantInfos")
 public class ParticipantInfo {
     private String idAccount;
     private ParicipantRole role;

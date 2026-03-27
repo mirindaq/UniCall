@@ -24,6 +24,9 @@ import {
 
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
+  title: string
+  avatarSrc?: string
+  avatarFallback: string
 }
 
 interface SectionProps {
@@ -63,7 +66,12 @@ function CollapsibleSection({
   )
 }
 
-export default function ChatInfoMain({ openStorage }: ChatInfoMainProps) {
+export default function ChatInfoMain({
+  openStorage,
+  title,
+  avatarSrc,
+  avatarFallback,
+}: ChatInfoMainProps) {
   const [openSections, setOpenSections] = useState({
     images: true,
     files: true,
@@ -90,16 +98,13 @@ export default function ChatInfoMain({ openStorage }: ChatInfoMainProps) {
         <div className="flex w-full flex-col">
           <div className="flex flex-col items-center border-b p-4">
             <Avatar className="mb-2 h-16 w-16">
-              <AvatarImage
-                src="https://avatarngau.sbs/wp-content/uploads/2025/05/avatar-phong-canh-17.jpg"
-                alt="Avatar"
-              />
-              <AvatarFallback>NH</AvatarFallback>
+              <AvatarImage src={avatarSrc} alt={title} />
+              <AvatarFallback>{avatarFallback}</AvatarFallback>
             </Avatar>
 
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
               <h4 className="ml-6 max-w-[220px] truncate text-base font-medium">
-                Nguyễn Đức Hùng
+                {title}
               </h4>
               <Button variant="secondary" size="icon-xs" title="Sửa biệt danh">
                 <Edit2 className="h-3.5 w-3.5" />
