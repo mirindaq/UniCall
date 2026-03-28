@@ -8,7 +8,7 @@ import iuh.fit.friend_service.entities.FriendRequest;
 import iuh.fit.friend_service.mapper.FriendMapper;
 import iuh.fit.friend_service.repositories.FriendRepository;
 import iuh.fit.friend_service.services.FriendService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -16,11 +16,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class FriendServiceImpl implements FriendService {
-    @Autowired
-    private FriendRepository friendRepository;
-    @Autowired
-    private FriendMapper friendMapper;
+    private final FriendRepository friendRepository;
+    private final FriendMapper friendMapper;
 
     @Override
     public void createFriendService(FriendRequest friendRequest) {
@@ -67,12 +66,6 @@ public class FriendServiceImpl implements FriendService {
             throw new ResourceNotFoundException("Không có friend với id: " + idFriend);
         }
 
-        try {
-            // Tạo event và gửi Kafka
-
-            friendRepository.deleteById(idFriend);
-        } catch (Exception e) {
-            throw new RuntimeException("Xóa bạn bè thất bại, vui lòng thử lại!");
-        }
+        friendRepository.deleteById(idFriend);
     }
 }

@@ -3,6 +3,8 @@ package iuh.fit.friend_service.services.impl;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
+import iuh.fit.common_service.specification.SpecificationBuildQuery;
+import iuh.fit.common_service.utils.SortUtils;
 import iuh.fit.friend_service.dtos.request.FriendRequestCreateRequest;
 import iuh.fit.friend_service.dtos.request.FriendRequestUpdateStatusRequest;
 import iuh.fit.friend_service.dtos.response.FriendRequestResponse;
@@ -13,23 +15,21 @@ import iuh.fit.friend_service.mapper.FriendRequestMapper;
 import iuh.fit.friend_service.repositories.FriendRequestRepository;
 import iuh.fit.friend_service.services.FriendRequestService;
 import iuh.fit.friend_service.services.FriendService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class FriendRequestServiceImpl implements FriendRequestService {
-    @Autowired
-    private FriendRequestRepository friendRequestRepository;
-    @Autowired
-    private FriendRequestMapper friendRequestMapper;
-    @Autowired
-    private FriendService friendService;
+    private final FriendRequestRepository friendRequestRepository;
+    private final FriendRequestMapper friendRequestMapper;
+    private final FriendService friendService;
 
     @Override
     public String createFriendRequest(FriendRequestCreateRequest friendRequestCreateRequest) {
@@ -69,22 +69,20 @@ public class FriendRequestServiceImpl implements FriendRequestService {
             throw new InvalidParamException("sortDirection phải là 'asc' hoặc 'desc'");
         }
 
+        SpecificationBuildQuery<FriendRequest> buildQuery = new SpecificationBuildQuery<>();
+        buildQuery.withCustom((root, query, cb) -> cb.or(
+                cb.equal(root.get("idAccountSent"), idAccount),
+                cb.equal(root.get("idAccountReceive"), idAccount)));
+        buildQuery.withCustom((root, query, cb) -> cb.equal(root.get("status"), FriendRequestEnum.SENT));
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(1, Math.min(size, 100));
         Sort sort = "asc".equalsIgnoreCase(sortDirection)
                 ? Sort.by("timeRequest").ascending()
                 : Sort.by("timeRequest").descending();
-
-        Pageable pageable = PageRequest.of(page, size, sort);
-
-        Specification<FriendRequest> spec = (root, query, cb) -> {
-            var accountPredicate = cb.or(
-                    cb.equal(root.get("idAccountSent"), idAccount),
-                    cb.equal(root.get("idAccountReceive"), idAccount));
-            var statusPredicate = cb.equal(root.get("status"), FriendRequestEnum.SENT);
-
-            return cb.and(accountPredicate, statusPredicate);
-        };
-
-        Page<FriendRequest> friendRequestPage = friendRequestRepository.findAll(spec, pageable);
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
+        Specification<FriendRequest> specification = buildQuery.build();
+        Page<FriendRequest> friendRequestPage = friendRequestRepository.findAll(specification, pageable);
 
         return PageResponse.fromPage(friendRequestPage, friendRequestMapper::toFriendRequestResponse);
     }
@@ -98,17 +96,18 @@ public class FriendRequestServiceImpl implements FriendRequestService {
             return response;
         }
 
-        Specification<FriendRequest> spec = (root, query, cb) -> cb.or(
+        SpecificationBuildQuery<FriendRequest> buildQuery = new SpecificationBuildQuery<>();
+        buildQuery.withCustom((root, query, cb) -> cb.or(
                 cb.and(
                         cb.equal(root.get("idAccountSent"), idAccountSent),
                         cb.equal(root.get("idAccountReceive"), idAccountTarget)),
                 cb.and(
                         cb.equal(root.get("idAccountSent"), idAccountTarget),
-                        cb.equal(root.get("idAccountReceive"), idAccountSent)),
-                cb.and(
-                        cb.equal(root.get("status"), FriendRequestEnum.SENT)));
+                        cb.equal(root.get("idAccountReceive"), idAccountSent))));
+        buildQuery.withCustom((root, query, cb) -> cb.equal(root.get("status"), FriendRequestEnum.SENT));
 
-        FriendRequest friendRequest = friendRequestRepository.findOne(spec).orElse(null);
+        Specification<FriendRequest> specification = buildQuery.build();
+        FriendRequest friendRequest = friendRequestRepository.findOne(specification).orElse(null);
 
         if (friendRequest == null) {
             response.setAreFriends(false);
