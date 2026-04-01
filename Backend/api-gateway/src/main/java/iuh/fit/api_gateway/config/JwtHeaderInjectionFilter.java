@@ -6,6 +6,7 @@ import org.springframework.core.Ordered;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -21,21 +22,18 @@ public class JwtHeaderInjectionFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         return ReactiveSecurityContextHolder.getContext()
-                .map(context -> context.getAuthentication())
+                .map(SecurityContext::getAuthentication)
                 .flatMap(authentication -> chain.filter(
-                        exchange.mutate().request(buildRequest(exchange, authentication)).build()
+                        exchange.mutate().request(buildRequest(authentication, exchange.getRequest())).build()
                 ))
-                .switchIfEmpty(chain.filter(
-                        exchange.mutate().request(buildRequest(exchange, null)).build()
-                ));
+                .switchIfEmpty(chain.filter(exchange));
     }
 
-    private ServerHttpRequest buildRequest(ServerWebExchange exchange, Authentication authentication) {
-        return exchange.getRequest().mutate().headers(headers -> {
-            headers.remove(USER_ID_HEADER);
-            headers.remove(USER_ROLE_HEADER);
-
+    private ServerHttpRequest buildRequest(Authentication authentication, ServerHttpRequest request) {
+        return request.mutate().headers(headers -> {
             if (authentication instanceof JwtAuthenticationToken jwtToken && authentication.isAuthenticated()) {
+                headers.remove(USER_ID_HEADER);
+                headers.remove(USER_ROLE_HEADER);
                 String userId = jwtToken.getToken().getSubject();
                 String userRole = extractRole(jwtToken);
                 if (userId != null && !userId.isBlank()) {

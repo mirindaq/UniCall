@@ -17,6 +17,8 @@ export function SearchUserAccountDialog({
   onOpenChange,
   selectedUser,
   currentIdentityUserId,
+  onStartChat,
+  isStartingChat = false,
   myFirstName,
   myLastName,
 }: {
@@ -24,6 +26,8 @@ export function SearchUserAccountDialog({
   onOpenChange: (open: boolean) => void
   selectedUser: UserSearchItem | null
   currentIdentityUserId: string | null
+  onStartChat?: (user: UserSearchItem) => void | Promise<void>
+  isStartingChat?: boolean
   myFirstName: string
   myLastName: string
 }) {
@@ -224,8 +228,9 @@ export function SearchUserAccountDialog({
   }
 
   // Handle send message
-  const handleSendMessage = () => {
-    // TODO: Implement message functionality / navigate to chat
+  const handleSendMessage = async () => {
+    if (!selectedUser || !onStartChat) return
+    await onStartChat(selectedUser)
   }
 
   return (
@@ -336,11 +341,11 @@ export function SearchUserAccountDialog({
                     </Button>
                     <Button
                       type="button"
-                      onClick={handleSendMessage}
-                      disabled={isCheckingRelationship}
+                      onClick={() => void handleSendMessage()}
+                      disabled={isCheckingRelationship || isStartingChat}
                       className="h-10 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isCheckingRelationship ? "Đang tải..." : "Nhắn tin"}
+                      {isCheckingRelationship ? "Đang tải..." : isStartingChat ? "Đang mở..." : "Nhắn tin"}
                     </Button>
                   </div>
                 )}
@@ -357,11 +362,11 @@ export function SearchUserAccountDialog({
                     </Button>
                     <Button
                       type="button"
-                      onClick={handleSendMessage}
-                      disabled={isCheckingRelationship}
+                      onClick={() => void handleSendMessage()}
+                      disabled={isCheckingRelationship || isStartingChat}
                       className="h-10 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isCheckingRelationship ? "Đang tải..." : "Nhắn tin"}
+                      {isCheckingRelationship ? "Đang tải..." : isStartingChat ? "Đang mở..." : "Nhắn tin"}
                     </Button>
                   </div>
                 )}
@@ -388,11 +393,11 @@ export function SearchUserAccountDialog({
                     </div>
                     <Button
                       type="button"
-                      onClick={handleSendMessage}
-                      disabled={isCheckingRelationship}
+                      onClick={() => void handleSendMessage()}
+                      disabled={isCheckingRelationship || isStartingChat}
                       className="h-10 w-full rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isCheckingRelationship ? "Đang tải..." : "Nhắn tin"}
+                      {isCheckingRelationship ? "Đang tải..." : isStartingChat ? "Đang mở..." : "Nhắn tin"}
                     </Button>
                   </>
                 )}
@@ -408,11 +413,11 @@ export function SearchUserAccountDialog({
                     </Button>
                     <Button
                       type="button"
-                      onClick={handleSendMessage}
-                      disabled={isCheckingRelationship}
+                      onClick={() => void handleSendMessage()}
+                      disabled={isCheckingRelationship || isStartingChat}
                       className="h-10 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isCheckingRelationship ? "Đang tải..." : "Nhắn tin"}
+                      {isCheckingRelationship ? "Đang tải..." : isStartingChat ? "Đang mở..." : "Nhắn tin"}
                     </Button>
                   </div>
                 )}
