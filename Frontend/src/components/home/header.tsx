@@ -1,5 +1,7 @@
 import { useState } from "react"
-import { Menu, X, Globe } from "lucide-react"
+import { useNavigate } from "react-router"
+import { Menu, X, Globe, LogOut, Inbox } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "../ui/button"
 import {
   DropdownMenu,
@@ -7,9 +9,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
+import { AUTH_PATH } from "@/constants/auth"
+import { USER_PATH } from "@/constants/user"
+import { authTokenStore } from "@/stores/auth-token.store"
+import { authService } from "@/services/auth/auth.service"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const navigate = useNavigate()
+  const isAuthenticated = !!authTokenStore.get()
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout()
+    } catch {
+      // ignore
+    } finally {
+      authTokenStore.clear()
+      toast.success("Đã đăng xuất")
+      navigate(AUTH_PATH.ROOT, { replace: true })
+    }
+  }
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -22,12 +42,44 @@ export function Header() {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden sm:flex items-center gap-3">
-            <Button variant="ghost" className="text-foreground hover:bg-accent">
-              Đăng nhập
-            </Button>
-            <Button className="bg-[#0068ff] hover:bg-[#0052cc] text-white">
-              Đăng ký
-            </Button>
+            {!isAuthenticated ? (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="text-foreground hover:bg-accent"
+                  onClick={() => navigate(AUTH_PATH.LOGIN)}
+                >
+                  Đăng nhập
+                </Button>
+                <Button 
+                  className="bg-[#0068ff] hover:bg-[#0052cc] text-white"
+                  onClick={() => navigate(AUTH_PATH.REGISTER)}
+                >
+                  Đăng ký
+                </Button>
+              </>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    className="bg-[#0068ff] hover:bg-[#0052cc] text-white"
+                  >
+                    <Inbox className="h-4 w-4 mr-2" />
+                    Chat
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)}>
+                    <Inbox className="h-4 w-4 mr-2" />
+                    Vào trang Chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Đăng xuất
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             
             {/* Language Selector */}
             <DropdownMenu>
@@ -66,12 +118,52 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="sm:hidden bg-background border-b border-border">
           <div className="px-4 py-4 flex flex-col gap-2">
-            <Button variant="ghost" className="w-full justify-center text-foreground hover:bg-accent">
-              Đăng nhập
-            </Button>
-            <Button className="w-full justify-center bg-[#0068ff] hover:bg-[#0052cc] text-white">
-              Đăng ký
-            </Button>
+            {!isAuthenticated ? (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-center text-foreground hover:bg-accent"
+                  onClick={() => {
+                    navigate(AUTH_PATH.LOGIN)
+                    setMobileMenuOpen(false)
+                  }}
+                >
+                  Đăng nhập
+                </Button>
+                <Button 
+                  className="w-full justify-center bg-[#0068ff] hover:bg-[#0052cc] text-white"
+                  onClick={() => {
+                    navigate(AUTH_PATH.REGISTER)
+                    setMobileMenuOpen(false)
+                  }}
+                >
+                  Đăng ký
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button 
+                  className="w-full justify-center bg-[#0068ff] hover:bg-[#0052cc] text-white"
+                  onClick={() => {
+                    navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)
+                    setMobileMenuOpen(false)
+                  }}
+                >
+                  Vào trang Chat
+                </Button>
+                <Button 
+                  className="w-full justify-center text-red-600 hover:bg-red-50"
+                  variant="ghost"
+                  onClick={() => {
+                    handleLogout()
+                    setMobileMenuOpen(false)
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Đăng xuất
+                </Button>
+              </>
+            )}
             <div className="flex justify-center gap-2 pt-2 border-t border-border mt-2">
               <Button variant="ghost" size="sm" className="text-foreground">
                 <span className="mr-1">VN</span> VI
