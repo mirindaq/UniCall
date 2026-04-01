@@ -25,114 +25,103 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ResponseError> handleGeneralException(
-            Exception e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(
-                INTERNAL_SERVER_ERROR,
-                "Đã xảy ra lỗi nội bộ, vui lòng thử lại sau",
-                request
-        );
-    }
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<ResponseError> handleGeneralException(
+                        Exception e,
+                        HttpServletRequest request) {
+                System.out.println("Exception: " + e.getClass().getName() + " - " + e.getMessage());
+                return buildErrorResponse(
+                                INTERNAL_SERVER_ERROR,
+                                "Đã xảy ra lỗi nội bộ, vui lòng thử lại sau",
+                                request);
+        }
 
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ResponseError> handleResourceNotFoundException(
-            ResourceNotFoundException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(NOT_FOUND, e.getMessage(), request);
-    }
+        @ExceptionHandler(ResourceNotFoundException.class)
+        public ResponseEntity<ResponseError> handleResourceNotFoundException(
+                        ResourceNotFoundException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(NOT_FOUND, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ResponseError> handleMethodArgumentNotValidException(
-            MethodArgumentNotValidException e,
-            HttpServletRequest request
-    ) {
-        List<String> errorMessages = e.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .map(FieldError::getDefaultMessage)
-                .filter(message -> message != null && !message.isBlank())
-                .toList();
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ResponseError> handleMethodArgumentNotValidException(
+                        MethodArgumentNotValidException e,
+                        HttpServletRequest request) {
+                List<String> errorMessages = e.getBindingResult()
+                                .getFieldErrors()
+                                .stream()
+                                .map(FieldError::getDefaultMessage)
+                                .filter(message -> message != null && !message.isBlank())
+                                .toList();
 
-        String message = errorMessages.isEmpty()
-                ? "Dữ liệu không hợp lệ"
-                : String.join("; ", errorMessages);
+                String message = errorMessages.isEmpty()
+                                ? "Dữ liệu không hợp lệ"
+                                : String.join("; ", errorMessages);
 
-        return buildErrorResponse(BAD_REQUEST, message, request);
-    }
+                return buildErrorResponse(BAD_REQUEST, message, request);
+        }
 
-    @ExceptionHandler(ConflictException.class)
-    public ResponseEntity<ResponseError> handleConflictException(
-            ConflictException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(CONFLICT, e.getMessage(), request);
-    }
+        @ExceptionHandler(ConflictException.class)
+        public ResponseEntity<ResponseError> handleConflictException(
+                        ConflictException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(CONFLICT, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ResponseError> handleMaxUploadSizeExceededException(
-            MaxUploadSizeExceededException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(BAD_REQUEST, "File too large!", request);
-    }
+        @ExceptionHandler(MaxUploadSizeExceededException.class)
+        public ResponseEntity<ResponseError> handleMaxUploadSizeExceededException(
+                        MaxUploadSizeExceededException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(BAD_REQUEST, "File too large!", request);
+        }
 
-    @ExceptionHandler(InvalidParamException.class)
-    public ResponseEntity<ResponseError> handleInvalidParamException(
-            InvalidParamException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(BAD_REQUEST, e.getMessage(), request);
-    }
+        @ExceptionHandler(InvalidParamException.class)
+        public ResponseEntity<ResponseError> handleInvalidParamException(
+                        InvalidParamException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(BAD_REQUEST, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(InvalidFileTypeException.class)
-    public ResponseEntity<ResponseError> handleInvalidFileTypeException(
-            InvalidFileTypeException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(BAD_REQUEST, e.getMessage(), request);
-    }
+        @ExceptionHandler(InvalidFileTypeException.class)
+        public ResponseEntity<ResponseError> handleInvalidFileTypeException(
+                        InvalidFileTypeException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(BAD_REQUEST, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(UnauthenticatedException.class)
-    public ResponseEntity<ResponseError> handleUnauthenticatedException(
-            UnauthenticatedException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(UNAUTHORIZED, e.getMessage(), request);
-    }
+        @ExceptionHandler(UnauthenticatedException.class)
+        public ResponseEntity<ResponseError> handleUnauthenticatedException(
+                        UnauthenticatedException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(UNAUTHORIZED, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<ResponseError> handleDisabledException(
-            DisabledException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(UNAUTHORIZED, e.getMessage(), request);
-    }
+        @ExceptionHandler(DisabledException.class)
+        public ResponseEntity<ResponseError> handleDisabledException(
+                        DisabledException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(UNAUTHORIZED, e.getMessage(), request);
+        }
 
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ResponseError> handleAccessDeniedException(
-            AccessDeniedException e,
-            HttpServletRequest request
-    ) {
-        return buildErrorResponse(FORBIDDEN, e.getMessage(), request);
-    }
+        @ExceptionHandler(AccessDeniedException.class)
+        public ResponseEntity<ResponseError> handleAccessDeniedException(
+                        AccessDeniedException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(FORBIDDEN, e.getMessage(), request);
+        }
 
-    private ResponseEntity<ResponseError> buildErrorResponse(
-            HttpStatus status,
-            String message,
-            HttpServletRequest request
-    ) {
-        ResponseError response = ResponseError.builder()
-                .timestamp(new Date())
-                .status(status.value())
-                .error(status.getReasonPhrase())
-                .path(request.getRequestURI())
-                .message(message)
-                .build();
+        private ResponseEntity<ResponseError> buildErrorResponse(
+                        HttpStatus status,
+                        String message,
+                        HttpServletRequest request) {
+                ResponseError response = ResponseError.builder()
+                                .timestamp(new Date())
+                                .status(status.value())
+                                .error(status.getReasonPhrase())
+                                .path(request.getRequestURI())
+                                .message(message)
+                                .build();
 
-        return ResponseEntity.status(status).body(response);
-    }
+                return ResponseEntity.status(status).body(response);
+        }
 }

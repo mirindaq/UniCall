@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { ArrowUpDown } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { friendList } from "@/mock/friendship.data"
+import { useQuery } from "@/hooks/useQuery"
+import { friendService } from "@/services/friend/friend.service"
+import { userService } from "@/services/user/user.service"
 import {
   FriendshipEmptyState,
   FriendshipFilterChips,
@@ -14,7 +16,7 @@ import {
   ZeroDataState,
 } from "@/components/friend_ship"
 
-type FriendFilter = "all" | "close" | "business"
+type FriendFilter = "all" | "NORMAL_FRIEND" | "CLOSE_FRIEND" | "FAMILY"
 type FriendSort = "name" | "recent" | "business"
 
 const friendSortOptions: SelectOption[] = [
@@ -25,21 +27,83 @@ const friendSortOptions: SelectOption[] = [
 
 const friendFilterOptions: SelectOption[] = [
   { value: "all", label: "Tất cả" },
-  { value: "close", label: "Bạn thân" },
-  { value: "business", label: "Business" },
+  { value: "NORMAL_FRIEND", label: "Bạn thường" },
+  { value: "CLOSE_FRIEND", label: "Bạn thân" },
+  { value: "FAMILY", label: "Gia đình" },
 ]
 
 export function FriendsListTab() {
   const [sortBy, setSortBy] = useState<FriendSort>("name")
   const [filterBy, setFilterBy] = useState<FriendFilter>("all")
 
-  const filteredFriends = useMemo(() => friendList, [])
+  const { data: myProfileResponse } = useQuery(
+    () => userService.getMyProfile(),
+    {}
+  )
+
+  const currentUserId = (myProfileResponse as any)?.data?.identityUserId
+
+  const [friendsData, setFriendsData] = useState<any[]>([])
+
+  useEffect(() => {
+    if (currentUserId) {
+      friendService
+        .getAllFriends(currentUserId)
+        .then((response: any) => {
+          setFriendsData(response?.data || [])
+        })
+        .catch((error) => {
+          console.error("Error fetching friends:", error)
+          setFriendsData([])
+        })
+    }
+  }, [currentUserId])
+
+  const friends = friendsData.map((friend: any) => ({
+    id: friend.idFriend,
+    name: `${friend.firstName} ${friend.lastName}`.trim(),
+    firstName: friend.firstName,
+    lastName: friend.lastName,
+    fallback: `${friend.firstName?.[0] ?? ""}${friend.lastName?.[0] ?? ""}`.toUpperCase(),
+    tone: "base",
+    avatar: friend.pathAvartar,
+    label: null,
+    friendType: "NORMAL_FRIEND",
+    recentOrder: 0,
+  }))
+
+  const filteredFriends = useMemo(() => {
+    let result: any[] = friends
+
+    // Apply filter
+    if (filterBy !== "all") {
+      result = result.filter((f: any) => f.friendType === filterBy)
+    }
+
+    // Apply sort
+    switch (sortBy) {
+      case "recent":
+        result = result.sort((a: any, b: any) => (b.recentOrder ?? 0) - (a.recentOrder ?? 0))
+        break
+      case "business":
+        result = result.sort((a: any, b: any) => {
+          if (a.friendType === "NORMAL_FRIEND" && b.friendType !== "NORMAL_FRIEND") return 1
+          if (a.friendType !== "NORMAL_FRIEND" && b.friendType === "NORMAL_FRIEND") return -1
+          return a.name.localeCompare(b.name, "vi")
+        })
+        break
+      default: // "name"
+        result = result.sort((a: any, b: any) => a.name.localeCompare(b.name, "vi"))
+    }
+
+    return result
+  }, [friends, filterBy, sortBy])
 
   const groupedFriends = useMemo(
     () =>
       Object.entries(
-        filteredFriends.reduce<Record<string, typeof filteredFriends>>(
-          (acc, friend) => {
+        filteredFriends.reduce<Record<string, any[]>>(
+          (acc: any, friend: any) => {
             const firstLetter =
               friend.name[0]
                 ?.normalize("NFD")
@@ -56,7 +120,7 @@ export function FriendsListTab() {
     [filteredFriends],
   )
 
-  if (friendList.length === 0) {
+  if (friends.length === 0) {
     return (
       <ZeroDataState
         title="Chưa có bạn bè nào"
@@ -112,13 +176,13 @@ export function FriendsListTab() {
             />
           ) : (
             <div className="mt-4 flex-1 min-h-0 space-y-6 overflow-auto pr-1">
-              {groupedFriends.map(([letter, items]) => (
+              {groupedFriends.map(([letter, items]: [string, any[]]) => (
                 <section key={letter} className="space-y-4">
                   <h4 className="text-xl font-semibold tracking-tight text-slate-800">
                     {letter}
                   </h4>
                   <div className="space-y-1">
-                    {items.map((friend) => (
+                    {items.map((friend: any) => (
                       <div
                         key={friend.id}
                         className="flex items-center justify-between rounded-xl px-2 py-2.5 transition hover:bg-slate-50"

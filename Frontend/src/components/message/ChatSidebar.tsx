@@ -40,6 +40,8 @@ export default function ChatSidebar() {
     onError: () => undefined,
   })
   const currentIdentityUserId = myProfileResponse?.data?.identityUserId ?? null
+  const myFirstName = myProfileResponse?.data?.firstName ?? ""
+  const myLastName = myProfileResponse?.data?.lastName ?? ""
 
   const {
     data: searchUsersResponse,
@@ -102,7 +104,7 @@ export default function ChatSidebar() {
 
   return (
     <div className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:w-[340px] lg:border-r lg:border-b-0">
-      
+
       <div className="border-b border-slate-100 px-4 py-4">
         <TopSidebarSearch
           value={searchKeyword}
@@ -205,6 +207,8 @@ export default function ChatSidebar() {
         onOpenChange={setIsAccountDialogOpen}
         selectedUser={selectedUser}
         currentIdentityUserId={currentIdentityUserId}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
       />
     </div>
   )
