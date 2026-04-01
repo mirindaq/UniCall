@@ -13,18 +13,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/friends")
 @RequiredArgsConstructor
 public class FriendController {
-    private FriendService friendService;
-    private FriendRequestService friendRequestService;
+    private final FriendService friendService;
+    private final FriendRequestService friendRequestService;
 
     @GetMapping("/idAccount/{idAccount}")
     public ResponseEntity<ResponseSuccess<?>> getFriendByIdAccount(
             @PathVariable String idAccount) {
 
         var response = friendService.getAllFriendByIdAccount(idAccount);
-        return response.isEmpty()
-                ? ResponseEntity.status(HttpStatus.NO_CONTENT)
-                        .body(new ResponseSuccess<>(HttpStatus.NO_CONTENT, "Danh sách trống."))
-                : ResponseEntity
+        return ResponseEntity
                         .ok(new ResponseSuccess<>(HttpStatus.OK, "Lấy danh sách bạn bè thành công", response));
 
     }

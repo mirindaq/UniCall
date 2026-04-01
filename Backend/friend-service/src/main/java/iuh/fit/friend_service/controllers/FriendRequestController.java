@@ -16,14 +16,12 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/friend-requestes")
 @RequiredArgsConstructor
 public class FriendRequestController {
-        private FriendRequestService friendRequestService;
+        private final FriendRequestService friendRequestService;
 
         @PostMapping
         public ResponseEntity<ResponseSuccess<?>> createFriendRequest(
                         @Valid @RequestBody FriendRequestCreateRequest friendRequestCreateRequest) {
-                System.out.println("FriendRequestCreateReequst: " + friendRequestCreateRequest.toString());
-                String idFriendRequested = friendRequestService.createFriendRequest(friendRequestCreateRequest);
-                System.out.println("result create friend request: " + idFriendRequested);
+                friendRequestService.createFriendRequest(friendRequestCreateRequest);
                 return ResponseEntity.status(HttpStatus.CREATED)
                                 .body(new ResponseSuccess<>(HttpStatus.CREATED, "Đã gửi lời mời kết bạn"));
         }
@@ -43,16 +41,11 @@ public class FriendRequestController {
                         @RequestParam(defaultValue = "0") int page,
                         @RequestParam(defaultValue = "10") int size,
                         @RequestParam(defaultValue = "desc") String sortDirection) {
-                PageResponse<FriendRequestResponse> responses = friendRequestService.getAllFriendRequestsByIdAccount(
-                                idAccount, page, size, sortDirection);
-                return responses.getTotalItem() == 0
-                                ? ResponseEntity.status(HttpStatus.NO_CONTENT)
-                                                .body(new ResponseSuccess<>(HttpStatus.NO_CONTENT,
-                                                                "Không có danh sách lời mời kết bạn nào phù hợp"))
-                                : ResponseEntity.status(HttpStatus.OK)
-                                                .body(new ResponseSuccess<>(HttpStatus.OK,
-                                                                "Lấy danh sách lời mời kết bạn thành công",
-                                                                responses));
+                return ResponseEntity.status(HttpStatus.OK)
+                        .body(new ResponseSuccess<>(HttpStatus.OK,
+                                "Lấy danh sách lời mời kết bạn thành công",
+                                friendRequestService.getAllFriendRequestsByIdAccount(
+                                        idAccount, page, size, sortDirection)));
         }
 
 }
