@@ -22,12 +22,12 @@ import java.time.LocalDateTime;
 @Builder
 public class FriendRequest {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int idFriendRequest;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String idFriendRequest;
     @NotNull
-    private int idAccountSent;
+    private String idAccountSent;
     @NotNull
-    private int idAccountReceive;
+    private String idAccountReceive;
     @Length(max = 120)
     private String pathAvartar = "";
     @NotNull
@@ -40,4 +40,9 @@ public class FriendRequest {
     private LocalDateTime timeRequest;
     @Enumerated(EnumType.STRING)
     private FriendRequestEnum status;
+
+    @PrePersist
+    protected void onCreate() {
+        this.timeRequest = LocalDateTime.now();
+    }
 }

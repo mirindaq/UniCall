@@ -54,6 +54,8 @@ export default function ChatSidebar() {
     onError: () => undefined,
   })
   const currentIdentityUserId = myProfileResponse?.data?.identityUserId ?? null
+  const myFirstName = myProfileResponse?.data?.firstName ?? ""
+  const myLastName = myProfileResponse?.data?.lastName ?? ""
 
   const {
     data: searchUsersResponse,
@@ -246,6 +248,8 @@ export default function ChatSidebar() {
           await startChatWithUser(user)
         }}
         isStartingChat={isStartingChat}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
       />
     </div>
   )

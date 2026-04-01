@@ -1,6 +1,7 @@
 package iuh.fit.friend_service.entities;
 
-
+import iuh.fit.friend_service.enums.FriendRequestEnum;
+import iuh.fit.friend_service.enums.FriendTypeEnum;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -19,10 +20,10 @@ import java.time.LocalDateTime;
 @Builder
 public class Friend {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int idFriend;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String idFriend;
     @NotNull
-    private int idAccountSent;
+    private String idAccountSent;
     private String pathAvartar = "";
     @NotNull
     @Size(max = 40)
@@ -31,11 +32,17 @@ public class Friend {
     @Size(max = 40)
     private String lastName;
     @NotNull
-    private int idAccountReceive;
-    @NotNull
+    private String idAccountReceive;
+    @Enumerated(EnumType.STRING)
+    private FriendTypeEnum friendType = FriendTypeEnum.NORMAL_FRIEND;
     private LocalDateTime timeCreate;
 
-    @JoinColumn(name="idFriendRequest")
+    @JoinColumn(name = "idFriendRequest")
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
     private FriendRequest friendRequest;
+
+    @PrePersist
+    protected void onCreate() {
+        this.timeCreate = LocalDateTime.now();
+    }
 }
