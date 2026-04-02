@@ -1,10 +1,63 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
-import { API_PREFIX } from '@/constants/api';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+const DEFAULT_GATEWAY_PORT = process.env.EXPO_PUBLIC_API_PORT ?? '8088';
+const DEFAULT_GATEWAY_PATH = process.env.EXPO_PUBLIC_API_GATEWAY_PATH ?? '/api-gateway';
 const LOGIN_PATH = process.env.EXPO_PUBLIC_LOGIN_PATH ?? '/login';
+const AUTH_API_PREFIX = '/identity-service/api/v1/auth';
+
+const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+const ensureLeadingSlash = (value: string) => (value.startsWith('/') ? value : `/${value}`);
+
+const extractHost = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.replace(/^[a-zA-Z]+:\/\//, '');
+  const hostAndPort = normalized.split('/')[0];
+  const host = hostAndPort.split(':')[0];
+  if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+  return host;
+};
+
+const getExpoDevHost = () => {
+  const constants = Constants as unknown as {
+    expoConfig?: { hostUri?: string };
+    expoGoConfig?: { debuggerHost?: string };
+    manifest?: { debuggerHost?: string };
+    manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } };
+  };
+
+  return (
+    extractHost(constants.expoConfig?.hostUri) ||
+    extractHost(constants.expoGoConfig?.debuggerHost) ||
+    extractHost(constants.manifest?.debuggerHost) ||
+    extractHost(constants.manifest2?.extra?.expoGo?.debuggerHost)
+  );
+};
+
+const resolveApiBaseUrl = () => {
+  const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (envBaseUrl) {
+    return stripTrailingSlash(envBaseUrl);
+  }
+
+  const gatewayPath = ensureLeadingSlash(DEFAULT_GATEWAY_PATH);
+  const expoHost = getExpoDevHost();
+
+  if (expoHost) {
+    return `http://${expoHost}:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+  }
+
+  if (Platform.OS === 'android') {
+    // Android emulator cannot reach host machine via localhost.
+    return `http://10.0.2.2:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+  }
+
+  return `http://localhost:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
@@ -44,6 +97,16 @@ const clearAuthData = () => {
   removeStorage(REFRESH_TOKEN_KEY);
 };
 
+export const authTokenStore = {
+  get: () => readStorage(ACCESS_TOKEN_KEY),
+  set: (accessToken: string) => {
+    writeStorage(ACCESS_TOKEN_KEY, accessToken);
+  },
+  clear: () => {
+    clearAuthData();
+  },
+};
+
 const navigateToLogin = () => {
   if (Platform.OS === 'web') {
     window.location.href = LOGIN_PATH;
@@ -63,6 +126,14 @@ let failedQueue: Array<{
   resolve: (token: string) => void;
   reject: (error: unknown) => void;
 }> = [];
+
+const isAuthRequest = (url?: string) =>
+  Boolean(
+    url?.includes(`${AUTH_API_PREFIX}/login`) ||
+      url?.includes(`${AUTH_API_PREFIX}/register`) ||
+      url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
+      url?.includes(`${AUTH_API_PREFIX}/logout`)
+  );
 
 const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach(({ resolve, reject }) => {
@@ -102,14 +173,7 @@ axiosClient.interceptors.response.use(
     }
 
     if (status === 401) {
-      if (originalRequest.url?.includes('/auth/refresh-token') || originalRequest._retry) {
-        clearAuthData();
-        navigateToLogin();
-        return Promise.reject(error);
-      }
-
-      const refreshToken = readStorage(REFRESH_TOKEN_KEY);
-      if (!refreshToken) {
+      if (isAuthRequest(originalRequest.url) || originalRequest._retry) {
         clearAuthData();
         navigateToLogin();
         return Promise.reject(error);
@@ -133,9 +197,12 @@ axiosClient.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          `${API_BASE_URL}${API_PREFIX}/auth/refresh-token`,
-          { refreshToken },
-          { headers: { 'Content-Type': 'application/json' } }
+          `${API_BASE_URL}${AUTH_API_PREFIX}/refresh`,
+          {},
+          {
+            withCredentials: true,
+            headers: { 'Content-Type': 'application/json' },
+          }
         );
 
         const newAccessToken = data?.data?.accessToken;
@@ -143,10 +210,7 @@ axiosClient.interceptors.response.use(
           throw new Error('No access token in refresh response');
         }
 
-        writeStorage(ACCESS_TOKEN_KEY, newAccessToken);
-        if (data?.data?.refreshToken) {
-          writeStorage(REFRESH_TOKEN_KEY, data.data.refreshToken);
-        }
+        authTokenStore.set(newAccessToken);
 
         axiosClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
         processQueue(null, newAccessToken);

@@ -1,4 +1,8 @@
-import { ChevronDown, MoreHorizontal } from "lucide-react"
+import {
+  ChevronDown,
+  MessageCircle,
+  MoreHorizontal,
+} from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { CreateGroupDialog } from "@/components/message/CreateGroupDialog"
@@ -6,38 +10,39 @@ import { SearchUserAccountDialog } from "@/components/shared/SearchUserAccountDi
 import { TopSidebarSearch } from "@/components/shared/TopSidebarSearch"
 import { UserSearchResultList } from "@/components/shared/UserSearchResultList"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useChatPage } from "@/contexts/ChatPageContext"
 import { useQuery } from "@/hooks/useQuery"
 import { cn } from "@/lib/utils"
-import { messageSidebarChats } from "@/mock/message-data"
 import { userService } from "@/services/user/user.service"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type { CreateGroupConversationResponse } from "@/types/chat"
 import type { UserSearchItem } from "@/types/user.type"
+import { formatChatSidebarTime } from "@/utils/chat-display.util"
 
-type SidebarChat = {
-  id: string
-  name: string
-  lastMessage: string
-  time: string
-  unread: number
-  avatar?: string
-}
+export default function ChatSidebar() {
+  const {
+    conversations,
+    conversationsLoading,
+    refetchConversations,
+    selectConversation,
+    selectedConversationId,
+    conversationTitle,
+    conversationAvatar,
+    startChatWithUser,
+    isStartingChat,
+  } = useChatPage()
 
-export type ConversationSelection = {
-  id: string
-  name: string
-  avatar?: string
-}
-
-export default function ChatSidebar({
-  onConversationSelect,
-}: {
-  onConversationSelect?: (conversation: ConversationSelection) => void
-}) {
   const [tab, setTab] = useState<"all" | "unread">("all")
   const [searchKeyword, setSearchKeyword] = useState("")
   const normalizedKeyword = useMemo(() => searchKeyword.trim(), [searchKeyword])
@@ -45,19 +50,6 @@ export default function ChatSidebar({
   const [searchPage, setSearchPage] = useState(1)
   const [allSearchedUsers, setAllSearchedUsers] = useState<UserSearchItem[]>([])
   const shouldSearch = debouncedKeyword.length > 0
-  const [sidebarChats, setSidebarChats] = useState<SidebarChat[]>(
-    messageSidebarChats.map((chat) => ({
-      id: String(chat.id),
-      name: chat.name,
-      lastMessage: chat.lastMessage,
-      time: chat.time,
-      unread: chat.unread,
-      avatar: chat.avatar,
-    }))
-  )
-  const [selectedConversationId, setSelectedConversationId] = useState<string>(
-    String(messageSidebarChats[0]?.id ?? "")
-  )
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -71,6 +63,8 @@ export default function ChatSidebar({
     onError: () => undefined,
   })
   const currentIdentityUserId = myProfileResponse?.data?.identityUserId ?? null
+  const myFirstName = myProfileResponse?.data?.firstName ?? ""
+  const myLastName = myProfileResponse?.data?.lastName ?? ""
 
   const {
     data: searchUsersResponse,
@@ -87,9 +81,11 @@ export default function ChatSidebar({
       enabled: shouldSearch,
       deps: [debouncedKeyword, searchPage],
       onError: () => undefined,
-    }
+    },
   )
 
+  /* User search list reset / append — cùng pattern TopSidebarSearch + FriendshipSidebar */
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!shouldSearch) {
       setSearchPage(1)
@@ -117,54 +113,24 @@ export default function ChatSidebar({
       return [...prev, ...appended]
     })
   }, [searchPage, searchUsersResponse?.data?.items, shouldSearch])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const searchedUsers = shouldSearch ? allSearchedUsers : []
   const currentPage = searchUsersResponse?.data?.page ?? 1
   const totalPage = searchUsersResponse?.data?.totalPage ?? 1
   const hasMoreSearchResult = shouldSearch && currentPage < totalPage
 
-  const chats =
-    tab === "unread"
-      ? sidebarChats.filter((chat) => chat.unread > 0)
-      : sidebarChats
+  /** Tab "Chua d?c": ch? API unread; hi?n danh sách r?ng kèm empty state. */
+  const listForTab = tab === "unread" ? [] : conversations
+
   const isSearchMode = searchKeyword.trim().length > 0
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserSearchItem | null>(null)
   const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = useState(false)
 
-  useEffect(() => {
-    if (!selectedConversationId || sidebarChats.length === 0) {
-      return
-    }
-
-    const selectedChat = sidebarChats.find(
-      (chat) => chat.id === selectedConversationId
-    )
-    if (!selectedChat) {
-      return
-    }
-
-    onConversationSelect?.({
-      id: selectedChat.id,
-      name: selectedChat.name,
-      avatar: selectedChat.avatar,
-    })
-  }, [onConversationSelect, selectedConversationId, sidebarChats])
-
-  const handleGroupCreated = (createdGroup: CreateGroupConversationResponse) => {
-    const newChat: SidebarChat = {
-      id: createdGroup.idConversation,
-      name: createdGroup.name,
-      lastMessage: "Nhom vua duoc tao",
-      time: "Vua xong",
-      unread: 0,
-    }
-
-    setSidebarChats((prev) => {
-      const withoutDuplicate = prev.filter((chat) => chat.id !== newChat.id)
-      return [newChat, ...withoutDuplicate]
-    })
-    setSelectedConversationId(newChat.id)
+  const handleGroupCreated = async (createdGroup: CreateGroupConversationResponse) => {
+    await refetchConversations()
+    selectConversation(createdGroup.idConversation)
     setTab("all")
     setSearchKeyword("")
   }
@@ -175,7 +141,7 @@ export default function ChatSidebar({
         <TopSidebarSearch
           value={searchKeyword}
           onChange={setSearchKeyword}
-          placeholder="Tim kiem"
+          placeholder="Tìm ki?m"
           onCreateGroup={() => setIsCreateGroupDialogOpen(true)}
         />
         {!isSearchMode ? (
@@ -187,16 +153,16 @@ export default function ChatSidebar({
             >
               <TabsList variant="line" className="h-9 p-0">
                 <TabsTrigger value="all" className="px-2">
-                  Tat ca
+                  T?t c?
                 </TabsTrigger>
                 <TabsTrigger value="unread" className="px-2">
-                  Chua doc
+                  Chua d?c
                 </TabsTrigger>
               </TabsList>
             </Tabs>
             <div className="flex items-center gap-1 text-xs">
               <Button variant="ghost" size="sm" className="h-8">
-                Phan loai
+                Phân lo?i
                 <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
               </Button>
               <Button variant="ghost" size="icon-sm">
@@ -211,7 +177,7 @@ export default function ChatSidebar({
         {isSearchMode ? (
           <div className="p-2">
             <UserSearchResultList
-              title="Ket qua tim kiem"
+              title="K?t qu? tìm ki?m"
               users={searchedUsers}
               isLoading={isSearchingUsers && searchPage === 1}
               isLoadingMore={isSearchingUsers && searchPage > 1}
@@ -228,44 +194,63 @@ export default function ChatSidebar({
               }}
             />
           </div>
+        ) : conversationsLoading ? (
+          <div className="flex justify-center py-16">
+            <Spinner className="size-8 text-muted-foreground" />
+          </div>
+        ) : listForTab.length === 0 ? (
+          <div className="p-4">
+            <Empty className="border-0 bg-transparent py-10">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MessageCircle />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {tab === "unread" ? "Không có h?i tho?i chua d?c" : "Chua có cu?c trò chuy?n"}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {tab === "unread"
+                    ? "Các tin m?i s? hi?n th? ? dây khi backend h? tr? tr?ng thái dã d?c."
+                    : "Tìm ngu?i d? nh?n, ho?c d?i tin nh?n m?i."}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </div>
         ) : (
           <div className="space-y-1 p-2">
-            {chats.map((chat) => (
-              <button
-                key={chat.id}
-                type="button"
-                onClick={() => setSelectedConversationId(chat.id)}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-md p-3 text-left transition-colors hover:bg-muted",
-                  chat.id === selectedConversationId && "bg-muted"
-                )}
-              >
-                <Avatar size="lg">
-                  <AvatarImage src={chat.avatar} alt={chat.name} />
-                  <AvatarFallback>{chat.name.slice(0, 2)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <h3 className="truncate text-sm font-medium text-foreground">
-                      {chat.name}
-                    </h3>
-                    <span className="ml-2 text-xs whitespace-nowrap text-muted-foreground">
-                      {chat.time}
-                    </span>
+            {listForTab.map((chat) => {
+              const title = conversationTitle(chat)
+              const avatar = conversationAvatar(chat)
+              const last = chat.lastMessageContent ?? ""
+              const timeLabel = formatChatSidebarTime(chat.dateUpdateMessage)
+              const isActive = chat.idConversation === selectedConversationId
+
+              return (
+                <button
+                  key={chat.idConversation}
+                  type="button"
+                  onClick={() => selectConversation(chat.idConversation)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-md p-3 text-left transition-colors hover:bg-muted",
+                    isActive && "bg-muted"
+                  )}
+                >
+                  <Avatar size="lg">
+                    <AvatarImage src={avatar} alt={title} />
+                    <AvatarFallback>{title.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-baseline justify-between">
+                      <h3 className="truncate text-sm font-medium text-foreground">{title}</h3>
+                      <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">{timeLabel}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="truncate text-xs text-muted-foreground">{last || " "}</p>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <p className="truncate text-xs text-muted-foreground">
-                      {chat.lastMessage}
-                    </p>
-                    {chat.unread > 0 && (
-                      <Badge className="min-w-[18px] justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px]">
-                        {chat.unread > 5 ? "5+" : chat.unread}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         )}
       </ScrollArea>
@@ -275,6 +260,14 @@ export default function ChatSidebar({
         onOpenChange={setIsAccountDialogOpen}
         selectedUser={selectedUser}
         currentIdentityUserId={currentIdentityUserId}
+        onStartChat={async (user) => {
+          setIsAccountDialogOpen(false)
+          setSearchKeyword("")
+          await startChatWithUser(user)
+        }}
+        isStartingChat={isStartingChat}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
       />
 
       <CreateGroupDialog

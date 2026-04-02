@@ -17,9 +17,13 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
     open-in-view: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
 api:
   prefix: /api/v1
-
 server:
   servlet:
     context-path: /friend-service

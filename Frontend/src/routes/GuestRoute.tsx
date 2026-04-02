@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react"
 import { Navigate } from "react-router"
 
 import { AUTH_PATH } from "@/constants/auth"
+import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
 import { authTokenStore } from "@/stores/auth-token.store"
 
@@ -11,45 +12,43 @@ interface GuestRouteProps {
 }
 
 export default function GuestRoute({ children }: GuestRouteProps) {
-  const [loading, setLoading] = useState(!authTokenStore.get())
-  const [authenticated, setAuthenticated] = useState(Boolean(authTokenStore.get()))
+  const [loading, setLoading] = useState(() => !authTokenStore.get());
+  const [authenticated, setAuthenticated] = useState(() => Boolean(authTokenStore.get()));
 
   useEffect(() => {
+    let mounted = true;
     if (authTokenStore.get()) {
-      setAuthenticated(true)
-      setLoading(false)
-      return
+      if (!authenticated) setAuthenticated(true);
+      if (loading) setLoading(false);
+      return;
     }
-
-    let mounted = true
 
     authService.refreshAccessToken()
       .then((response) => {
-        const token = response.data.accessToken
-        if (!token) {
-          throw new Error("Missing access token")
-        }
-        authTokenStore.set(token)
+        const token = response.data.accessToken;
+        if (!token) throw new Error("Missing access token");
+        authTokenStore.set(token);
         if (mounted) {
-          setAuthenticated(true)
+          setAuthenticated(true);
         }
       })
       .catch(() => {
-        authTokenStore.clear()
+        authTokenStore.clear();
         if (mounted) {
-          setAuthenticated(false)
+          setAuthenticated(false);
         }
       })
       .finally(() => {
         if (mounted) {
-          setLoading(false)
+          setLoading(false);
         }
-      })
+      });
 
     return () => {
-      mounted = false
-    }
-  }, [])
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
@@ -59,12 +58,12 @@ export default function GuestRoute({ children }: GuestRouteProps) {
           Dang kiem tra phien dang nhap...
         </div>
       </main>
-    )
+    );
   }
 
   if (authenticated) {
-    return <Navigate to={AUTH_PATH.HOME} replace />
+    return <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />;
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }
