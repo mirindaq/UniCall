@@ -26,12 +26,15 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
+  detailsView: "main" | "storage" | "group-members"
+  setDetailsView: (view: "main" | "storage" | "group-members") => void
 }
 
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
   const [peerById, setPeerById] = useState<Record<string, UserProfile>>({})
   const [isStartingChat, setIsStartingChat] = useState(false)
   const fetchedPeersRef = useRef(new Set<string>())
@@ -128,6 +131,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
+    setDetailsView("main")
   }, [])
 
   const startChatWithUser = useCallback(
@@ -169,6 +173,8 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       conversationAvatar,
       selectedConversation,
       selectedPeerProfile,
+      detailsView,
+      setDetailsView,
     }),
     [
       conversationAvatar,
@@ -182,6 +188,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectConversation,
       selectedConversation,
       selectedPeerProfile,
+      detailsView,
       selectedConversationId,
       startChatWithUser,
     ],

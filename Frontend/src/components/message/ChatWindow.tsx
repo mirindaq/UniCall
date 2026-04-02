@@ -7,6 +7,7 @@ import {
   Send,
   Smile,
   Sticker,
+  Users,
   Video,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -61,6 +62,7 @@ export default function ChatWindow() {
     conversationTitle,
     conversationAvatar,
     selectedPeerProfile,
+    setDetailsView,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -305,7 +307,18 @@ export default function ChatWindow() {
           </Avatar>
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-foreground">{headerTitle}</h2>
-            <p className="text-xs text-green-600">Trực tuyến</p>
+            {selectedConversation.type === "GROUP" ? (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600"
+                onClick={() => setDetailsView("group-members")}
+              >
+                <Users className="h-3.5 w-3.5" />
+                {selectedConversation.numberMember} thành viên
+              </button>
+            ) : (
+              <p className="text-xs text-green-600">Trực tuyến</p>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -322,6 +335,7 @@ export default function ChatWindow() {
             variant="ghost"
             size="icon-sm"
             className="text-primary"
+            onClick={() => setDetailsView("main")}
             title="Thông tin hội thoại"
           >
             <PanelRight className="h-5 w-5 text-blue-600" />

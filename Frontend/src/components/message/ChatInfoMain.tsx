@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertTriangle,
   BellOff,
   ChevronDown,
@@ -7,12 +7,23 @@ import {
   EyeOff,
   HelpCircle,
   Link as LinkIcon,
+  LogOut,
   Pin,
   Trash2,
   Users,
 } from "lucide-react"
 import { useState } from "react"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -27,6 +38,10 @@ interface ChatInfoMainProps {
   title: string
   avatarSrc?: string
   avatarFallback: string
+  isGroup?: boolean
+  canDissolveGroup?: boolean
+  onLeaveGroup?: () => Promise<void>
+  onDissolveGroup?: () => Promise<void>
 }
 
 interface SectionProps {
@@ -71,6 +86,10 @@ export default function ChatInfoMain({
   title,
   avatarSrc,
   avatarFallback,
+  isGroup = false,
+  canDissolveGroup = false,
+  onLeaveGroup,
+  onDissolveGroup,
 }: ChatInfoMainProps) {
   const [openSections, setOpenSections] = useState({
     images: true,
@@ -78,12 +97,42 @@ export default function ChatInfoMain({
     links: true,
     security: true,
   })
+  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false)
+  const [isDissolveDialogOpen, setIsDissolveDialogOpen] = useState(false)
+  const [isLeavingGroup, setIsLeavingGroup] = useState(false)
+  const [isDissolvingGroup, setIsDissolvingGroup] = useState(false)
 
   const toggleSection = (key: keyof typeof openSections) => {
     setOpenSections((prev) => ({
       ...prev,
       [key]: !prev[key],
     }))
+  }
+
+  const handleConfirmLeaveGroup = async () => {
+    if (!onLeaveGroup || isLeavingGroup) {
+      return
+    }
+    setIsLeavingGroup(true)
+    try {
+      await onLeaveGroup()
+      setIsLeaveDialogOpen(false)
+    } finally {
+      setIsLeavingGroup(false)
+    }
+  }
+
+  const handleConfirmDissolveGroup = async () => {
+    if (!onDissolveGroup || isDissolvingGroup) {
+      return
+    }
+    setIsDissolvingGroup(true)
+    try {
+      await onDissolveGroup()
+      setIsDissolveDialogOpen(false)
+    } finally {
+      setIsDissolvingGroup(false)
+    }
   }
 
   return (
@@ -309,9 +358,69 @@ export default function ChatInfoMain({
               <Trash2 className="h-5 w-5" />
               Xóa lịch sử trò chuyện
             </Button>
+
+            {isGroup ? (
+              <Button
+                variant="ghost"
+                className="w-full justify-start bg-transparent text-amber-600 hover:text-amber-700"
+                onClick={() => setIsLeaveDialogOpen(true)}
+              >
+                <LogOut className="h-5 w-5" />
+                Rời nhóm
+              </Button>
+            ) : null}
+
+            {isGroup && canDissolveGroup ? (
+              <Button
+                variant="ghost"
+                className="w-full justify-start bg-transparent text-red-600 hover:text-red-700"
+                onClick={() => setIsDissolveDialogOpen(true)}
+              >
+                <Trash2 className="h-5 w-5" />
+                Giải tán nhóm
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
+
+      <AlertDialog open={isLeaveDialogOpen} onOpenChange={setIsLeaveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận rời nhóm</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn rời nhóm này không?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLeavingGroup}>Hủy</AlertDialogCancel>
+            <AlertDialogAction disabled={isLeavingGroup} onClick={() => void handleConfirmLeaveGroup()}>
+              {isLeavingGroup ? "Đang xử lý..." : "Rời nhóm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isDissolveDialogOpen} onOpenChange={setIsDissolveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận giải tán nhóm</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sau khi giải tán, nhóm sẽ bị xóa và không thể khôi phục.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDissolvingGroup}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDissolvingGroup}
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => void handleConfirmDissolveGroup()}
+            >
+              {isDissolvingGroup ? "Đang xử lý..." : "Giải tán nhóm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
