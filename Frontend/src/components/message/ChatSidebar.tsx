@@ -1,10 +1,11 @@
-import {
+﻿import {
   ChevronDown,
   MessageCircle,
   MoreHorizontal,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
+import { AddFriendDialog } from "@/components/message/AddFriendDialog"
 import { CreateGroupDialog } from "@/components/message/CreateGroupDialog"
 import { SearchUserAccountDialog } from "@/components/shared/SearchUserAccountDialog"
 import { TopSidebarSearch } from "@/components/shared/TopSidebarSearch"
@@ -84,7 +85,7 @@ export default function ChatSidebar() {
     },
   )
 
-  /* User search list reset / append � c�ng pattern TopSidebarSearch + FriendshipSidebar */
+  /* User search list reset / append — cùng pattern TopSidebarSearch + FriendshipSidebar */
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!shouldSearch) {
@@ -120,13 +121,14 @@ export default function ChatSidebar() {
   const totalPage = searchUsersResponse?.data?.totalPage ?? 1
   const hasMoreSearchResult = shouldSearch && currentPage < totalPage
 
-  /** Tab "Chua d?c": ch? API unread; hi?n danh s�ch r?ng k�m empty state. */
+  /** Tab "Chưa đọc": chờ API unread; hiện danh sách rỗng kèm empty state. */
   const listForTab = tab === "unread" ? [] : conversations
 
   const isSearchMode = searchKeyword.trim().length > 0
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserSearchItem | null>(null)
   const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = useState(false)
+  const [isAddFriendDialogOpen, setIsAddFriendDialogOpen] = useState(false)
 
   const handleGroupCreated = async (createdGroup: CreateGroupConversationResponse) => {
     await refetchConversations()
@@ -141,7 +143,8 @@ export default function ChatSidebar() {
         <TopSidebarSearch
           value={searchKeyword}
           onChange={setSearchKeyword}
-          placeholder="T�m ki?m"
+          placeholder="Tìm kiếm"
+          onAddFriend={() => setIsAddFriendDialogOpen(true)}
           onCreateGroup={() => setIsCreateGroupDialogOpen(true)}
         />
         {!isSearchMode ? (
@@ -153,16 +156,16 @@ export default function ChatSidebar() {
             >
               <TabsList variant="line" className="h-9 p-0">
                 <TabsTrigger value="all" className="px-2">
-                  T?t c?
+                  Tất cả
                 </TabsTrigger>
                 <TabsTrigger value="unread" className="px-2">
-                  Chua d?c
+                  Chưa đọc
                 </TabsTrigger>
               </TabsList>
             </Tabs>
             <div className="flex items-center gap-1 text-xs">
               <Button variant="ghost" size="sm" className="h-8">
-                Ph�n lo?i
+                Phân loại
                 <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
               </Button>
               <Button variant="ghost" size="icon-sm">
@@ -177,7 +180,7 @@ export default function ChatSidebar() {
         {isSearchMode ? (
           <div className="p-2">
             <UserSearchResultList
-              title="K?t qu? t�m ki?m"
+              title="Kết quả tìm kiếm"
               users={searchedUsers}
               isLoading={isSearchingUsers && searchPage === 1}
               isLoadingMore={isSearchingUsers && searchPage > 1}
@@ -206,12 +209,12 @@ export default function ChatSidebar() {
                   <MessageCircle />
                 </EmptyMedia>
                 <EmptyTitle>
-                  {tab === "unread" ? "Kh�ng c� h?i tho?i chua d?c" : "Chua c� cu?c tr� chuy?n"}
+                  {tab === "unread" ? "Không có hội thoại chưa đọc" : "Chưa có cuộc trò chuyện"}
                 </EmptyTitle>
                 <EmptyDescription>
                   {tab === "unread"
-                    ? "C�c tin m?i s? hi?n th? ? d�y khi backend h? tr? tr?ng th�i d� d?c."
-                    : "T�m ngu?i d? nh?n, ho?c d?i tin nh?n m?i."}
+                    ? "Các tin mới sẽ hiển thị ở đây khi backend hỗ trợ trạng thái đã đọc."
+                    : "Tìm người để nhắn, hoặc đợi tin nhắn mới."}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -275,6 +278,18 @@ export default function ChatSidebar() {
         onOpenChange={setIsCreateGroupDialogOpen}
         currentIdentityUserId={currentIdentityUserId}
         onCreatedGroup={handleGroupCreated}
+      />
+
+      <AddFriendDialog
+        open={isAddFriendDialogOpen}
+        onOpenChange={setIsAddFriendDialogOpen}
+        currentIdentityUserId={currentIdentityUserId}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
+        onOpenUserProfile={(user) => {
+          setSelectedUser(user)
+          setIsAccountDialogOpen(true)
+        }}
       />
     </div>
   )
