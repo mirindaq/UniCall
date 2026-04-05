@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
+import type { AxiosError } from "axios"
 import { ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { useLocation, useNavigate } from "react-router"
@@ -8,9 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { LoginRequest, RegisterRequest } from "@/types/auth"
+import type { ResponseError } from "@/types/api-response"
+import type { ForgotPasswordRequest, LoginRequest, RegisterRequest } from "@/types/auth"
 
 type AuthTab = "login" | "register"
 
@@ -24,8 +27,18 @@ export function AuthPage() {
     phoneNumber: "",
     password: "",
   })
+  const [resendEmail, setResendEmail] = useState("")
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [isSubmittingForgotPassword, setIsSubmittingForgotPassword] = useState(false)
+  const [forgotPasswordData, setForgotPasswordData] = useState<ForgotPasswordRequest>({
+    phoneNumber: "",
+    email: "",
+  })
   const [registerData, setRegisterData] = useState<RegisterRequest>({
     phoneNumber: "",
+    email: "",
     firstName: "",
     lastName: "",
     gender: "MALE",
@@ -37,6 +50,16 @@ export function AuthPage() {
     return tab === "login" ? "Đăng nhập UniCall" : "Đăng ký tài khoản UniCall"
   }, [tab])
 
+  const extractErrorMessage = (error: unknown, fallback: string) => {
+    const axiosError = error as AxiosError<ResponseError>
+    return axiosError?.response?.data?.message || fallback
+  }
+
+  const isEmailNotVerifiedError = (message: string) => {
+    const normalized = message.toLowerCase()
+    return normalized.includes("not activated") || normalized.includes("verify your email")
+  }
+
   useEffect(() => {
     if (location.pathname === AUTH_PATH.REGISTER) {
       setTab("register")
@@ -45,15 +68,32 @@ export function AuthPage() {
     setTab("login")
   }, [location.pathname])
 
+  useEffect(() => {
+    if (tab === "register") {
+      setShowResendVerification(false)
+      setShowForgotPassword(false)
+    }
+  }, [tab])
+
+  useEffect(() => {
+    if (!showForgotPassword) {
+      return
+    }
+    setForgotPasswordData((prev) => ({
+      ...prev,
+      phoneNumber: loginData.phoneNumber.trim(),
+    }))
+  }, [showForgotPassword, loginData.phoneNumber])
+
   const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSubmitting(true)
     try {
       const response = await authService.register(registerData)
-      toast.success(response.message || "Đăng ký thành công")
+      toast.success(response.message || "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.")
       navigate(AUTH_PATH.LOGIN)
-    } catch {
-      toast.error("Đăng ký thất bại, vui lòng thử lại.")
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Đăng ký thất bại, vui lòng thử lại."))
     } finally {
       setIsSubmitting(false)
     }
@@ -65,13 +105,71 @@ export function AuthPage() {
     try {
       const response = await authService.login(loginData)
       setAuthenticated()
+      setShowResendVerification(false)
       toast.success(response.message || "Đăng nhập thành công")
       navigate(AUTH_PATH.HOME)
-    } catch {
+    } catch (error) {
       clearAuthenticated()
-      toast.error("Đăng nhập thất bại, vui lòng kiểm tra số điện thoại và mật khẩu.")
+      const message = extractErrorMessage(error, "Đăng nhập thất bại, vui lòng kiểm tra số điện thoại và mật khẩu.")
+      if (isEmailNotVerifiedError(message)) {
+        setShowResendVerification(true)
+        toast.error("Tài khoản chưa kích hoạt. Vui lòng xác nhận email trước khi đăng nhập.")
+      } else {
+        setShowResendVerification(false)
+        toast.error(message)
+      }
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleResendVerificationEmail = async () => {
+    if (!loginData.phoneNumber.trim()) {
+      toast.error("Vui lòng nhập số điện thoại tài khoản trước.")
+      return
+    }
+    if (!resendEmail.trim()) {
+      toast.error("Vui lòng nhập email để gửi lại xác thực.")
+      return
+    }
+
+    setIsResendingVerification(true)
+    try {
+      const response = await authService.resendVerificationEmail({
+        phoneNumber: loginData.phoneNumber.trim(),
+        email: resendEmail.trim(),
+      })
+      toast.success(response.message || "Đã gửi lại email xác thực.")
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Không thể gửi lại email xác thực."))
+    } finally {
+      setIsResendingVerification(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordData.phoneNumber.trim()) {
+      toast.error("Vui lòng nhập số điện thoại tài khoản.")
+      return
+    }
+    if (!forgotPasswordData.email.trim()) {
+      toast.error("Vui lòng nhập email đã đăng ký.")
+      return
+    }
+
+    setIsSubmittingForgotPassword(true)
+    try {
+      const response = await authService.forgotPassword({
+        phoneNumber: forgotPasswordData.phoneNumber.trim(),
+        email: forgotPasswordData.email.trim(),
+      })
+      toast.success(response.message || "Đã gửi email đặt lại mật khẩu.")
+      setShowForgotPassword(false)
+      setForgotPasswordData((prev) => ({ ...prev, email: "" }))
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Không thể gửi email đặt lại mật khẩu."))
+    } finally {
+      setIsSubmittingForgotPassword(false)
     }
   }
 
@@ -163,6 +261,13 @@ export function AuthPage() {
                 >
                   {isSubmitting ? "Đang xử lý..." : "Đăng nhập"}
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="w-full text-center text-sm font-medium text-sky-600 hover:text-sky-700"
+                >
+                  Quên mật khẩu?
+                </button>
               </form>
             ) : (
               <form className="space-y-4" onSubmit={handleRegister}>
@@ -174,6 +279,18 @@ export function AuthPage() {
                     placeholder="VD: 0987654321"
                     value={registerData.phoneNumber}
                     onChange={(event) => setRegisterData({ ...registerData, phoneNumber: event.target.value })}
+                    required
+                    className="h-11 border-slate-300 focus-visible:ring-sky-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="register-email">Email</Label>
+                  <Input
+                    id="register-email"
+                    type="email"
+                    placeholder="VD: example@domain.com"
+                    value={registerData.email}
+                    onChange={(event) => setRegisterData({ ...registerData, email: event.target.value })}
                     required
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
@@ -269,6 +386,97 @@ export function AuthPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showResendVerification} onOpenChange={setShowResendVerification}>
+        <DialogContent className="max-w-md rounded-xl border border-slate-200 bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-slate-900">Xác thực email tài khoản</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              Tài khoản chưa xác thực email. Vui lòng nhập đúng email đã đăng ký để gửi lại link kích hoạt.
+            </p>
+            <Input
+              type="email"
+              placeholder="Nhập email đã đăng ký"
+              value={resendEmail}
+              onChange={(event) => setResendEmail(event.target.value)}
+              className="h-10 border-slate-300 bg-white focus-visible:ring-sky-500"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowResendVerification(false)}
+              >
+                Đóng
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleResendVerificationEmail()}
+                disabled={isResendingVerification}
+                className="bg-sky-500 text-white hover:bg-sky-600"
+              >
+                {isResendingVerification ? "Đang gửi..." : "Gửi lại email"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="max-w-md rounded-xl border border-slate-200 bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-slate-900">Quên mật khẩu</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              Nhập số điện thoại và email đã đăng ký. UniCall sẽ gửi email để bạn đặt lại mật khẩu.
+            </p>
+            <Input
+              type="tel"
+              placeholder="Số điện thoại"
+              value={forgotPasswordData.phoneNumber}
+              onChange={(event) =>
+                setForgotPasswordData((prev) => ({
+                  ...prev,
+                  phoneNumber: event.target.value,
+                }))
+              }
+              className="h-10 border-slate-300 bg-white focus-visible:ring-sky-500"
+            />
+            <Input
+              type="email"
+              placeholder="Email đã đăng ký"
+              value={forgotPasswordData.email}
+              onChange={(event) =>
+                setForgotPasswordData((prev) => ({
+                  ...prev,
+                  email: event.target.value,
+                }))
+              }
+              className="h-10 border-slate-300 bg-white focus-visible:ring-sky-500"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgotPassword(false)}
+              >
+                Đóng
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleForgotPassword()}
+                disabled={isSubmittingForgotPassword}
+                className="bg-sky-500 text-white hover:bg-sky-600"
+              >
+                {isSubmittingForgotPassword ? "Đang gửi..." : "Gửi email"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

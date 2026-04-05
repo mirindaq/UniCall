@@ -40,11 +40,16 @@ const redirectToLogin = () => {
 
 const isAuthRequest = (url?: string) =>
   Boolean(
-    url?.includes(`${AUTH_API_PREFIX}/login`) ||
+      url?.includes(`${AUTH_API_PREFIX}/login`) ||
       url?.includes(`${AUTH_API_PREFIX}/register`) ||
+      url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
+      url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
       url?.includes(`${AUTH_API_PREFIX}/logout`)
   )
+
+const isAuthLifecycleRequest = (url?: string) =>
+  Boolean(url?.includes(`${AUTH_API_PREFIX}/refresh`) || url?.includes(`${AUTH_API_PREFIX}/logout`))
 
 axiosClient.interceptors.response.use(
   (response) => response,
@@ -73,8 +78,12 @@ axiosClient.interceptors.response.use(
     }
 
     if (status === 401) {
-      if (isAuthRequest(originalRequest.url) || originalRequest._retry) {
+      if (originalRequest._retry || isAuthLifecycleRequest(originalRequest.url)) {
         redirectToLogin()
+        return Promise.reject(error)
+      }
+
+      if (isAuthRequest(originalRequest.url)) {
         return Promise.reject(error)
       }
 

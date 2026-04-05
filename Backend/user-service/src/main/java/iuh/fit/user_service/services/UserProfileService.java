@@ -9,6 +9,7 @@ public interface UserProfileService {
     Long createUserProfile(
             String identityUserId,
             String phoneNumber,
+            String email,
             String firstName,
             String lastName,
             String gender,

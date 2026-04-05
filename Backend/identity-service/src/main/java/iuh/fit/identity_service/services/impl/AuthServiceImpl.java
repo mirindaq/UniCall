@@ -1,8 +1,10 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
@@ -32,6 +34,16 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public RegisterResponse register(RegisterRequest request) {
         return keycloakAuthService.register(request);
+    }
+
+    @Override
+    public void resendVerificationEmail(ResendVerificationEmailRequest request) {
+        keycloakAuthService.resendVerificationEmail(request.getPhoneNumber(), request.getEmail());
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequest request) {
+        keycloakAuthService.forgotPassword(request.getPhoneNumber(), request.getEmail());
     }
 
     @Override

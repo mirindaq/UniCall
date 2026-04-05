@@ -30,6 +30,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     public Long createUserProfile(
             String identityUserId,
             String phoneNumber,
+            String email,
             String firstName,
             String lastName,
             String gender,
@@ -41,10 +42,14 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (userRepository.existsByPhoneNumber(phoneNumber)) {
             throw new ConflictException("Phone number already exists");
         }
+        if (userRepository.existsByEmail(email)) {
+            throw new ConflictException("Email already exists");
+        }
 
         User user = User.builder()
                 .identityUserId(identityUserId)
                 .phoneNumber(phoneNumber)
+                .email(email)
                 .firstName(firstName)
                 .lastName(lastName)
                 .gender(gender)
@@ -115,6 +120,7 @@ public class UserProfileServiceImpl implements UserProfileService {
         }
 
         String keywordSearch = "phoneNumber~" + normalizedKeyword
+                + "'email~" + normalizedKeyword
                 + "'firstName~" + normalizedKeyword
                 + "'lastName~" + normalizedKeyword;
 
