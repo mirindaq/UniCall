@@ -43,6 +43,11 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     }
 
     @Override
+    public void changePassword(String phoneNumber, String currentPassword, String newPassword) {
+        keycloakIdentityClient.changePassword(phoneNumber, currentPassword, newPassword);
+    }
+
+    @Override
     public AuthTokenResponse login(String phoneNumber, String password) {
         return keycloakIdentityClient.login(phoneNumber, password);
     }

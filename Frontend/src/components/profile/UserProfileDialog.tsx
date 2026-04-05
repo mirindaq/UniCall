@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react"
-import { Pencil, PencilLine, Save } from "lucide-react"
+import { KeyRound, Pencil, PencilLine, Save } from "lucide-react"
 import { toast } from "sonner"
 
+import { authService } from "@/services/auth/auth.service"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { CustomDatePicker } from "@/components/ui/custom-date-picker"
@@ -33,6 +34,13 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  })
   const [formData, setFormData] = useState<UpdateMyProfileRequest>({
     firstName: "",
     lastName: "",
@@ -104,18 +112,62 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
     }
   }
 
+  const handleChangePassword = async () => {
+    if (!profile?.phoneNumber) {
+      toast.error("Không xác định được tài khoản hiện tại.")
+      return
+    }
+    if (!passwordForm.currentPassword.trim()) {
+      toast.error("Vui lòng nhập mật khẩu hiện tại.")
+      return
+    }
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.")
+      return
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("Xác nhận mật khẩu mới không khớp.")
+      return
+    }
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      toast.error("Mật khẩu mới phải khác mật khẩu hiện tại.")
+      return
+    }
+
+    setIsChangingPassword(true)
+    try {
+      const response = await authService.changePassword({
+        phoneNumber: profile.phoneNumber,
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      })
+      toast.success(response.message || "Đổi mật khẩu thành công.")
+      setShowChangePassword(false)
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      })
+    } catch {
+      toast.error("Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu hiện tại.")
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] min-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white">
         <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle className="text-lg text-slate-900">Thông tin cá nhân</DialogTitle>
+
         </DialogHeader>
 
         {isLoading || !profile ? (
           <div className="py-6 text-center text-sm text-slate-500">Đang tải thông tin...</div>
         ) : (
           <div className="space-y-5">
-            <div className="flex justify-center mb-10">
+            <div className="flex justify-center">
               <input
                 ref={fileRef}
                 type="file"
@@ -146,6 +198,29 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
               </button>
             </div>
 
+            <div className="flex justify-end pt-1">
+              {isEditing ? (
+                <Button
+                  type="button"
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  disabled={isSaving}
+                  onClick={() => void handleSaveProfile()}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSaving ? "Đang lưu..." : "Lưu"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isLoading || !profile}
+                  onClick={() => setIsEditing(true)}
+                >
+                  <PencilLine className="mr-2 h-4 w-4" />
+                  Chỉnh sửa
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Số điện thoại</Label>
@@ -202,28 +277,67 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
               </div>
             </div>
 
-            <div className="flex justify-end pt-1">
-              {isEditing ? (
-                <Button
-                  type="button"
-                  className="bg-blue-600 text-white hover:bg-blue-700"
-                  disabled={isSaving}
-                  onClick={() => void handleSaveProfile()}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  {isSaving ? "Đang lưu..." : "Lưu"}
-                </Button>
-              ) : (
+
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-slate-800">
+                  <KeyRound className="h-4 w-4" />
+                  <span className="text-sm font-medium">Bảo mật tài khoản</span>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isLoading || !profile}
-                  onClick={() => setIsEditing(true)}
+                  onClick={() => setShowChangePassword((prev) => !prev)}
                 >
-                  <PencilLine className="mr-2 h-4 w-4" />
-                  Chỉnh sửa
+                  {showChangePassword ? "Đóng" : "Đổi mật khẩu"}
                 </Button>
-              )}
+              </div>
+
+              {showChangePassword ? (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Mật khẩu hiện tại</Label>
+                    <Input
+                      type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={(event) =>
+                        setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mật khẩu mới</Label>
+                    <Input
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(event) =>
+                        setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Xác nhận mật khẩu mới</Label>
+                    <Input
+                      type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(event) =>
+                        setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex justify-end">
+                    <Button
+                      type="button"
+                      className="bg-blue-600 text-white hover:bg-blue-700"
+                      disabled={isChangingPassword}
+                      onClick={() => void handleChangePassword()}
+                    >
+                      {isChangingPassword ? "Đang đổi..." : "Cập nhật mật khẩu"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
