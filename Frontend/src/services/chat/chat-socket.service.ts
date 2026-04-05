@@ -61,11 +61,18 @@ export const chatSocketService = {
     conversationId: string,
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
-    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>
+    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
+    replyToMessageId?: string | null
   ) {
     sharedClient?.publish({
       destination: "/app/chat.send",
-      body: JSON.stringify({ conversationId, content, type, attachments }),
+      body: JSON.stringify({
+        conversationId,
+        content,
+        type,
+        attachments,
+        replyToMessageId: replyToMessageId ?? undefined,
+      }),
       headers: { "content-type": "application/json" },
     })
   },

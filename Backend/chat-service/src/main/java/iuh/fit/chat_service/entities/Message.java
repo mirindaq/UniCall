@@ -33,4 +33,6 @@ public class Message {
     private String replyToMessageId;
     private boolean isEdited;
     private List<String> editHistory;
+    private boolean recalled;
+    private List<String> hiddenForAccountIds;
 }

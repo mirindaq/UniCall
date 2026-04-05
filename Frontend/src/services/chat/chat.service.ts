@@ -41,11 +41,24 @@ export const chatService = {
     conversationId: string,
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
-    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>
+    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
+    replyToMessageId?: string | null
   ) => {
     const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { content, type, attachments }
+      { content, type, attachments, replyToMessageId: replyToMessageId ?? undefined }
+    )
+    return data
+  },
+  recallMessage: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/recall`
+    )
+    return data
+  },
+  hideMessageForMe: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<void>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/self`
     )
     return data
   },

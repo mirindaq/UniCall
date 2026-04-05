@@ -12,4 +12,8 @@ public interface ChatMessageService {
     MessageResponse sendRest(String identityUserId, String conversationId, SendChatMessageRequest request);
 
     void sendFromStomp(String identityUserId, ChatSendStompPayload payload);
+
+    MessageResponse recallMessage(String identityUserId, String conversationId, String messageId);
+
+    void hideMessageForMe(String identityUserId, String conversationId, String messageId);
 }

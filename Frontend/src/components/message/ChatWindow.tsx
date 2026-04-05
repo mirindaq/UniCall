@@ -1,20 +1,43 @@
 import {
+  Copy,
+  Forward,
   Image as ImageIcon,
+  ListChecks,
+  MoreHorizontal,
   PanelRight,
   Paperclip,
   Phone,
+  Pin,
+  Quote,
   Search,
   Send,
   Smile,
   Sticker,
+  Trash2,
+  Undo2,
   Users,
   Video,
+  X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -46,8 +69,26 @@ const GIFS = [
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7aD2saalBwwftBIY/giphy.gif",
 ]
 
+function messagePlainTextForCopy(msg: ChatMessageResponse): string {
+  if (msg.recalled) {
+    return msg.content ?? ""
+  }
+  if (msg.type === "TEXT") {
+    return msg.content ?? ""
+  }
+  const a = msg.attachments?.[0]
+  if (a?.type === "STICKER") {
+    return "[Sticker]"
+  }
+  if (a?.type === "GIF") {
+    return "[GIF]"
+  }
+  return msg.content ?? ""
+}
+
 export default function ChatWindow() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const draftCaretRef = useRef({ start: 0, end: 0 })
   const bottomRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -63,6 +104,7 @@ export default function ChatWindow() {
     conversationAvatar,
     selectedPeerProfile,
     setDetailsView,
+    conversations,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -78,6 +120,16 @@ export default function ChatWindow() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const [socketExtras, setSocketExtras] = useState<ChatMessageResponse[]>([])
+
+  const [draft, setDraft] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const [stickerOpen, setStickerOpen] = useState(false)
+  const [gifOpen, setGifOpen] = useState(false)
+  const [forwardTarget, setForwardTarget] = useState<ChatMessageResponse | null>(null)
+  const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
+  const [multiSelectActive, setMultiSelectActive] = useState(false)
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -168,21 +220,35 @@ export default function ChatWindow() {
     }
   }, [loadMoreMessages])
 
+  const mergeIncomingOrUpdatedMessage = useCallback((msg: ChatMessageResponse) => {
+    if (msg.idConversation !== selectedIdRef.current) {
+      return
+    }
+    setSocketExtras((prev) => {
+      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
+      if (i >= 0) {
+        const next = [...prev]
+        next[i] = msg
+        return next
+      }
+      pendingScrollToBottomRef.current = true
+      return [...prev, msg]
+    })
+    setApiMessages((prev) => {
+      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
+      if (i < 0) {
+        return prev
+      }
+      const next = [...prev]
+      next[i] = msg
+      return next
+    })
+  }, [])
+
   useChatSocket({
     autoConnect: Boolean(selectedConversationId),
     conversationId: selectedConversationId ?? undefined,
-    onMessage: (msg) => {
-      if (msg.idConversation !== selectedIdRef.current) {
-        return
-      }
-      setSocketExtras((prev) => {
-        if (prev.some((x) => x.idMessage === msg.idMessage)) {
-          return prev
-        }
-        pendingScrollToBottomRef.current = true
-        return [...prev, msg]
-      })
-    },
+    onMessage: mergeIncomingOrUpdatedMessage,
   })
 
   const displayMessages = useMemo(() => {
@@ -200,6 +266,32 @@ export default function ChatWindow() {
     )
   }, [apiMessages, socketExtras])
 
+  const messageById = useMemo(() => {
+    const m = new Map<string, ChatMessageResponse>()
+    for (const x of displayMessages) {
+      m.set(x.idMessage, x)
+    }
+    return m
+  }, [displayMessages])
+
+  useEffect(() => {
+    setMultiSelectActive(false)
+    setSelectedMessageIds(new Set())
+    setReplyingTo(null)
+  }, [selectedConversationId])
+
+  const toggleMessageSelection = useCallback((messageId: string) => {
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(messageId)) {
+        next.delete(messageId)
+      } else {
+        next.add(messageId)
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const viewport = viewportRef.current
     const prependAnchor = prependAnchorRef.current
@@ -216,12 +308,6 @@ export default function ChatWindow() {
     }
   }, [displayMessages])
 
-  const [draft, setDraft] = useState("")
-  const [isSending, setIsSending] = useState(false)
-  const [emojiOpen, setEmojiOpen] = useState(false)
-  const [stickerOpen, setStickerOpen] = useState(false)
-  const [gifOpen, setGifOpen] = useState(false)
-
   const handleInput = () => {
     const textarea = textareaRef.current
     if (!textarea) {
@@ -236,6 +322,7 @@ export default function ChatWindow() {
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
     attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
+    replyToMessageId?: string | null,
   ) => {
     const normalized = content.trim()
     if (!normalized || !selectedConversationId || !currentUserId) {
@@ -246,9 +333,21 @@ export default function ChatWindow() {
     try {
       const client = chatSocketService.getClient()
       if (client?.connected) {
-        chatSocketService.sendMessage(selectedConversationId, normalized, type, attachments)
+        chatSocketService.sendMessage(
+          selectedConversationId,
+          normalized,
+          type,
+          attachments,
+          replyToMessageId,
+        )
       } else {
-        const res = await chatService.sendMessageRest(selectedConversationId, normalized, type, attachments)
+        const res = await chatService.sendMessageRest(
+          selectedConversationId,
+          normalized,
+          type,
+          attachments,
+          replyToMessageId,
+        )
         setSocketExtras((prev) => {
           if (prev.some((x) => x.idMessage === res.data.idMessage)) {
             return prev
@@ -256,6 +355,9 @@ export default function ChatWindow() {
           return [...prev, res.data]
         })
         pendingScrollToBottomRef.current = true
+      }
+      if (replyToMessageId) {
+        setReplyingTo(null)
       }
     } catch {
       toast.error("Gửi tin nhắn thất bại")
@@ -265,27 +367,151 @@ export default function ChatWindow() {
   }
 
   const sendText = async () => {
-    await sendMessage(draft, "TEXT")
+    await sendMessage(draft, "TEXT", undefined, replyingTo?.idMessage)
     setDraft("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
   }
 
-  const sendEmoji = async (emoji: string) => {
-    await sendMessage(emoji, "TEXT")
-    setEmojiOpen(false)
+  const syncDraftCaret = () => {
+    const el = textareaRef.current
+    if (el) {
+      draftCaretRef.current = { start: el.selectionStart, end: el.selectionEnd }
+    }
+  }
+
+  const insertEmojiIntoDraft = (emoji: string) => {
+    const { start, end } = draftCaretRef.current
+    const text = textareaRef.current?.value ?? ""
+    const safeStart = Math.min(Math.max(0, start), text.length)
+    const safeEnd = Math.min(Math.max(safeStart, end), text.length)
+    const next = text.slice(0, safeStart) + emoji + text.slice(safeEnd)
+    const caretAfter = safeStart + emoji.length
+    setDraft(next)
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    // Không focus textarea ở đây — focus sẽ đóng popover Radix. Co giãn ô nhập sau khi React cập nhật.
+    setTimeout(() => {
+      handleInput()
+    }, 0)
+  }
+
+  const handleEmojiOpenChange = (open: boolean) => {
+    setEmojiOpen(open)
+    if (!open) {
+      setTimeout(() => {
+        const el = textareaRef.current
+        if (el) {
+          const { start, end } = draftCaretRef.current
+          const len = el.value.length
+          const s = Math.min(Math.max(0, start), len)
+          const e = Math.min(Math.max(s, end), len)
+          el.focus()
+          el.setSelectionRange(s, e)
+          handleInput()
+        }
+      }, 0)
+    }
   }
 
   const sendSticker = async (stickerUrl: string) => {
-    await sendMessage("Đã gửi sticker", "NONTEXT", [{ type: "STICKER", url: stickerUrl, order: 0 }])
+    await sendMessage(
+      "Đã gửi sticker",
+      "NONTEXT",
+      [{ type: "STICKER", url: stickerUrl, order: 0 }],
+      replyingTo?.idMessage,
+    )
     setStickerOpen(false)
   }
 
   const sendGif = async (gifUrl: string) => {
-    await sendMessage("Đã gửi GIF", "NONTEXT", [{ type: "GIF", url: gifUrl, order: 0 }])
+    await sendMessage(
+      "Đã gửi GIF",
+      "NONTEXT",
+      [{ type: "GIF", url: gifUrl, order: 0 }],
+      replyingTo?.idMessage,
+    )
     setGifOpen(false)
   }
+
+  const copyMessageText = useCallback(async (msg: ChatMessageResponse) => {
+    const text = messagePlainTextForCopy(msg)
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Đã sao chép tin nhắn")
+    } catch {
+      toast.error("Không sao chép được")
+    }
+  }, [])
+
+  const removeMessageLocally = useCallback((messageId: string) => {
+    setApiMessages((prev) => prev.filter((m) => m.idMessage !== messageId))
+    setSocketExtras((prev) => prev.filter((m) => m.idMessage !== messageId))
+  }, [])
+
+  const handleRecallMessage = useCallback(
+    async (msg: ChatMessageResponse) => {
+      if (!selectedConversationId) {
+        return
+      }
+      try {
+        const res = await chatService.recallMessage(selectedConversationId, msg.idMessage)
+        mergeIncomingOrUpdatedMessage(res.data)
+        toast.success("Đã thu hồi tin nhắn")
+      } catch {
+        toast.error("Không thu hồi được tin nhắn")
+      }
+    },
+    [mergeIncomingOrUpdatedMessage, selectedConversationId],
+  )
+
+  const handleHideMessageForMe = useCallback(
+    async (msg: ChatMessageResponse) => {
+      if (!selectedConversationId) {
+        return
+      }
+      try {
+        await chatService.hideMessageForMe(selectedConversationId, msg.idMessage)
+        removeMessageLocally(msg.idMessage)
+        toast.success("Đã xóa tin nhắn ở phía bạn")
+      } catch {
+        toast.error("Không xóa được tin nhắn")
+      }
+    },
+    [removeMessageLocally, selectedConversationId],
+  )
+
+  const handleForwardTo = useCallback(
+    async (targetConversationId: string) => {
+      if (!forwardTarget) {
+        return
+      }
+      const content = (forwardTarget.content ?? "").trim()
+      const attachments = forwardTarget.attachments?.map((a) => ({
+        type: a.type,
+        url: a.url,
+        size: a.size,
+        order: a.order ?? 0,
+      }))
+      if (!content && (!attachments || attachments.length === 0)) {
+        toast.error("Không có nội dung để chuyển")
+        return
+      }
+      try {
+        await chatService.sendMessageRest(
+          targetConversationId,
+          content || " ",
+          forwardTarget.type,
+          attachments && attachments.length > 0 ? attachments : undefined,
+        )
+        toast.success("Đã chuyển tin nhắn")
+        setForwardTarget(null)
+      } catch {
+        toast.error("Chuyển tin nhắn thất bại")
+      }
+    },
+    [forwardTarget],
+  )
 
   if (!selectedConversationId || !selectedConversation) {
     return (
@@ -362,6 +588,10 @@ export default function ChatWindow() {
                 const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
                 const firstAttachment = msg.attachments?.[0]
 
+                const replyParent = msg.replyToMessageId
+                  ? messageById.get(msg.replyToMessageId)
+                  : undefined
+
                 return (
                   <div
                     key={msg.idMessage}
@@ -375,37 +605,188 @@ export default function ChatWindow() {
                     )}
                     <div
                       className={cn(
-                        "flex max-w-[70%] flex-col",
-                        isMe ? "items-end" : "items-start",
+                        "flex max-w-[min(70%,28rem)] items-end gap-2",
+                        isMe ? "flex-row-reverse" : "flex-row",
                       )}
                     >
-                      {msg.type === "TEXT" ? (
-                        <div
+                      {multiSelectActive ? (
+                        <button
+                          type="button"
+                          aria-label="Chọn tin nhắn"
+                          onClick={() => toggleMessageSelection(msg.idMessage)}
                           className={cn(
-                            "rounded-2xl px-4 py-2 text-sm",
-                            isMe
-                              ? "rounded-br-sm bg-primary/10 text-foreground"
-                              : "rounded-bl-sm border bg-background text-foreground shadow-xs",
+                            "mb-5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2",
+                            selectedMessageIds.has(msg.idMessage)
+                              ? "border-blue-600 bg-blue-600 text-white"
+                              : "border-muted-foreground/40 bg-background",
                           )}
                         >
-                          {msg.content}
+                          {selectedMessageIds.has(msg.idMessage) ? "✓" : ""}
+                        </button>
+                      ) : null}
+                      <div
+                        className={cn(
+                          "group/msg flex min-w-0 items-end gap-1",
+                          isMe ? "flex-row-reverse" : "flex-row",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "flex min-w-0 flex-col",
+                            isMe ? "items-end" : "items-start",
+                          )}
+                        >
+                          {msg.replyToMessageId && !msg.recalled ? (
+                            <div
+                              className={cn(
+                                "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground dark:bg-white/5",
+                                isMe ? "mr-0" : "ml-0",
+                              )}
+                            >
+                              <span className="line-clamp-2">
+                                {replyParent
+                                  ? messagePlainTextForCopy(replyParent)
+                                  : "Tin nhắn"}
+                              </span>
+                            </div>
+                          ) : null}
+                          {msg.recalled ? (
+                            <div
+                              className={cn(
+                                "rounded-2xl px-4 py-2 text-sm italic text-muted-foreground",
+                                isMe ? "rounded-br-sm bg-primary/5" : "rounded-bl-sm border bg-muted/40",
+                              )}
+                            >
+                              {msg.content}
+                            </div>
+                          ) : msg.type === "TEXT" ? (
+                            <div
+                              className={cn(
+                                "rounded-2xl px-4 py-2 text-sm",
+                                isMe
+                                  ? "rounded-br-sm bg-primary/10 text-foreground"
+                                  : "rounded-bl-sm border bg-background text-foreground shadow-xs",
+                              )}
+                            >
+                              {msg.content}
+                            </div>
+                          ) : firstAttachment?.type === "STICKER" ? (
+                            <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
+                              <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
+                            </div>
+                          ) : firstAttachment?.type === "GIF" ? (
+                            <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
+                              <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
+                              {msg.content}
+                            </div>
+                          )}
+                          <span className="mt-1 text-[11px] text-muted-foreground">
+                            {formatChatMessageTime(msg.timeSent)}
+                          </span>
                         </div>
-                      ) : firstAttachment?.type === "STICKER" ? (
-                        <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
-                          <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
-                        </div>
-                      ) : firstAttachment?.type === "GIF" ? (
-                        <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
-                          <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
-                          {msg.content}
-                        </div>
-                      )}
-                      <span className="mt-1 text-[11px] text-muted-foreground">
-                        {formatChatMessageTime(msg.timeSent)}
-                      </span>
+
+                        {!msg.recalled && !multiSelectActive ? (
+                          <div
+                            className={cn(
+                              "mb-5 flex shrink-0 gap-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100",
+                              "pointer-events-none group-hover/msg:pointer-events-auto",
+                            )}
+                          >
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="icon"
+                              className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                              title="Trả lời (Rep)"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setReplyingTo(msg)
+                                setTimeout(() => textareaRef.current?.focus(), 0)
+                              }}
+                            >
+                              <Quote className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="icon"
+                              className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                              title="Chuyển tiếp"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setForwardTarget(msg)
+                              }}
+                            >
+                              <Forward className="size-3.5" />
+                            </Button>
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="icon"
+                                  className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                                  title="Thêm"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreHorizontal className="size-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align={isMe ? "end" : "start"} className="w-56">
+                                <DropdownMenuItem
+                                  className="gap-2"
+                                  onSelect={() => void copyMessageText(msg)}
+                                >
+                                  <Copy className="size-4" />
+                                  Copy tin nhắn
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="gap-2"
+                                  onSelect={() => toast.info("Tính năng ghim tin đang được phát triển")}
+                                >
+                                  <Pin className="size-4" />
+                                  Ghim tin nhắn
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="gap-2"
+                                  onSelect={() => {
+                                    setMultiSelectActive(true)
+                                    setSelectedMessageIds(new Set([msg.idMessage]))
+                                  }}
+                                >
+                                  <ListChecks className="size-4" />
+                                  Chọn nhiều tin nhắn
+                                </DropdownMenuItem>
+                                {isMe && !msg.recalled ? (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      className="gap-2"
+                                      onSelect={() => void handleRecallMessage(msg)}
+                                    >
+                                      <Undo2 className="size-4" />
+                                      Thu hồi
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  className="gap-2"
+                                  onSelect={() => void handleHideMessageForMe(msg)}
+                                >
+                                  <Trash2 className="size-4" />
+                                  Xóa chỉ ở phía tôi
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 )
@@ -417,7 +798,44 @@ export default function ChatWindow() {
         </ScrollArea>
       </div>
 
+      {multiSelectActive ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            Đã chọn <strong className="text-foreground">{selectedMessageIds.size}</strong> tin nhắn
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setMultiSelectActive(false)
+              setSelectedMessageIds(new Set())
+            }}
+          >
+            Xong
+          </Button>
+        </div>
+      ) : null}
+
       <div className="shrink-0 border-t bg-background p-3">
+        {replyingTo ? (
+          <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+            <Quote className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground">Trả lời</p>
+              <p className="truncate text-foreground">{messagePlainTextForCopy(replyingTo)}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              type="button"
+              title="Bỏ trả lời"
+              onClick={() => setReplyingTo(null)}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        ) : null}
         <div className="mb-2 flex gap-1">
           <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
             <PopoverTrigger asChild>
@@ -474,6 +892,10 @@ export default function ChatWindow() {
               ref={textareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onSelect={syncDraftCaret}
+              onClick={syncDraftCaret}
+              onKeyUp={syncDraftCaret}
+              onBlur={syncDraftCaret}
               onInput={handleInput}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -487,7 +909,7 @@ export default function ChatWindow() {
               className="custom-scrollbar max-h-32 min-h-[38px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
             <Separator orientation="vertical" className="h-5 self-center" />
-            <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+            <Popover open={emojiOpen} onOpenChange={handleEmojiOpenChange}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -507,7 +929,7 @@ export default function ChatWindow() {
                       key={emoji}
                       type="button"
                       className="rounded-md py-1 text-2xl hover:bg-muted"
-                      onClick={() => void sendEmoji(emoji)}
+                      onClick={() => insertEmojiIntoDraft(emoji)}
                     >
                       {emoji}
                     </button>
@@ -529,6 +951,38 @@ export default function ChatWindow() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={forwardTarget != null} onOpenChange={(open) => !open && setForwardTarget(null)}>
+        <DialogContent className="sm:max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Chuyển tin nhắn</DialogTitle>
+            <DialogDescription>Chọn cuộc trò chuyện để gửi bản sao nội dung này.</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-72">
+            <div className="flex flex-col gap-1 pr-3">
+              {conversations.filter((c) => c.idConversation !== selectedConversationId).length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Chưa có hội thoại khác để chuyển.
+                </p>
+              ) : (
+                conversations
+                  .filter((c) => c.idConversation !== selectedConversationId)
+                  .map((c) => (
+                    <Button
+                      key={c.idConversation}
+                      type="button"
+                      variant="ghost"
+                      className="h-auto justify-start px-3 py-2.5 font-normal"
+                      onClick={() => void handleForwardTo(c.idConversation)}
+                    >
+                      {conversationTitle(c)}
+                    </Button>
+                  ))
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
