@@ -10,14 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
 import { AUTH_PATH } from "@/constants/auth"
+import { useAuth } from "@/contexts/auth-context"
 import { USER_PATH } from "@/constants/user"
-import { authTokenStore } from "@/stores/auth-token.store"
 import { authService } from "@/services/auth/auth.service"
 
 export function Header() {
+  const { isAuthenticated, clearAuthenticated } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
-  const isAuthenticated = !!authTokenStore.get()
 
   const handleLogout = async () => {
     try {
@@ -25,7 +25,7 @@ export function Header() {
     } catch {
       // ignore
     } finally {
-      authTokenStore.clear()
+      clearAuthenticated()
       toast.success("Đã đăng xuất")
       navigate(AUTH_PATH.ROOT, { replace: true })
     }

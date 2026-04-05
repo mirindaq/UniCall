@@ -1,6 +1,7 @@
 package iuh.fit.api_gateway.config;
 
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
@@ -17,22 +18,25 @@ import java.util.Base64;
 public class WebSocketAccessTokenQueryPreAuthWebFilter implements WebFilter, Ordered {
 
     private static final String CHAT_WS_PREFIX = "/api-gateway/chat-service/ws";
+    private static final String ACCESS_TOKEN_COOKIE_NAME = "unicall_at";
     private static final String ACCESS_TOKEN_PARAM = "access_token";
     private static final String USER_ID_HEADER = "X-User-Id";
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
-        if (!isChatWsPath(path)) {
+        String authorizationHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (StringUtils.hasText(authorizationHeader)) {
             return chain.filter(exchange);
         }
 
-        String token = exchange.getRequest().getQueryParams().getFirst(ACCESS_TOKEN_PARAM);
+        boolean isChatWs = isChatWsPath(path);
+        String token = resolveAccessToken(exchange, isChatWs);
         if (!StringUtils.hasText(token)) {
             return chain.filter(exchange);
         }
 
-        String extractedSub = extractSubFromJwtPayload(token);
+        String extractedSub = isChatWs ? extractSubFromJwtPayload(token) : "";
         ServerHttpRequest request = exchange.getRequest().mutate()
                 .headers(headers -> {
                     if (!StringUtils.hasText(headers.getFirst(HttpHeaders.AUTHORIZATION))) {
@@ -54,6 +58,22 @@ public class WebSocketAccessTokenQueryPreAuthWebFilter implements WebFilter, Ord
 
     private static boolean isChatWsPath(String path) {
         return path != null && path.startsWith(CHAT_WS_PREFIX);
+    }
+
+    private static String resolveAccessToken(ServerWebExchange exchange, boolean isChatWs) {
+        HttpCookie accessCookie = exchange.getRequest().getCookies().getFirst(ACCESS_TOKEN_COOKIE_NAME);
+        if (accessCookie != null && StringUtils.hasText(accessCookie.getValue())) {
+            return accessCookie.getValue();
+        }
+
+        if (isChatWs) {
+            String tokenFromQuery = exchange.getRequest().getQueryParams().getFirst(ACCESS_TOKEN_PARAM);
+            if (StringUtils.hasText(tokenFromQuery)) {
+                return tokenFromQuery;
+            }
+        }
+
+        return "";
     }
 
     private static String extractSubFromJwtPayload(String jwtToken) {

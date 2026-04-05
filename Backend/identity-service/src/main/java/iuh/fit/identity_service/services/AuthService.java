@@ -2,7 +2,6 @@ package iuh.fit.identity_service.services;
 
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
-import iuh.fit.identity_service.dtos.response.auth.AccessTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseCookie;
@@ -18,10 +17,10 @@ public interface AuthService {
 
     LogoutResult logout(String refreshToken, HttpServletRequest request);
 
-    record LoginResult(AccessTokenResponse accessTokenResponse, ResponseCookie refreshCookie) {
+    record LoginResult(List<ResponseCookie> cookies) {
     }
 
-    record RefreshResult(AccessTokenResponse accessTokenResponse, ResponseCookie refreshCookie) {
+    record RefreshResult(List<ResponseCookie> cookies) {
     }
 
     record LogoutResult(List<ResponseCookie> clearCookies) {
