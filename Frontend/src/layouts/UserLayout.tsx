@@ -35,9 +35,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AUTH_PATH } from "@/constants/auth"
+import { useAuth } from "@/contexts/auth-context"
 import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
-import { authTokenStore } from "@/stores/auth-token.store"
 
 const userTabs = [
   {
@@ -58,6 +58,7 @@ const userTabs = [
 ]
 
 export function UserLayout() {
+  const { clearAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -69,7 +70,7 @@ export function UserLayout() {
     } catch {
       // ignore and clear local session
     } finally {
-      authTokenStore.clear()
+      clearAuthenticated()
       toast.success("Đăng xuất thành công")
       navigate(AUTH_PATH.LOGIN, { replace: true })
       setIsLoggingOut(false)

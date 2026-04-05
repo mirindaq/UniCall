@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react"
-import { ChevronDown, Clock3, UsersRound, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Clock3, UsersRound, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -301,18 +301,18 @@ export function AddFriendDialog({
       <DialogContent
         showCloseButton={false}
         overlayClassName="bg-black/60"
-        style={{ width: 520, maxWidth: "calc(100vw - 2rem)" }}
-        className="gap-0 overflow-hidden rounded-lg border border-slate-300 bg-white p-0 shadow-xl"
+        style={{ width: 540, maxWidth: "calc(100vw - 2rem)" }}
+        className="gap-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl"
       >
-        <DialogHeader className="flex-row items-center justify-between border-b border-slate-300 px-3.5 py-2.5">
-          <DialogTitle className="text-[28px] leading-none font-semibold text-slate-800">
+        <DialogHeader className="flex-row items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-3">
+          <DialogTitle className="text-xl leading-none font-semibold text-slate-800">
             Thêm bạn
           </DialogTitle>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="h-7 w-7 rounded-sm text-slate-600 hover:bg-slate-100"
+            className="h-8 w-8 rounded-md text-slate-600 hover:bg-slate-200"
             onClick={() => handleDialogOpenChange(false)}
           >
             <X className="h-4 w-4" />
@@ -321,14 +321,6 @@ export function AddFriendDialog({
 
         <div className="space-y-4 px-5 py-4">
           <div className="flex items-end gap-4">
-            <button
-              type="button"
-              className="flex h-10 items-center gap-2 border-b border-slate-300 px-1 text-[14px] font-semibold text-slate-700"
-            >
-              <span className="text-lg leading-none">🇻🇳</span>
-              (+84)
-              <ChevronDown className="h-4 w-4 text-slate-500" />
-            </button>
 
             <div className="flex-1">
               <Input
@@ -341,13 +333,13 @@ export function AddFriendDialog({
                     void handleSearch()
                   }
                 }}
-                className="h-10 rounded-none border-x-0 border-t-0 border-b border-blue-500 px-0 text-[14px] shadow-none placeholder:text-slate-400 focus-visible:ring-0"
+                className="h-10 rounded-xl border-slate-200 bg-slate-50 px-3 text-sm shadow-none placeholder:text-slate-400 focus-visible:ring-0"
               />
             </div>
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-semibold text-slate-500">Kết quả gần nhất</p>
+            <p className="mb-2 text-sm font-semibold text-slate-600">Kết quả gần nhất</p>
 
             {isSearching ? (
               <p className="py-4 text-sm text-slate-500">Đang tìm kiếm...</p>
@@ -356,10 +348,10 @@ export function AddFriendDialog({
                 <p className="py-4 text-sm text-slate-500">Nhập số điện thoại để tìm bạn bè.</p>
               ) : (
                 <div className="space-y-2">
-                  <p className="flex items-center gap-1 text-sm text-slate-500">
-                    <Clock3 className="h-4 w-4" />
-                    Đã tìm kiếm gần đây
-                  </p>
+                    <p className="flex items-center gap-1 text-sm text-slate-500">
+                      <Clock3 className="h-4 w-4" />
+                      Đã tìm kiếm gần đây
+                    </p>
                   {recentUsers.map((user) => (
                     <UserRow
                       key={user.identityUserId}
@@ -423,18 +415,18 @@ export function AddFriendDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-row flex-nowrap justify-end gap-2 border-t border-slate-300 bg-slate-100 px-3.5 py-2.5">
+        <DialogFooter className="flex-row flex-nowrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <Button
             type="button"
             variant="secondary"
-            className="h-8 min-w-21 shrink-0 rounded-lg border border-slate-300 bg-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-300"
+            className="h-9 min-w-21 shrink-0 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
             onClick={() => handleDialogOpenChange(false)}
           >
             Hủy
           </Button>
           <Button
             type="button"
-            className="h-8 min-w-21 shrink-0 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300"
+            className="h-9 min-w-21 shrink-0 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300"
             disabled={!canSearch}
             onClick={() => void handleSearch()}
           >
@@ -484,7 +476,7 @@ function UserRow({
     <div className="flex items-center gap-3">
       <button
         type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left hover:bg-slate-50"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
         onClick={onOpenProfile}
       >
         <Avatar className="h-12 w-12">
@@ -500,7 +492,7 @@ function UserRow({
         <Button
           type="button"
           variant="outline"
-          className="h-8 min-w-22 rounded-md border-blue-600 px-3 text-blue-600 hover:bg-blue-50 disabled:border-slate-300 disabled:text-slate-400"
+          className="h-8 min-w-22 rounded-lg border-blue-600 px-3 text-blue-600 hover:bg-blue-50 disabled:border-slate-300 disabled:text-slate-400"
           disabled={!canSend}
           onClick={onAddFriend}
         >
@@ -525,12 +517,6 @@ function parseVietnamPhone(input: string): { valid: boolean; normalized: string 
 function normalizePhone(phone?: string) {
   if (!phone) {
     return "--"
-  }
-  if (phone.startsWith("+84")) {
-    return phone
-  }
-  if (phone.startsWith("0")) {
-    return `(+84) ${phone.slice(1)}`
   }
   return phone
 }

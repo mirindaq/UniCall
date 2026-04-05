@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Camera, ChevronRight, Search, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -412,29 +412,29 @@ export function CreateGroupDialog({
       <DialogContent
         showCloseButton={false}
         overlayClassName="bg-black/60"
-        style={{ width: 520, maxWidth: "calc(100vw - 2rem)" }}
-        className="gap-0 overflow-hidden rounded-lg border border-slate-300 bg-white p-0 shadow-xl"
+        style={{ width: 560, maxWidth: "calc(100vw - 2rem)" }}
+        className="gap-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl"
       >
-        <DialogHeader className="flex-row items-center justify-between border-b border-slate-300 px-3.5 py-2.5">
-          <DialogTitle className="text-[28px] leading-none font-semibold text-slate-800">
+        <DialogHeader className="flex-row items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-3">
+          <DialogTitle className="text-xl leading-none font-semibold text-slate-800">
             Tạo nhóm
           </DialogTitle>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="h-7 w-7 rounded-sm text-slate-600 hover:bg-slate-100"
+            className="h-8 w-8 rounded-md text-slate-600 hover:bg-slate-200"
             onClick={() => onOpenChange(false)}
           >
             <X className="h-4 w-4" />
           </Button>
         </DialogHeader>
 
-        <div className="space-y-2.5 px-3.5 pt-2.5 pb-2">
+        <div className="space-y-3 px-4 pt-4 pb-3">
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-slate-500"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-slate-500"
               title="Ảnh nhóm tạm thời chưa hỗ trợ"
             >
               <Camera className="h-3.5 w-3.5" />
@@ -448,7 +448,7 @@ export function CreateGroupDialog({
                 }
               }}
               placeholder="Nhập tên nhóm..."
-              className="h-8 rounded-none border-x-0 border-t-0 border-b border-blue-500 px-0 pb-1 text-[14px] text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-0"
+              className="h-9 rounded-none border-x-0 border-t-0 border-b border-blue-500 px-0 pb-1 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-0"
             />
           </div>
           {nameError ? (
@@ -461,7 +461,7 @@ export function CreateGroupDialog({
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
               placeholder="Nhập tên, số điện thoại, hoặc danh sách số điện thoại"
-              className="h-9 rounded-full border-slate-300 pr-3 pl-9 text-[13px] text-slate-700 placeholder:text-slate-400 focus-visible:ring-0"
+              className="h-10 rounded-xl border-slate-200 bg-slate-50 pr-3 pl-9 text-sm text-slate-700 placeholder:text-slate-400 focus-visible:ring-0"
             />
           </div>
 
@@ -474,10 +474,10 @@ export function CreateGroupDialog({
                     key={item}
                     type="button"
                     onClick={() => setActiveCategory(item)}
-                    className={`rounded-full px-2.5 py-1 text-[12px] leading-none font-semibold whitespace-nowrap transition ${
+                    className={`rounded-full px-2.5 py-1 text-xs leading-none font-medium whitespace-nowrap transition ${
                       active
                         ? "bg-blue-600 text-white"
-                        : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
                     {item}
@@ -495,8 +495,8 @@ export function CreateGroupDialog({
           </div>
         </div>
 
-        <div className="border-t border-slate-300">
-          <div className="px-3.5 py-2 text-[25px] font-semibold text-slate-800">
+        <div className="border-t border-slate-200">
+          <div className="px-4 py-2.5 text-base font-semibold text-slate-800">
             Trò chuyện gần đây
           </div>
           {memberError ? (
@@ -505,8 +505,8 @@ export function CreateGroupDialog({
             </p>
           ) : null}
 
-          <div className="flex h-[392px] border-t border-slate-300">
-            <div className="min-w-0 flex-1 border-r border-slate-200">
+          <div className="flex h-[392px] border-t border-slate-200">
+            <div className="min-w-0 flex-1 border-r border-slate-100">
               <ScrollArea
                 className="h-full **:data-[slot=scroll-area-scrollbar]:w-1.5 **:data-[slot=scroll-area-thumb]:rounded-full **:data-[slot=scroll-area-thumb]:bg-slate-300"
               >
@@ -550,9 +550,7 @@ export function CreateGroupDialog({
                                 A
                               </div>
                             ) : null}
-                            <div
-                              className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${selected ? "bg-slate-100" : "hover:bg-slate-50"}`}
-                            >
+                            <div className={`flex items-center gap-2 rounded-lg px-1.5 py-1 ${selected ? "bg-blue-50" : "hover:bg-slate-50"}`}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -561,7 +559,7 @@ export function CreateGroupDialog({
                                     setMemberError(null)
                                   }
                                 }}
-                                className={`h-4.25 w-4.25 shrink-0 rounded-full border transition ${
+                                className={`h-4.5 w-4.5 shrink-0 rounded-full border transition ${
                                   selected
                                     ? "border-blue-600 bg-blue-600"
                                     : "border-slate-300 bg-white hover:border-slate-400"
@@ -593,7 +591,7 @@ export function CreateGroupDialog({
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="min-w-0">
-                                  <p className="truncate text-[14px] font-medium text-slate-700">
+                                  <p className="truncate text-sm font-medium text-slate-700">
                                     {member.displayName}
                                   </p>
                                   {member.phoneNumber ? (
@@ -631,7 +629,7 @@ export function CreateGroupDialog({
               </ScrollArea>
             </div>
 
-            <div className="w-[190px] bg-slate-50 px-2 py-2">
+            <div className="w-[200px] bg-slate-50/80 px-2.5 py-2.5">
               <div className="mb-2 flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-800">Đã chọn</span>
                 <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700">
@@ -639,7 +637,7 @@ export function CreateGroupDialog({
                 </span>
               </div>
 
-              <ScrollArea className="h-[340px] rounded-md border border-slate-200 bg-white p-1">
+              <ScrollArea className="h-[340px] rounded-lg border border-slate-200 bg-white p-1">
                 <div className="space-y-1.5 p-1">
                   {selectedMemberList.length === 0 ? (
                     <p className="px-2 py-3 text-xs text-slate-500">
@@ -677,18 +675,18 @@ export function CreateGroupDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-row flex-nowrap justify-end gap-2 border-t border-slate-300 bg-slate-100 px-3.5 py-2.5">
+        <DialogFooter className="flex-row flex-nowrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <Button
             type="button"
             variant="secondary"
-            className="h-8 min-w-21 shrink-0 rounded-lg border border-slate-300 bg-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-300"
+            className="h-9 min-w-21 shrink-0 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
             onClick={() => onOpenChange(false)}
           >
             Hủy
           </Button>
           <Button
             type="button"
-            className="h-8 min-w-21 shrink-0 rounded-lg bg-blue-300 px-3 text-sm font-medium text-white hover:bg-blue-400 disabled:bg-blue-200"
+            className="h-9 min-w-21 shrink-0 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300"
             disabled={!canCreateGroup}
             onClick={handleCreateGroup}
           >

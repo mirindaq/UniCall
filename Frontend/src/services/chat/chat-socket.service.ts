@@ -1,7 +1,6 @@
 import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs"
 
 import { buildChatStompBrokerUrl } from "@/constants/api"
-import { authTokenStore } from "@/stores/auth-token.store"
 import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 
 let sharedClient: Client | null = null
@@ -12,21 +11,16 @@ export const chatSocketService = {
   getClient: () => sharedClient,
 
   /**
-   * Kích hoạt STOMP qua WebSocket thuần (không SockJS) — tương thích cách xác thực query trên gateway.
+   * Kích hoạt STOMP qua WebSocket thuần (không SockJS) — xác thực dựa trên HttpOnly cookie.
    */
   connect(onConnected?: () => void, onDisconnected?: () => void): Client {
-    const token = authTokenStore.get()
-    if (!token) {
-      throw new Error("Chưa có access token để kết nối chat WebSocket")
-    }
-
     if (sharedClient?.active) {
       onConnected?.()
       return sharedClient
     }
 
     const client = new Client({
-      brokerURL: buildChatStompBrokerUrl(token),
+      brokerURL: buildChatStompBrokerUrl(),
       reconnectDelay: 5000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,

@@ -3,7 +3,6 @@ package iuh.fit.identity_service.controllers;
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
-import iuh.fit.identity_service.dtos.response.auth.AccessTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,25 +34,21 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ResponseSuccess<AccessTokenResponse>> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<ResponseSuccess<Void>> login(@Valid @RequestBody LoginRequest request) {
         AuthService.LoginResult result = authService.login(request);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, result.refreshCookie().toString())
-                .body(
-                        new ResponseSuccess<>(HttpStatus.OK, "Login success", result.accessTokenResponse())
-                );
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
+        result.cookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
+        return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Login success"));
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ResponseSuccess<AccessTokenResponse>> refresh(
+    public ResponseEntity<ResponseSuccess<Void>> refresh(
             @CookieValue(value = REFRESH_COOKIE_NAME, required = false) String refreshToken
     ) {
         AuthService.RefreshResult result = authService.refresh(refreshToken);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, result.refreshCookie().toString())
-                .body(
-                        new ResponseSuccess<>(HttpStatus.OK, "Refresh token success", result.accessTokenResponse())
-                );
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
+        result.cookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
+        return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Refresh token success"));
     }
 
     @PostMapping("/logout")

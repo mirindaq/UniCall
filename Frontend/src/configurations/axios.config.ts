@@ -3,9 +3,8 @@ import { toast } from "sonner"
 
 import { API_BASE_URL, buildApiUrl } from "@/constants/api"
 import { AUTH_PATH } from "@/constants/auth"
-import { authTokenStore } from "@/stores/auth-token.store"
+import { updateAuthState } from "@/contexts/auth-context"
 import type { ResponseError, ResponseSuccess } from "@/types/api-response"
-import type { AccessTokenResponse } from "@/types/auth"
 
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? AUTH_PATH.LOGIN
 const AUTH_API_PREFIX = "/identity-service/api/v1/auth"
@@ -19,23 +18,23 @@ const axiosClient = axios.create({
 
 let isRefreshing = false
 let failedQueue: Array<{
-  resolve: (token: string) => void
+  resolve: () => void
   reject: (error: unknown) => void
 }> = []
 
-const processQueue = (error: unknown, token: string | null = null) => {
+const processQueue = (error: unknown) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
       reject(error)
       return
     }
-    resolve(token!)
+    resolve()
   })
   failedQueue = []
 }
 
 const redirectToLogin = () => {
-  authTokenStore.clear()
+  updateAuthState(false)
   window.location.href = LOGIN_PATH
 }
 
@@ -46,17 +45,6 @@ const isAuthRequest = (url?: string) =>
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
       url?.includes(`${AUTH_API_PREFIX}/logout`)
   )
-
-axiosClient.interceptors.request.use(
-  (config) => {
-    const accessToken = authTokenStore.get()
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
 
 axiosClient.interceptors.response.use(
   (response) => response,
@@ -93,8 +81,7 @@ axiosClient.interceptors.response.use(
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({
-            resolve: (token: string) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`
+            resolve: () => {
               originalRequest._retry = true
               resolve(axiosClient(originalRequest))
             },
@@ -107,7 +94,7 @@ axiosClient.interceptors.response.use(
       originalRequest._retry = true
 
       try {
-        const { data } = await axios.post<ResponseSuccess<AccessTokenResponse>>(
+        await axios.post<ResponseSuccess<void>>(
           buildApiUrl(`${AUTH_API_PREFIX}/refresh`),
           {},
           {
@@ -116,18 +103,11 @@ axiosClient.interceptors.response.use(
           }
         )
 
-        const newAccessToken = data?.data?.accessToken
-        if (!newAccessToken) {
-          throw new Error("No access token in refresh response")
-        }
-
-        authTokenStore.set(newAccessToken)
-        processQueue(null, newAccessToken)
-
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        updateAuthState(true)
+        processQueue(null)
         return axiosClient(originalRequest)
       } catch (refreshError) {
-        processQueue(refreshError, null)
+        processQueue(refreshError)
         toast.error("Phien dang nhap da het han. Vui long dang nhap lai.")
         redirectToLogin()
         return Promise.reject(refreshError)

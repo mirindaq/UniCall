@@ -7,9 +7,8 @@ export const API_BASE_URL = stripTrailingSlash(rawBaseUrl)
 
 export const buildApiUrl = (path: string) => `${API_BASE_URL}${ensureLeadingSlash(path)}`
 
-/** STOMP broker qua API Gateway; JWT truyền bằng query để gateway chuyển thành Authorization. */
-export const buildChatStompBrokerUrl = (accessToken: string) => {
+/** STOMP broker qua API Gateway; xác thực bằng HttpOnly cookie. */
+export const buildChatStompBrokerUrl = () => {
   const wsBase = API_BASE_URL.replace(/^http/i, (scheme) => (scheme.toLowerCase() === "https" ? "wss" : "ws"))
-  const qs = new URLSearchParams({ access_token: accessToken })
-  return `${wsBase}/chat-service/ws?${qs.toString()}`
+  return `${wsBase}/chat-service/ws`
 }

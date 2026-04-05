@@ -3,7 +3,6 @@ package iuh.fit.identity_service.services.impl;
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
-import iuh.fit.identity_service.dtos.response.auth.AccessTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
@@ -19,6 +18,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
+    private static final String ACCESS_COOKIE_NAME = "unicall_at";
     private static final String REFRESH_COOKIE_NAME = "unicall_rt";
 
     private final KeycloakAuthService keycloakAuthService;
@@ -37,20 +37,18 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginResult login(LoginRequest request) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
+        if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
+            throw new UnauthenticatedException("Missing access token from identity provider");
+        }
         if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isBlank()) {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
 
-        AccessTokenResponse response = AccessTokenResponse.builder()
-                .accessToken(tokens.getAccessToken())
-                .tokenType(tokens.getTokenType())
-                .expiresIn(tokens.getExpiresIn())
-                .scope(tokens.getScope())
-                .build();
-
         return new LoginResult(
-                response,
-                createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
+                List.of(
+                        createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
+                        createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
+                )
         );
     }
 
@@ -64,17 +62,15 @@ public class AuthServiceImpl implements AuthService {
         String rotatedRefreshToken = tokenResponse.getRefreshToken() == null || tokenResponse.getRefreshToken().isBlank()
                 ? refreshToken
                 : tokenResponse.getRefreshToken();
-
-        AccessTokenResponse response = AccessTokenResponse.builder()
-                .accessToken(tokenResponse.getAccessToken())
-                .tokenType(tokenResponse.getTokenType())
-                .expiresIn(tokenResponse.getExpiresIn())
-                .scope(tokenResponse.getScope())
-                .build();
+        if (tokenResponse.getAccessToken() == null || tokenResponse.getAccessToken().isBlank()) {
+            throw new UnauthenticatedException("Missing access token from identity provider");
+        }
 
         return new RefreshResult(
-                response,
-                createRefreshCookie(rotatedRefreshToken, tokenResponse.getRefreshExpiresIn())
+                List.of(
+                        createAccessCookie(tokenResponse.getAccessToken(), tokenResponse.getExpiresIn()),
+                        createRefreshCookie(rotatedRefreshToken, tokenResponse.getRefreshExpiresIn())
+                )
         );
     }
 
@@ -86,8 +82,20 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return new LogoutResult(List.of(
+                clearCookie(ACCESS_COOKIE_NAME),
                 clearCookie(REFRESH_COOKIE_NAME)
         ));
+    }
+
+    private ResponseCookie createAccessCookie(String accessToken, Integer accessExpiresInSeconds) {
+        long maxAge = accessExpiresInSeconds == null ? 10 * 60L : accessExpiresInSeconds.longValue();
+        return ResponseCookie.from(ACCESS_COOKIE_NAME, accessToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                .path("/")
+                .maxAge(maxAge)
+                .build();
     }
 
     private ResponseCookie createRefreshCookie(String refreshToken, Integer refreshExpiresInSeconds) {
