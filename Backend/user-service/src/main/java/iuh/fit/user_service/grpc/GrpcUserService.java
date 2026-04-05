@@ -34,6 +34,7 @@ public class GrpcUserService extends UserServiceGrpc.UserServiceImplBase {
             Long id = userProfileService.createUserProfile(
                     request.getIdentityUserId(),
                     request.getPhoneNumber(),
+                    request.getEmail(),
                     request.getFirstName(),
                     request.getLastName(),
                     request.getGender(),
@@ -91,6 +92,7 @@ public class GrpcUserService extends UserServiceGrpc.UserServiceImplBase {
                     .setDateOfBirth(user.getDateOfBirth().toString())
                     .setAvatar(user.getAvatar() == null ? "" : user.getAvatar())
                     .setIsActive(Boolean.TRUE.equals(user.getIsActive()))
+                    .setEmail(user.getEmail() == null ? "" : user.getEmail())
                     .build());
             responseObserver.onCompleted();
         } catch (ResourceNotFoundException ex) {

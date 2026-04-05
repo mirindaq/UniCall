@@ -2,18 +2,21 @@ import axios from "axios"
 
 import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
-import type { AccessTokenResponse, LoginRequest, RegisterRequest, RegisterResponse } from "@/types/auth"
+import type {
+  ForgotPasswordRequest,
+  LoginRequest,
+  RegisterRequest,
+  RegisterResponse,
+  ResendVerificationEmailRequest,
+} from "@/types/auth"
 import type { ResponseSuccess } from "@/types/api-response"
 
 const AUTH_API_PREFIX = "/identity-service/api/v1/auth"
 const authApiUrl = (path: string) => buildApiUrl(`${AUTH_API_PREFIX}${path}`)
 
 export const authService = {
-  login: async (payload: LoginRequest): Promise<ResponseSuccess<AccessTokenResponse>> => {
-    const response = await axiosClient.post<ResponseSuccess<AccessTokenResponse>>(
-      `${AUTH_API_PREFIX}/login`,
-      payload
-    )
+  login: async (payload: LoginRequest): Promise<ResponseSuccess<void>> => {
+    const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/login`, payload)
     return response.data
   },
 
@@ -22,8 +25,21 @@ export const authService = {
     return response.data
   },
 
-  refreshAccessToken: async (): Promise<ResponseSuccess<AccessTokenResponse>> => {
-    const response = await axios.post<ResponseSuccess<AccessTokenResponse>>(
+  resendVerificationEmail: async (payload: ResendVerificationEmailRequest): Promise<ResponseSuccess<void>> => {
+    const response = await axiosClient.post<ResponseSuccess<void>>(
+      `${AUTH_API_PREFIX}/resend-verification-email`,
+      payload
+    )
+    return response.data
+  },
+
+  forgotPassword: async (payload: ForgotPasswordRequest): Promise<ResponseSuccess<void>> => {
+    const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/forgot-password`, payload)
+    return response.data
+  },
+
+  refreshAccessToken: async (): Promise<ResponseSuccess<void>> => {
+    const response = await axios.post<ResponseSuccess<void>>(
       authApiUrl("/refresh"),
       {},
       {

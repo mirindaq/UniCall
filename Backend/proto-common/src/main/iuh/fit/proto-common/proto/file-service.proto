@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package unicall.file.v1;
+
+option java_multiple_files = true;
+option java_package = "iuh.fit.unicall.grpc.file.v1";
+option java_outer_classname = "FileServiceProto";
+
+service FileService {
+  rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+}
+
+message UploadAvatarRequest {
+  string owner_identity_user_id = 1;
+  string file_name = 2;
+  string content_type = 3;
+  bytes content = 4;
+}
+
+message UploadAvatarResponse {
+  string url = 1;
+}

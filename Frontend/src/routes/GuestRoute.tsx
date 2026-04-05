@@ -2,45 +2,37 @@ import { useEffect, useState, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { Navigate } from "react-router"
 
-import { AUTH_PATH } from "@/constants/auth"
+import { USER_PATH } from "@/constants/user"
+import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
-import { authTokenStore } from "@/stores/auth-token.store"
+import { userService } from "@/services/user/user.service"
 
 interface GuestRouteProps {
   children: ReactNode
 }
 
 export default function GuestRoute({ children }: GuestRouteProps) {
-  const [loading, setLoading] = useState(!authTokenStore.get())
-  const [authenticated, setAuthenticated] = useState(Boolean(authTokenStore.get()))
+  const { isAuthenticated, setAuthenticated, clearAuthenticated } = useAuth()
+  const [loading, setLoading] = useState(() => !isAuthenticated)
 
   useEffect(() => {
-    if (authTokenStore.get()) {
-      setAuthenticated(true)
+    let mounted = true
+
+    if (isAuthenticated) {
       setLoading(false)
       return
     }
 
-    let mounted = true
-
     authService.refreshAccessToken()
-      .then((response) => {
-        const token = response.data.accessToken
-        if (!token) {
-          throw new Error("Missing access token")
-        }
-        authTokenStore.set(token)
+      .then(async () => {
+        const profile = await userService.getMyProfile()
+        setAuthenticated(profile.data.identityUserId)
         if (mounted) {
-          setAuthenticated(true)
+          setLoading(false)
         }
       })
       .catch(() => {
-        authTokenStore.clear()
-        if (mounted) {
-          setAuthenticated(false)
-        }
-      })
-      .finally(() => {
+        clearAuthenticated()
         if (mounted) {
           setLoading(false)
         }
@@ -49,7 +41,7 @@ export default function GuestRoute({ children }: GuestRouteProps) {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [clearAuthenticated, isAuthenticated, setAuthenticated])
 
   if (loading) {
     return (
@@ -62,8 +54,8 @@ export default function GuestRoute({ children }: GuestRouteProps) {
     )
   }
 
-  if (authenticated) {
-    return <Navigate to={AUTH_PATH.HOME} replace />
+  if (isAuthenticated) {
+    return <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />
   }
 
   return <>{children}</>

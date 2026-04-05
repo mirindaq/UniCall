@@ -7,6 +7,7 @@ import iuh.fit.common_service.exceptions.UnauthenticatedException;
 import iuh.fit.common_service.specification.SearchQueryParser;
 import iuh.fit.common_service.specification.SpecificationBuildQuery;
 import iuh.fit.common_service.utils.SortUtils;
+import iuh.fit.user_service.clients.GrpcFileServiceClient;
 import iuh.fit.user_service.entities.User;
 import iuh.fit.user_service.repositories.UserRepository;
 import iuh.fit.user_service.services.UserProfileService;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -24,12 +26,14 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class UserProfileServiceImpl implements UserProfileService {
     private final UserRepository userRepository;
+    private final GrpcFileServiceClient grpcFileServiceClient;
 
     @Override
     @Transactional
     public Long createUserProfile(
             String identityUserId,
             String phoneNumber,
+            String email,
             String firstName,
             String lastName,
             String gender,
@@ -41,10 +45,14 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (userRepository.existsByPhoneNumber(phoneNumber)) {
             throw new ConflictException("Phone number already exists");
         }
+        if (userRepository.existsByEmail(email)) {
+            throw new ConflictException("Email already exists");
+        }
 
         User user = User.builder()
                 .identityUserId(identityUserId)
                 .phoneNumber(phoneNumber)
+                .email(email)
                 .firstName(firstName)
                 .lastName(lastName)
                 .gender(gender)
@@ -84,6 +92,32 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
     @Override
+    @Transactional
+    public User updateAuthenticatedUserProfile(
+            String identityUserId,
+            String firstName,
+            String lastName,
+            String gender,
+            LocalDate dateOfBirth
+    ) {
+        User user = getAuthenticatedUserProfile(identityUserId);
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setGender(gender);
+        user.setDateOfBirth(dateOfBirth);
+        return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public User updateAuthenticatedUserAvatar(String identityUserId, MultipartFile avatarFile) {
+        User user = getAuthenticatedUserProfile(identityUserId);
+        String avatarUrl = grpcFileServiceClient.uploadAvatar(identityUserId, avatarFile);
+        user.setAvatar(avatarUrl);
+        return userRepository.save(user);
+    }
+
+    @Override
     public Page<User> searchUsers(
             int page,
             int limit,
@@ -115,6 +149,7 @@ public class UserProfileServiceImpl implements UserProfileService {
         }
 
         String keywordSearch = "phoneNumber~" + normalizedKeyword
+                + "'email~" + normalizedKeyword
                 + "'firstName~" + normalizedKeyword
                 + "'lastName~" + normalizedKeyword;
 

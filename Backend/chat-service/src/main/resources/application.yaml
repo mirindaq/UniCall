@@ -4,9 +4,10 @@ spring:
 
   data:
     mongodb:
-      host: localhost
-      port: 27017
-      database: unicall_chat_service
+      # host: localhost
+      # port: 27017
+      # database: unicall_chat_service
+      uri: mongodb://localhost:27017/unicall_chat_service
       auto-index-creation: true
 
 server:
@@ -16,6 +17,10 @@ server:
 
 api:
   prefix: /api/v1
+
+app:
+  websocket:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
 
 eureka:
   client:

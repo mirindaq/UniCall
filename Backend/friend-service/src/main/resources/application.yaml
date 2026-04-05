@@ -4,8 +4,8 @@ spring:
 
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_friend_service?createDatabaseIfNotExist=true
-    username: root
-    password: root
+    username: springstudent
+    password: springstudent
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -17,9 +17,13 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
     open-in-view: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
 api:
   prefix: /api/v1
-
 server:
   servlet:
     context-path: /friend-service

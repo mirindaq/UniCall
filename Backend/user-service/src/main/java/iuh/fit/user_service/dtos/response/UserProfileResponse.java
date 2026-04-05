@@ -12,6 +12,7 @@ public class UserProfileResponse {
     private Long id;
     private String identityUserId;
     private String phoneNumber;
+    private String email;
     private String firstName;
     private String lastName;
     private String gender;
@@ -24,6 +25,7 @@ public class UserProfileResponse {
                 .id(user.getId())
                 .identityUserId(user.getIdentityUserId())
                 .phoneNumber(user.getPhoneNumber())
+                .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .gender(user.getGender())

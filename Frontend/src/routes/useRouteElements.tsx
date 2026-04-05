@@ -25,7 +25,7 @@ export default function useRouteElements() {
   return useRoutes([
     {
       path: AUTH_PATH.ROOT,
-      element: <Navigate to={AUTH_PATH.LOGIN} replace />,
+      element: <HomePage />,
     },
     {
       path: AUTH_PATH.LOGIN,
@@ -41,14 +41,6 @@ export default function useRouteElements() {
         <GuestRoute>
           <AuthPage />
         </GuestRoute>
-      ),
-    },
-    {
-      path: AUTH_PATH.HOME,
-      element: (
-        <ProtectedRoute>
-          <HomePage />
-        </ProtectedRoute>
       ),
     },
     {

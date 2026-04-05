@@ -1,5 +1,6 @@
 export interface RegisterRequest {
   phoneNumber: string
+  email: string
   firstName: string
   lastName: string
   gender: "MALE" | "FEMALE" | "OTHER"
@@ -12,9 +13,20 @@ export interface LoginRequest {
   password: string
 }
 
+export interface ResendVerificationEmailRequest {
+  phoneNumber: string
+  email: string
+}
+
+export interface ForgotPasswordRequest {
+  phoneNumber: string
+  email: string
+}
+
 export interface RegisterResponse {
   userId: string
   phoneNumber: string
+  email: string
   firstName: string
   lastName: string
   gender: "MALE" | "FEMALE" | "OTHER"

@@ -19,6 +19,7 @@ message CreateUserProfileRequest {
   string lastName = 4;
   string gender = 5;
   string dateOfBirth = 6;
+  string email = 7;
 }
 
 message CreateUserProfileResponse {
@@ -48,4 +49,5 @@ message GetUserProfileByIdentityResponse {
   string dateOfBirth = 7;
   string avatar = 8;
   bool isActive = 9;
+  string email = 10;
 }
