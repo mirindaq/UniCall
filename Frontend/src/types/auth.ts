@@ -23,6 +23,12 @@ export interface ForgotPasswordRequest {
   email: string
 }
 
+export interface ChangePasswordRequest {
+  phoneNumber: string
+  currentPassword: string
+  newPassword: string
+}
+
 export interface RegisterResponse {
   userId: string
   phoneNumber: string

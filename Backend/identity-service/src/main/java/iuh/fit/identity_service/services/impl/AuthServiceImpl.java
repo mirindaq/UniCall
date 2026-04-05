@@ -1,6 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
@@ -44,6 +45,15 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void forgotPassword(ForgotPasswordRequest request) {
         keycloakAuthService.forgotPassword(request.getPhoneNumber(), request.getEmail());
+    }
+
+    @Override
+    public void changePassword(ChangePasswordRequest request) {
+        keycloakAuthService.changePassword(
+                request.getPhoneNumber(),
+                request.getCurrentPassword(),
+                request.getNewPassword()
+        );
     }
 
     @Override

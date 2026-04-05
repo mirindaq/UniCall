@@ -43,6 +43,7 @@ const isAuthRequest = (url?: string) =>
       url?.includes(`${AUTH_API_PREFIX}/login`) ||
       url?.includes(`${AUTH_API_PREFIX}/register`) ||
       url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
+      url?.includes(`${AUTH_API_PREFIX}/change-password`) ||
       url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
       url?.includes(`${AUTH_API_PREFIX}/logout`)

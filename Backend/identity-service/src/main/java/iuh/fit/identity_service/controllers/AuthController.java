@@ -1,6 +1,7 @@
 package iuh.fit.identity_service.controllers;
 
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
+import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
@@ -49,6 +50,14 @@ public class AuthController {
     ) {
         authService.forgotPassword(request);
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password reset email sent"));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<ResponseSuccess<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        authService.changePassword(request);
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password changed successfully"));
     }
 
     @PostMapping("/login")

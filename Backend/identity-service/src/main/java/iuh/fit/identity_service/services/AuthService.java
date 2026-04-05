@@ -1,5 +1,6 @@
 package iuh.fit.identity_service.services;
 
+import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
@@ -16,6 +17,8 @@ public interface AuthService {
     void resendVerificationEmail(ResendVerificationEmailRequest request);
 
     void forgotPassword(ForgotPasswordRequest request);
+
+    void changePassword(ChangePasswordRequest request);
 
     LoginResult login(LoginRequest request);
 
