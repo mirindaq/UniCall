@@ -26,6 +26,12 @@ spring:
                 - Path=/api-gateway/friend-service/**
               filters:
                 - StripPrefix=1
+            - id: file-service
+              uri: lb://FILE-SERVICE
+              predicates:
+                - Path=/api-gateway/file-service/**
+              filters:
+                - StripPrefix=1
             - id: chat-service-ws
               uri: lb:ws://CHAT-SERVICE
               predicates:
