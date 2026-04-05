@@ -39,7 +39,24 @@ public class FileStorageServiceImpl implements FileStorageService {
         String contentType = resolveValidatedContentType(file);
 
         String key = buildObjectKey(file.getOriginalFilename());
-        putObject(key, contentType, file);
+        putMultipartObject(key, contentType, file);
+
+        return FileUploadResponse.builder()
+                .url(buildPublicUrl(key))
+                .build();
+    }
+
+    @Override
+    public FileUploadResponse uploadBytes(String originalFilename, String contentType, byte[] content) {
+        if (content == null || content.length == 0) {
+            throw new InvalidParamException("File không được để trống");
+        }
+        if (!StringUtils.hasText(contentType) || !props.allowedMimeTypes().contains(contentType)) {
+            throw new InvalidFileTypeException("Định dạng file không được hỗ trợ");
+        }
+
+        String key = buildObjectKey(originalFilename);
+        putByteArrayObject(key, contentType, content);
 
         return FileUploadResponse.builder()
                 .url(buildPublicUrl(key))
@@ -147,7 +164,7 @@ public class FileStorageServiceImpl implements FileStorageService {
                 .build());
     }
 
-    private void putObject(String key, String contentType, MultipartFile file) {
+    private void putMultipartObject(String key, String contentType, MultipartFile file) {
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(props.getBucket())
@@ -161,11 +178,24 @@ public class FileStorageServiceImpl implements FileStorageService {
         }
     }
 
+    private void putByteArrayObject(String key, String contentType, byte[] content) {
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(props.getBucket())
+                .key(key)
+                .contentType(contentType)
+                .contentLength((long) content.length)
+                .build();
+        s3Client.putObject(request, RequestBody.fromBytes(content));
+    }
+
     private String buildObjectKey(String originalFilename) {
         return UUID.randomUUID() + "-" + safeFileName(originalFilename);
     }
 
     private static String safeFileName(String name) {
+        if (!StringUtils.hasText(name)) {
+            return "avatar";
+        }
         String base = Paths.get(name).getFileName().toString();
         if (!StringUtils.hasText(base) || base.contains("..")) {
             throw new InvalidParamException("Tên file không hợp lệ");

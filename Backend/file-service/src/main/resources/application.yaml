@@ -17,6 +17,10 @@ server:
     context-path: /file-service
   port: 8087
 
+grpc:
+  server:
+    port: ${FILE_SERVICE_GRPC_PORT:9097}
+
 eureka:
   client:
     service-url:
@@ -26,7 +30,7 @@ eureka:
 
 aws:
   s3:
-    region: ${AWS_REGION:ap-southeast-1}
+    region: ${AWS_REGION:us-east-1}
     bucket: ${AWS_S3_BUCKET:}
     access-key: ${AWS_ACCESS_KEY_ID:}
     secret-key: ${AWS_SECRET_ACCESS_KEY:}
