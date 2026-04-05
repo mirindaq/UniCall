@@ -1,31 +1,41 @@
-import {
+﻿import {
   ChevronDown,
   MessageCircle,
   MoreHorizontal,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
+import { AddFriendDialog } from "@/components/message/AddFriendDialog"
+import { CreateGroupDialog } from "@/components/message/CreateGroupDialog"
 import { SearchUserAccountDialog } from "@/components/shared/SearchUserAccountDialog"
 import { TopSidebarSearch } from "@/components/shared/TopSidebarSearch"
 import { UserSearchResultList } from "@/components/shared/UserSearchResultList"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useChatPage } from "@/contexts/ChatPageContext"
 import { useQuery } from "@/hooks/useQuery"
+import { cn } from "@/lib/utils"
 import { userService } from "@/services/user/user.service"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
+import type { CreateGroupConversationResponse } from "@/types/chat"
 import type { UserSearchItem } from "@/types/user.type"
-import { cn } from "@/lib/utils"
 import { formatChatSidebarTime } from "@/utils/chat-display.util"
 
 export default function ChatSidebar() {
   const {
     conversations,
     conversationsLoading,
+    refetchConversations,
     selectConversation,
     selectedConversationId,
     conversationTitle,
@@ -117,6 +127,15 @@ export default function ChatSidebar() {
   const isSearchMode = searchKeyword.trim().length > 0
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserSearchItem | null>(null)
+  const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = useState(false)
+  const [isAddFriendDialogOpen, setIsAddFriendDialogOpen] = useState(false)
+
+  const handleGroupCreated = async (createdGroup: CreateGroupConversationResponse) => {
+    await refetchConversations()
+    selectConversation(createdGroup.idConversation)
+    setTab("all")
+    setSearchKeyword("")
+  }
 
   return (
     <div className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:w-[340px] lg:border-r lg:border-b-0">
@@ -125,6 +144,8 @@ export default function ChatSidebar() {
           value={searchKeyword}
           onChange={setSearchKeyword}
           placeholder="Tìm kiếm"
+          onAddFriend={() => setIsAddFriendDialogOpen(true)}
+          onCreateGroup={() => setIsCreateGroupDialogOpen(true)}
         />
         {!isSearchMode ? (
           <div className="mt-4 flex items-center justify-between gap-2">
@@ -250,6 +271,25 @@ export default function ChatSidebar() {
         isStartingChat={isStartingChat}
         myFirstName={myFirstName}
         myLastName={myLastName}
+      />
+
+      <CreateGroupDialog
+        open={isCreateGroupDialogOpen}
+        onOpenChange={setIsCreateGroupDialogOpen}
+        currentIdentityUserId={currentIdentityUserId}
+        onCreatedGroup={handleGroupCreated}
+      />
+
+      <AddFriendDialog
+        open={isAddFriendDialogOpen}
+        onOpenChange={setIsAddFriendDialogOpen}
+        currentIdentityUserId={currentIdentityUserId}
+        myFirstName={myFirstName}
+        myLastName={myLastName}
+        onOpenUserProfile={(user) => {
+          setSelectedUser(user)
+          setIsAccountDialogOpen(true)
+        }}
       />
     </div>
   )

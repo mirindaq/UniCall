@@ -7,6 +7,7 @@ import {
   Send,
   Smile,
   Sticker,
+  Users,
   Video,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -22,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useChatPage } from "@/contexts/ChatPageContext"
 import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
-import { chatApiService } from "@/services/chat/chat-api.service"
+import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
@@ -61,6 +62,7 @@ export default function ChatWindow() {
     conversationTitle,
     conversationAvatar,
     selectedPeerProfile,
+    setDetailsView,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -89,7 +91,7 @@ export default function ChatWindow() {
       }
       setMessagesLoading(true)
       try {
-        const res = await chatApiService.listMessages(selectedConversationId, 1, MESSAGE_PAGE_SIZE)
+        const res = await chatService.listMessages(selectedConversationId, 1, MESSAGE_PAGE_SIZE)
         if (cancelled) {
           return
         }
@@ -131,7 +133,7 @@ export default function ChatWindow() {
     setIsLoadingMore(true)
     try {
       const nextPage = page + 1
-      const res = await chatApiService.listMessages(selectedConversationId, nextPage, MESSAGE_PAGE_SIZE)
+      const res = await chatService.listMessages(selectedConversationId, nextPage, MESSAGE_PAGE_SIZE)
       const moreItems = res.data.items ?? []
       setApiMessages((prev) => [...prev, ...moreItems])
       setPage(nextPage)
@@ -246,7 +248,7 @@ export default function ChatWindow() {
       if (client?.connected) {
         chatSocketService.sendMessage(selectedConversationId, normalized, type, attachments)
       } else {
-        const res = await chatApiService.sendMessageRest(selectedConversationId, normalized, type, attachments)
+        const res = await chatService.sendMessageRest(selectedConversationId, normalized, type, attachments)
         setSocketExtras((prev) => {
           if (prev.some((x) => x.idMessage === res.data.idMessage)) {
             return prev
@@ -305,7 +307,18 @@ export default function ChatWindow() {
           </Avatar>
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-foreground">{headerTitle}</h2>
-            <p className="text-xs text-green-600">Trực tuyến</p>
+            {selectedConversation.type === "GROUP" ? (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600"
+                onClick={() => setDetailsView("group-members")}
+              >
+                <Users className="h-3.5 w-3.5" />
+                {selectedConversation.numberMember} thành viên
+              </button>
+            ) : (
+              <p className="text-xs text-green-600">Trực tuyến</p>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -322,6 +335,7 @@ export default function ChatWindow() {
             variant="ghost"
             size="icon-sm"
             className="text-primary"
+            onClick={() => setDetailsView("main")}
             title="Thông tin hội thoại"
           >
             <PanelRight className="h-5 w-5 text-blue-600" />

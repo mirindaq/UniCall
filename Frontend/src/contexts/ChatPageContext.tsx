@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
-import { chatApiService } from "@/services/chat/chat-api.service"
+import { chatService } from "@/services/chat/chat.service"
 import { userService } from "@/services/user/user.service"
 import type { ConversationResponse } from "@/types/chat"
 import type { UserProfile, UserSearchItem } from "@/types/user.type"
@@ -26,12 +26,15 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
+  detailsView: "main" | "storage" | "group-members"
+  setDetailsView: (view: "main" | "storage" | "group-members") => void
 }
 
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
   const [peerById, setPeerById] = useState<Record<string, UserProfile>>({})
   const [isStartingChat, setIsStartingChat] = useState(false)
   const fetchedPeersRef = useRef(new Set<string>())
@@ -46,7 +49,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     isLoading: conversationsLoading,
     error: conversationsError,
     refetch: refetchConversations,
-  } = useQuery(() => chatApiService.listConversations(), {
+  } = useQuery(() => chatService.listConversations(), {
     enabled: currentUserId != null,
     deps: [currentUserId],
     onError: () => {
@@ -128,13 +131,14 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
+    setDetailsView("main")
   }, [])
 
   const startChatWithUser = useCallback(
     async (user: UserSearchItem) => {
       setIsStartingChat(true)
       try {
-        const res = await chatApiService.getOrCreateDirect(user.identityUserId)
+        const res = await chatService.getOrCreateDirect(user.identityUserId)
         const conv = res.data
 
         setPeerById((prev) => ({
@@ -169,6 +173,8 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       conversationAvatar,
       selectedConversation,
       selectedPeerProfile,
+      detailsView,
+      setDetailsView,
     }),
     [
       conversationAvatar,
@@ -182,6 +188,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectConversation,
       selectedConversation,
       selectedPeerProfile,
+      detailsView,
       selectedConversationId,
       startChatWithUser,
     ],

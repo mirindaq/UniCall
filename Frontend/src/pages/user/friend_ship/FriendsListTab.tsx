@@ -44,6 +44,9 @@ export function FriendsListTab() {
   const currentUserId = (myProfileResponse as any)?.data?.identityUserId
 
   const [friendsData, setFriendsData] = useState<any[]>([])
+  const [friendProfiles, setFriendProfiles] = useState<
+    Record<string, { firstName: string; lastName: string; avatar?: string | null }>
+  >({})
 
   useEffect(() => {
     if (currentUserId) {
@@ -59,18 +62,92 @@ export function FriendsListTab() {
     }
   }, [currentUserId])
 
-  const friends = friendsData.map((friend: any) => ({
-    id: friend.idFriend,
-    name: `${friend.firstName} ${friend.lastName}`.trim(),
-    firstName: friend.firstName,
-    lastName: friend.lastName,
-    fallback: `${friend.firstName?.[0] ?? ""}${friend.lastName?.[0] ?? ""}`.toUpperCase(),
-    tone: "base",
-    avatar: friend.pathAvartar,
-    label: null,
-    friendType: "NORMAL_FRIEND",
-    recentOrder: 0,
-  }))
+  useEffect(() => {
+    if (!currentUserId || friendsData.length === 0) {
+      setFriendProfiles({})
+      return
+    }
+
+    const peerIds = Array.from(
+      new Set(
+        friendsData
+          .map((friend: any) =>
+            friend.idAccountSent === currentUserId
+              ? friend.idAccountReceive
+              : friend.idAccountSent
+          )
+          .filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+      )
+    )
+
+    if (peerIds.length === 0) {
+      setFriendProfiles({})
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      peerIds.map(async (peerId) => {
+        try {
+          const response = await userService.getProfileByIdentityUserId(peerId)
+          const profile = response.data
+          return {
+            id: peerId,
+            firstName: profile.firstName ?? "",
+            lastName: profile.lastName ?? "",
+            avatar: profile.avatar ?? null,
+          }
+        } catch {
+          return {
+            id: peerId,
+            firstName: "",
+            lastName: "",
+            avatar: null,
+          }
+        }
+      })
+    ).then((profiles) => {
+      if (cancelled) {
+        return
+      }
+      const nextMap: Record<string, { firstName: string; lastName: string; avatar?: string | null }> = {}
+      for (const item of profiles) {
+        nextMap[item.id] = {
+          firstName: item.firstName,
+          lastName: item.lastName,
+          avatar: item.avatar,
+        }
+      }
+      setFriendProfiles(nextMap)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, friendsData])
+
+  const friends = friendsData.map((friend: any) => {
+    const peerIdentityUserId =
+      friend.idAccountSent === currentUserId
+        ? friend.idAccountReceive
+        : friend.idAccountSent
+    const profile = friendProfiles[peerIdentityUserId]
+    const firstName = profile?.firstName || friend.firstName || ""
+    const lastName = profile?.lastName || friend.lastName || ""
+    const displayName = `${firstName} ${lastName}`.trim() || peerIdentityUserId
+    return {
+      id: friend.idFriend,
+      name: displayName,
+      firstName,
+      lastName,
+      fallback: `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "U",
+      tone: "base",
+      avatar: profile?.avatar || friend.pathAvartar,
+      label: null,
+      friendType: friend.friendType || "NORMAL_FRIEND",
+      recentOrder: 0,
+    }
+  })
 
   const filteredFriends = useMemo(() => {
     let result: any[] = friends

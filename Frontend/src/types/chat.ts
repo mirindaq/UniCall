@@ -26,10 +26,11 @@ export interface ChatAttachment {
 }
 
 export type ConversationType = "DOUBLE" | "GROUP"
+export type GroupParticipantRole = "ADMIN" | "DEPUTY" | "USER"
 
 export interface ChatParticipantInfo {
   idAccount: string
-  role: string
+  role: GroupParticipantRole
   nickname?: string
   dateJoin: string
 }
@@ -44,4 +45,49 @@ export interface ConversationResponse {
   lastMessageContent?: string
   numberMember: number
   participantInfos: ChatParticipantInfo[]
+}
+
+export type CreateGroupConversationRequest = {
+  name: string
+  memberIdentityUserIds: string[]
+}
+
+export type CreateGroupConversationResponse = {
+  idConversation: string
+  name: string
+  numberMember: number
+  dateCreate: string
+  participantIdentityUserIds: string[]
+}
+
+export type GroupParticipantInfo = {
+  idAccount: string
+  role: GroupParticipantRole
+  nickname: string
+  dateJoin: string
+}
+
+export type ManageGroupParticipantsResponse = {
+  idConversation: string
+  name: string
+  numberMember: number
+  participantInfos: GroupParticipantInfo[]
+}
+
+export type AddGroupMembersRequest = {
+  memberIdentityUserIds: string[]
+}
+
+export type UpdateGroupMemberRoleRequest = {
+  role: GroupParticipantRole
+}
+
+export type TransferGroupAdminRequest = {
+  targetIdentityUserId: string
+}
+
+export type DissolveGroupConversationResponse = {
+  idConversation: string
+  dissolved: boolean
+  dissolvedAt: string
 }
