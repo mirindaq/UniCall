@@ -9,6 +9,8 @@ public interface FileStorageService {
 
     FileUploadResponse upload(MultipartFile file);
 
+    FileUploadResponse uploadBytes(String originalFilename, String contentType, byte[] content);
+
     List<FileUploadResponse> uploadAll(List<MultipartFile> files);
 
     void deleteByUrl(String url);

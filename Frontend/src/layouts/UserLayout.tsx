@@ -13,10 +13,11 @@ import {
   User,
   Users,
 } from "lucide-react"
-import { useState } from "react"
-import { Link, NavLink, Outlet, useNavigate } from "react-router"
+import { useEffect, useState } from "react"
+import { NavLink, Outlet, useNavigate } from "react-router"
 import { toast } from "sonner"
 
+import { UserProfileDialog } from "@/components/profile/UserProfileDialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,10 +35,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
 import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
+import { userService } from "@/services/user/user.service"
+import type { UserProfile } from "@/types/user.type"
 
 const userTabs = [
   {
@@ -58,10 +62,31 @@ const userTabs = [
 ]
 
 export function UserLayout() {
-  const { clearAuthenticated } = useAuth()
+  const { clearAuthenticated, setIdentityUserId } = useAuth()
   const navigate = useNavigate()
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [me, setMe] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const loadMe = async () => {
+      try {
+        const response = await userService.getMyProfile()
+        if (mounted) {
+          setMe(response.data)
+          setIdentityUserId(response.data.identityUserId)
+        }
+      } catch {
+        // ignore profile load failures in layout shell
+      }
+    }
+    void loadMe()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -82,12 +107,18 @@ export function UserLayout() {
     <div className="flex h-screen w-full overflow-hidden bg-slate-100">
       <aside className="flex w-16 shrink-0 flex-col items-center justify-between bg-blue-600 py-4 text-white shadow-lg">
         <div className="flex w-full flex-col items-center gap-4">
-          <Link
-            to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`}
-            className="flex size-10 items-center justify-center rounded-full bg-white/25 text-sm font-semibold"
+          <button
+            type="button"
+            className="flex size-10 items-center justify-center rounded-full bg-white/25"
+            onClick={() => setIsProfileOpen(true)}
           >
-            U
-          </Link>
+            <Avatar className="size-10 border border-white/40">
+              <AvatarImage src={me?.avatar ?? undefined} alt="my-avatar" />
+              <AvatarFallback className="bg-white/20 text-sm font-semibold text-white">
+                {`${me?.firstName?.[0] ?? "U"}${me?.lastName?.[0] ?? ""}`.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </button>
 
           <nav className="flex w-full flex-col items-center gap-2 px-2">
             {userTabs.map((tab) => {
@@ -138,7 +169,10 @@ export function UserLayout() {
               sideOffset={10}
               className="w-56 rounded-xl border border-slate-200 p-1.5 shadow-lg"
             >
-              <DropdownMenuItem className="h-10 rounded-md px-2.5">
+              <DropdownMenuItem
+                className="h-10 rounded-md px-2.5"
+                onSelect={() => setIsProfileOpen(true)}
+              >
                 <User className="mr-2 size-4.5 text-slate-700" />
                 <span className="text-sm text-slate-800">Thông tin tài khoản</span>
               </DropdownMenuItem>
@@ -201,6 +235,12 @@ export function UserLayout() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <UserProfileDialog
+        open={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        onProfileChanged={(profile) => setMe(profile)}
+      />
     </div>
   )
 }

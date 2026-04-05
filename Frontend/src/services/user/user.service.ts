@@ -1,12 +1,31 @@
 import axiosClient from "@/configurations/axios.config"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
-import type { UserProfile, UserSearchItem, UserSearchQuery } from "@/types/user.type"
+import type {
+  UpdateMyProfileRequest,
+  UserProfile,
+  UserSearchItem,
+  UserSearchQuery,
+} from "@/types/user.type"
 
 const USER_API_PREFIX = "/user-service/api/v1/users"
 
 export const userService = {
   getMyProfile: async (): Promise<ResponseSuccess<UserProfile>> => {
     const response = await axiosClient.get<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/me`)
+    return response.data
+  },
+
+  updateMyProfile: async (payload: UpdateMyProfileRequest): Promise<ResponseSuccess<UserProfile>> => {
+    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/me`, payload)
+    return response.data
+  },
+
+  updateMyAvatar: async (file: File): Promise<ResponseSuccess<UserProfile>> => {
+    const form = new FormData()
+    form.append("file", file)
+    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/me/avatar`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
     return response.data
   },
 

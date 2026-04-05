@@ -14,6 +14,7 @@ export interface ChatMessageResponse {
   timeUpdate: string
   replyToMessageId?: string
   edited: boolean
+  recalled?: boolean
   attachments?: ChatAttachment[]
 }
 

@@ -5,6 +5,7 @@ import { Navigate } from "react-router"
 import { USER_PATH } from "@/constants/user"
 import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
+import { userService } from "@/services/user/user.service"
 
 interface GuestRouteProps {
   children: ReactNode
@@ -23,8 +24,9 @@ export default function GuestRoute({ children }: GuestRouteProps) {
     }
 
     authService.refreshAccessToken()
-      .then(() => {
-        setAuthenticated()
+      .then(async () => {
+        const profile = await userService.getMyProfile()
+        setAuthenticated(profile.data.identityUserId)
         if (mounted) {
           setLoading(false)
         }

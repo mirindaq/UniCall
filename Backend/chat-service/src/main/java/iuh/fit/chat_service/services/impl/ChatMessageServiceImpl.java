@@ -16,9 +16,11 @@ import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -50,9 +52,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         if (limit < 1 || limit > 100) {
             throw new InvalidParamException("limit phải từ 1 đến 100");
         }
-        Page<Message> result = messageRepository.findByIdConversationOrderByTimeSentDesc(
+        Page<Message> result = messageRepository.findVisibleForParticipant(
                 conversationId,
-                PageRequest.of(page - 1, limit)
+                identityUserId,
+                PageRequest.of(page - 1, limit, Sort.by(Sort.Direction.DESC, "timeSent"))
         );
         return PageResponse.fromPage(result, MessageResponse::from);
     }
@@ -65,7 +68,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 conversationId,
                 request.getContent(),
                 request.getType(),
-                request.getAttachments()
+                request.getAttachments(),
+                request.getReplyToMessageId()
         );
     }
 
@@ -81,7 +85,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 payload.getConversationId(),
                 payload.getContent(),
                 type,
-                payload.getAttachments()
+                payload.getAttachments(),
+                payload.getReplyToMessageId()
         );
     }
 
@@ -90,7 +95,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             String conversationId,
             String content,
             MessageType type,
-            List<MessageAttachmentRequest> attachmentRequests
+            List<MessageAttachmentRequest> attachmentRequests,
+            String replyToMessageId
     ) {
         List<Attachment> attachments = toAttachments(attachmentRequests);
         String normalizedContent = content == null ? "" : content.trim();
@@ -110,6 +116,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(now);
         message.setAttachments(attachments);
         message.setEdited(false);
+        message.setReplyToMessageId(resolveReplyToMessageId(conversationId, replyToMessageId));
 
         Message saved = messageRepository.save(message);
 
@@ -123,6 +130,68 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         MessageResponse dto = MessageResponse.from(saved);
         messagingTemplate.convertAndSend(topicForConversation(conversationId), dto);
         return dto;
+    }
+
+    @Override
+    public MessageResponse recallMessage(String identityUserId, String conversationId, String messageId) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = messageRepository
+                .findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tin nhắn"));
+        if (!conversationId.equals(message.getIdConversation())) {
+            throw new InvalidParamException("Tin nhắn không thuộc hội thoại này");
+        }
+        if (!identityUserId.equals(message.getIdAccountSent())) {
+            throw new InvalidParamException("Chỉ người gửi mới thu hồi được tin nhắn");
+        }
+        if (message.isRecalled()) {
+            throw new InvalidParamException("Tin nhắn đã được thu hồi");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        message.setRecalled(true);
+        message.setContent("Tin nhắn đã thu hồi");
+        message.setAttachments(List.of());
+        message.setType(MessageType.TEXT);
+        message.setTimeUpdate(now);
+        Message saved = messageRepository.save(message);
+        MessageResponse dto = MessageResponse.from(saved);
+        messagingTemplate.convertAndSend(topicForConversation(conversationId), dto);
+        return dto;
+    }
+
+    @Override
+    public void hideMessageForMe(String identityUserId, String conversationId, String messageId) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = messageRepository
+                .findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tin nhắn"));
+        if (!conversationId.equals(message.getIdConversation())) {
+            throw new InvalidParamException("Tin nhắn không thuộc hội thoại này");
+        }
+        List<String> hidden = message.getHiddenForAccountIds();
+        if (hidden == null) {
+            hidden = new ArrayList<>();
+        }
+        if (hidden.contains(identityUserId)) {
+            return;
+        }
+        hidden.add(identityUserId);
+        message.setHiddenForAccountIds(hidden);
+        messageRepository.save(message);
+    }
+
+    private String resolveReplyToMessageId(String conversationId, String replyToMessageId) {
+        if (replyToMessageId == null || replyToMessageId.isBlank()) {
+            return null;
+        }
+        String trimmed = replyToMessageId.trim();
+        Message ref = messageRepository
+                .findById(trimmed)
+                .orElseThrow(() -> new InvalidParamException("Tin nhắn trả lời không tồn tại"));
+        if (!conversationId.equals(ref.getIdConversation())) {
+            throw new InvalidParamException("Tin nhắn trả lời không thuộc hội thoại này");
+        }
+        return ref.getIdMessage();
     }
 
     private static String topicForConversation(String conversationId) {

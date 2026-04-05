@@ -26,6 +26,7 @@ public class MessageResponse {
     private Map<String, String> reactions;
     private String replyToMessageId;
     private boolean edited;
+    private boolean recalled;
 
     public static MessageResponse from(Message entity) {
         if (entity == null) {
@@ -44,6 +45,7 @@ public class MessageResponse {
                 .reactions(entity.getReactions())
                 .replyToMessageId(entity.getReplyToMessageId())
                 .edited(entity.isEdited())
+                .recalled(entity.isRecalled())
                 .build();
     }
 }

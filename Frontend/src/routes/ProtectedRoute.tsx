@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
+import { userService } from "@/services/user/user.service"
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -24,8 +25,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     let mounted = true
 
     authService.refreshAccessToken()
-      .then(() => {
-        setAuthenticated()
+      .then(async () => {
+        const profile = await userService.getMyProfile()
+        setAuthenticated(profile.data.identityUserId)
         if (mounted) {
           setLoading(false)
         }
