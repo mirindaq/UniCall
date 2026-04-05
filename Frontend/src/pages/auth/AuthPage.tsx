@@ -10,8 +10,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { userService } from "@/services/user/user.service"
 import type { ResponseError } from "@/types/api-response"
 import type { ForgotPasswordRequest, LoginRequest, RegisterRequest } from "@/types/auth"
 
@@ -104,7 +106,8 @@ export function AuthPage() {
     setIsSubmitting(true)
     try {
       const response = await authService.login(loginData)
-      setAuthenticated()
+      const profile = await userService.getMyProfile()
+      setAuthenticated(profile.data.identityUserId)
       setShowResendVerification(false)
       toast.success(response.message || "Đăng nhập thành công")
       navigate(AUTH_PATH.HOME)
@@ -344,18 +347,17 @@ export function AuthPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="register-date-of-birth">Ngày sinh</Label>
-                    <Input
-                      id="register-date-of-birth"
-                      type="date"
+                    <CustomDatePicker
                       value={registerData.dateOfBirth}
-                      onChange={(event) =>
+                      onChange={(value) =>
                         setRegisterData({
                           ...registerData,
-                          dateOfBirth: event.target.value,
+                          dateOfBirth: value,
                         })
                       }
+                      placeholder="Chọn ngày sinh"
                       required
-                      className="h-11 border-slate-300 focus-visible:ring-sky-500"
+                      triggerClassName="focus-visible:ring-sky-500"
                     />
                   </div>
                 </div>

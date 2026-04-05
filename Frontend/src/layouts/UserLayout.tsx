@@ -62,7 +62,7 @@ const userTabs = [
 ]
 
 export function UserLayout() {
-  const { clearAuthenticated } = useAuth()
+  const { clearAuthenticated, setIdentityUserId } = useAuth()
   const navigate = useNavigate()
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -76,6 +76,7 @@ export function UserLayout() {
         const response = await userService.getMyProfile()
         if (mounted) {
           setMe(response.data)
+          setIdentityUserId(response.data.identityUserId)
         }
       } catch {
         // ignore profile load failures in layout shell

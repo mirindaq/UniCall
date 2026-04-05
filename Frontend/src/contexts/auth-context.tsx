@@ -2,37 +2,59 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 type AuthContextValue = {
   isAuthenticated: boolean
-  setAuthenticated: () => void
+  identityUserId: string | null
+  setAuthenticated: (identityUserId?: string | null) => void
+  setIdentityUserId: (identityUserId: string | null) => void
   clearAuthenticated: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-let externalAuthStateUpdater: ((authenticated: boolean) => void) | null = null
+let externalAuthStateUpdater:
+  | ((authenticated: boolean, identityUserId?: string | null) => void)
+  | null = null
 
-export const updateAuthState = (authenticated: boolean) => {
-  externalAuthStateUpdater?.(authenticated)
+export const updateAuthState = (authenticated: boolean, identityUserId?: string | null) => {
+  externalAuthStateUpdater?.(authenticated, identityUserId)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [identityUserId, setIdentityUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    externalAuthStateUpdater = setIsAuthenticated
-    return () => {
-      if (externalAuthStateUpdater === setIsAuthenticated) {
-        externalAuthStateUpdater = null
+    externalAuthStateUpdater = (authenticated, nextIdentityUserId) => {
+      setIsAuthenticated(authenticated)
+      if (!authenticated) {
+        setIdentityUserId(null)
+        return
       }
+      if (nextIdentityUserId !== undefined) {
+        setIdentityUserId(nextIdentityUserId ?? null)
+      }
+    }
+    return () => {
+      externalAuthStateUpdater = null
     }
   }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated,
-      setAuthenticated: () => setIsAuthenticated(true),
-      clearAuthenticated: () => setIsAuthenticated(false),
+      identityUserId,
+      setAuthenticated: (nextIdentityUserId) => {
+        setIsAuthenticated(true)
+        if (nextIdentityUserId !== undefined) {
+          setIdentityUserId(nextIdentityUserId ?? null)
+        }
+      },
+      setIdentityUserId,
+      clearAuthenticated: () => {
+        setIsAuthenticated(false)
+        setIdentityUserId(null)
+      },
     }),
-    [isAuthenticated]
+    [identityUserId, isAuthenticated]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -45,4 +67,3 @@ export function useAuth() {
   }
   return context
 }
-

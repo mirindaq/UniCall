@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -188,12 +189,16 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
               </div>
               <div className="space-y-2">
                 <Label>Ngày sinh</Label>
-                <Input
-                  type={isEditing ? "date" : "text"}
-                  value={isEditing ? formData.dateOfBirth : formatDateVi(profile.dateOfBirth)}
-                  disabled={!isEditing}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, dateOfBirth: event.target.value }))}
-                />
+                {isEditing ? (
+                  <CustomDatePicker
+                    value={formData.dateOfBirth}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, dateOfBirth: value }))}
+                    placeholder="Chọn ngày sinh"
+                    triggerClassName="focus-visible:ring-blue-500"
+                  />
+                ) : (
+                  <Input type="text" value={formatDateVi(profile.dateOfBirth)} disabled />
+                )}
               </div>
             </div>
 

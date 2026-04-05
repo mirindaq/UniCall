@@ -1,6 +1,6 @@
-import { useState } from "react"
-import { useNavigate } from "react-router"
-import { Menu, X, Globe, LogOut, Inbox } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Link, useNavigate } from "react-router"
+import { Loader2, Menu, X, Globe, LogOut, Inbox } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 import {
@@ -13,11 +13,39 @@ import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
 import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
+import { userService } from "@/services/user/user.service"
 
 export function Header() {
-  const { isAuthenticated, clearAuthenticated } = useAuth()
+  const { isAuthenticated, clearAuthenticated, setAuthenticated } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(!isAuthenticated)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setCheckingSession(false)
+      return
+    }
+
+    let mounted = true
+    authService.refreshAccessToken()
+      .then(async () => {
+        const profile = await userService.getMyProfile()
+        setAuthenticated(profile.data.identityUserId)
+      })
+      .catch(() => {
+        clearAuthenticated()
+      })
+      .finally(() => {
+        if (mounted) {
+          setCheckingSession(false)
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [clearAuthenticated, isAuthenticated, setAuthenticated])
 
   const handleLogout = async () => {
     try {
@@ -36,13 +64,18 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="/" className="flex items-center">
+          <Link to={AUTH_PATH.ROOT} className="flex items-center">
             <span className="text-2xl font-bold text-[#0068ff]">Zalo</span>
-          </a>
+          </Link>
 
           {/* Desktop Auth Buttons */}
           <div className="hidden sm:flex items-center gap-3">
-            {!isAuthenticated ? (
+            {checkingSession ? (
+              <Button variant="ghost" className="text-foreground" disabled>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang kiểm tra...
+              </Button>
+            ) : !isAuthenticated ? (
               <>
                 <Button 
                   variant="ghost" 
@@ -118,7 +151,12 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="sm:hidden bg-background border-b border-border">
           <div className="px-4 py-4 flex flex-col gap-2">
-            {!isAuthenticated ? (
+            {checkingSession ? (
+              <Button variant="ghost" className="w-full justify-center text-foreground" disabled>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang kiểm tra...
+              </Button>
+            ) : !isAuthenticated ? (
               <>
                 <Button 
                   variant="ghost" 
