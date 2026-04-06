@@ -1,8 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -255,7 +263,16 @@ export function UserProfileScreen({
 
       </View>
 
-      <ScrollView className="flex-1 px-4" contentContainerClassName="pb-8 pt-4" showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView
+          enableOnAndroid
+          enableAutomaticScroll
+          enableResetScrollToCoords={false}
+          extraScrollHeight={150}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          className="flex-1 px-4"
+          contentContainerClassName="pb-8 pt-4"
+          showsVerticalScrollIndicator={false}>
 
         {isLoading ? (
           <View className="mt-10 items-center">
@@ -359,7 +376,7 @@ export function UserProfileScreen({
             ) : null}
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
