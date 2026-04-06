@@ -11,3 +11,11 @@ export interface ResponseError {
   message: string;
   path: string;
 }
+
+export interface PageResponse<T> {
+  page: number;
+  limit: number;
+  totalPage: number;
+  totalItem: number;
+  items: T[];
+}

@@ -572,227 +572,227 @@ export default function ChatWindow() {
       <div ref={scrollAreaRef} className="min-h-0 flex-1">
         <ScrollArea className="h-full min-h-0">
           <div className="space-y-2 p-4">
-          {messagesLoading ? (
-            <div className="flex justify-center py-20">
-              <Spinner className="size-8 text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              {isLoadingMore && (
-                <div className="flex justify-center py-2">
-                  <Spinner className="size-4 text-muted-foreground" />
-                </div>
-              )}
-              {displayMessages.map((msg) => {
-                const isMe = msg.idAccountSent === currentUserId
-                const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
-                const firstAttachment = msg.attachments?.[0]
+            {messagesLoading ? (
+              <div className="flex justify-center py-20">
+                <Spinner className="size-8 text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {isLoadingMore && (
+                  <div className="flex justify-center py-2">
+                    <Spinner className="size-4 text-muted-foreground" />
+                  </div>
+                )}
+                {displayMessages.map((msg) => {
+                  const isMe = msg.idAccountSent === currentUserId
+                  const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
+                  const firstAttachment = msg.attachments?.[0]
 
-                const replyParent = msg.replyToMessageId
-                  ? messageById.get(msg.replyToMessageId)
-                  : undefined
+                  const replyParent = msg.replyToMessageId
+                    ? messageById.get(msg.replyToMessageId)
+                    : undefined
 
-                return (
-                  <div
-                    key={msg.idMessage}
-                    className={cn("flex gap-2", isMe ? "justify-end" : "justify-start")}
-                  >
-                    {showAvatar && (
-                      <Avatar size="sm" className="mb-1 self-end">
-                        <AvatarImage src={headerAvatar} alt={headerTitle} />
-                        <AvatarFallback>{headerTitle.slice(0, 2)}</AvatarFallback>
-                      </Avatar>
-                    )}
+                  return (
                     <div
-                      className={cn(
-                        "flex max-w-[min(70%,28rem)] items-end gap-2",
-                        isMe ? "flex-row-reverse" : "flex-row",
-                      )}
+                      key={msg.idMessage}
+                      className={cn("flex gap-2", isMe ? "justify-end" : "justify-start")}
                     >
-                      {multiSelectActive ? (
-                        <button
-                          type="button"
-                          aria-label="Chọn tin nhắn"
-                          onClick={() => toggleMessageSelection(msg.idMessage)}
-                          className={cn(
-                            "mb-5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2",
-                            selectedMessageIds.has(msg.idMessage)
-                              ? "border-blue-600 bg-blue-600 text-white"
-                              : "border-muted-foreground/40 bg-background",
-                          )}
-                        >
-                          {selectedMessageIds.has(msg.idMessage) ? "✓" : ""}
-                        </button>
-                      ) : null}
+                      {showAvatar && (
+                        <Avatar size="sm" className="mb-1 self-end">
+                          <AvatarImage src={headerAvatar} alt={headerTitle} />
+                          <AvatarFallback>{headerTitle.slice(0, 2)}</AvatarFallback>
+                        </Avatar>
+                      )}
                       <div
                         className={cn(
-                          "group/msg flex min-w-0 items-end gap-1",
+                          "flex max-w-[min(70%,28rem)] items-end gap-2",
                           isMe ? "flex-row-reverse" : "flex-row",
                         )}
                       >
-                        <div
-                          className={cn(
-                            "flex min-w-0 flex-col",
-                            isMe ? "items-end" : "items-start",
-                          )}
-                        >
-                          {msg.replyToMessageId && !msg.recalled ? (
-                            <div
-                              className={cn(
-                                "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground dark:bg-white/5",
-                                isMe ? "mr-0" : "ml-0",
-                              )}
-                            >
-                              <span className="line-clamp-2">
-                                {replyParent
-                                  ? messagePlainTextForCopy(replyParent)
-                                  : "Tin nhắn"}
-                              </span>
-                            </div>
-                          ) : null}
-                          {msg.recalled ? (
-                            <div
-                              className={cn(
-                                "rounded-2xl px-4 py-2 text-sm italic text-muted-foreground",
-                                isMe ? "rounded-br-sm bg-primary/5" : "rounded-bl-sm border bg-muted/40",
-                              )}
-                            >
-                              {msg.content}
-                            </div>
-                          ) : msg.type === "TEXT" ? (
-                            <div
-                              className={cn(
-                                "rounded-2xl px-4 py-2 text-sm",
-                                isMe
-                                  ? "rounded-br-sm bg-primary/10 text-foreground"
-                                  : "rounded-bl-sm border bg-background text-foreground shadow-xs",
-                              )}
-                            >
-                              {msg.content}
-                            </div>
-                          ) : firstAttachment?.type === "STICKER" ? (
-                            <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
-                              <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
-                            </div>
-                          ) : firstAttachment?.type === "GIF" ? (
-                            <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
-                              <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
-                            </div>
-                          ) : (
-                            <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
-                              {msg.content}
-                            </div>
-                          )}
-                          <span className="mt-1 text-[11px] text-muted-foreground">
-                            {formatChatMessageTime(msg.timeSent)}
-                          </span>
-                        </div>
-
-                        {!msg.recalled && !multiSelectActive ? (
-                          <div
+                        {multiSelectActive ? (
+                          <button
+                            type="button"
+                            aria-label="Chọn tin nhắn"
+                            onClick={() => toggleMessageSelection(msg.idMessage)}
                             className={cn(
-                              "mb-5 flex shrink-0 gap-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100",
-                              "pointer-events-none group-hover/msg:pointer-events-auto",
+                              "mb-5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2",
+                              selectedMessageIds.has(msg.idMessage)
+                                ? "border-blue-600 bg-blue-600 text-white"
+                                : "border-muted-foreground/40 bg-background",
                             )}
                           >
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon"
-                              className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
-                              title="Trả lời (Rep)"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setReplyingTo(msg)
-                                setTimeout(() => textareaRef.current?.focus(), 0)
-                              }}
-                            >
-                              <Quote className="size-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon"
-                              className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
-                              title="Chuyển tiếp"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setForwardTarget(msg)
-                              }}
-                            >
-                              <Forward className="size-3.5" />
-                            </Button>
-                            <DropdownMenu modal={false}>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="icon"
-                                  className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
-                                  title="Thêm"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <MoreHorizontal className="size-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align={isMe ? "end" : "start"} className="w-56">
-                                <DropdownMenuItem
-                                  className="gap-2"
-                                  onSelect={() => void copyMessageText(msg)}
-                                >
-                                  <Copy className="size-4" />
-                                  Copy tin nhắn
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="gap-2"
-                                  onSelect={() => toast.info("Tính năng ghim tin đang được phát triển")}
-                                >
-                                  <Pin className="size-4" />
-                                  Ghim tin nhắn
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="gap-2"
-                                  onSelect={() => {
-                                    setMultiSelectActive(true)
-                                    setSelectedMessageIds(new Set([msg.idMessage]))
-                                  }}
-                                >
-                                  <ListChecks className="size-4" />
-                                  Chọn nhiều tin nhắn
-                                </DropdownMenuItem>
-                                {isMe && !msg.recalled ? (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      variant="destructive"
-                                      className="gap-2"
-                                      onSelect={() => void handleRecallMessage(msg)}
-                                    >
-                                      <Undo2 className="size-4" />
-                                      Thu hồi
-                                    </DropdownMenuItem>
-                                  </>
-                                ) : null}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  className="gap-2"
-                                  onSelect={() => void handleHideMessageForMe(msg)}
-                                >
-                                  <Trash2 className="size-4" />
-                                  Xóa chỉ ở phía tôi
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
+                            {selectedMessageIds.has(msg.idMessage) ? "✓" : ""}
+                          </button>
                         ) : null}
+                        <div
+                          className={cn(
+                            "group/msg flex min-w-0 items-end gap-1",
+                            isMe ? "flex-row-reverse" : "flex-row",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "flex min-w-0 flex-col",
+                              isMe ? "items-end" : "items-start",
+                            )}
+                          >
+                            {msg.replyToMessageId && !msg.recalled ? (
+                              <div
+                                className={cn(
+                                  "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground dark:bg-white/5",
+                                  isMe ? "mr-0" : "ml-0",
+                                )}
+                              >
+                                <span className="line-clamp-2">
+                                  {replyParent
+                                    ? messagePlainTextForCopy(replyParent)
+                                    : "Tin nhắn"}
+                                </span>
+                              </div>
+                            ) : null}
+                            {msg.recalled ? (
+                              <div
+                                className={cn(
+                                  "rounded-2xl px-4 py-2 text-sm italic text-muted-foreground",
+                                  isMe ? "rounded-br-sm bg-primary/5" : "rounded-bl-sm border bg-muted/40",
+                                )}
+                              >
+                                {msg.content}
+                              </div>
+                            ) : msg.type === "TEXT" ? (
+                              <div
+                                className={cn(
+                                  "rounded-2xl px-4 py-2 text-sm",
+                                  isMe
+                                    ? "rounded-br-sm bg-primary/10 text-foreground"
+                                    : "rounded-bl-sm border bg-background text-foreground shadow-xs",
+                                )}
+                              >
+                                {msg.content}
+                              </div>
+                            ) : firstAttachment?.type === "STICKER" ? (
+                              <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
+                                <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
+                              </div>
+                            ) : firstAttachment?.type === "GIF" ? (
+                              <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
+                                <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
+                              </div>
+                            ) : (
+                              <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
+                                {msg.content}
+                              </div>
+                            )}
+                            <span className="mt-1 text-[11px] text-muted-foreground">
+                              {formatChatMessageTime(msg.timeSent)}
+                            </span>
+                          </div>
+
+                          {!msg.recalled && !multiSelectActive ? (
+                            <div
+                              className={cn(
+                                "mb-5 flex shrink-0 gap-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100",
+                                "pointer-events-none group-hover/msg:pointer-events-auto",
+                              )}
+                            >
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                                title="Trả lời (Rep)"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setReplyingTo(msg)
+                                  setTimeout(() => textareaRef.current?.focus(), 0)
+                                }}
+                              >
+                                <Quote className="size-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                                title="Chuyển tiếp"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setForwardTarget(msg)
+                                }}
+                              >
+                                <Forward className="size-3.5" />
+                              </Button>
+                              <DropdownMenu modal={false}>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    className="h-7 w-7 rounded-full border-0 bg-muted/90 shadow-sm hover:bg-muted"
+                                    title="Thêm"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreHorizontal className="size-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align={isMe ? "end" : "start"} className="w-56">
+                                  <DropdownMenuItem
+                                    className="gap-2"
+                                    onSelect={() => void copyMessageText(msg)}
+                                  >
+                                    <Copy className="size-4" />
+                                    Copy tin nhắn
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="gap-2"
+                                    onSelect={() => toast.info("Tính năng ghim tin đang được phát triển")}
+                                  >
+                                    <Pin className="size-4" />
+                                    Ghim tin nhắn
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="gap-2"
+                                    onSelect={() => {
+                                      setMultiSelectActive(true)
+                                      setSelectedMessageIds(new Set([msg.idMessage]))
+                                    }}
+                                  >
+                                    <ListChecks className="size-4" />
+                                    Chọn nhiều tin nhắn
+                                  </DropdownMenuItem>
+                                  {isMe && !msg.recalled ? (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        variant="destructive"
+                                        className="gap-2"
+                                        onSelect={() => void handleRecallMessage(msg)}
+                                      >
+                                        <Undo2 className="size-4" />
+                                        Thu hồi
+                                      </DropdownMenuItem>
+                                    </>
+                                  ) : null}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    className="gap-2"
+                                    onSelect={() => void handleHideMessageForMe(msg)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    Xóa chỉ ở phía tôi
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </>
-          )}
+                  )
+                })}
+              </>
+            )}
             <div ref={bottomRef} />
           </div>
         </ScrollArea>

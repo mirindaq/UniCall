@@ -8,6 +8,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
+
 @Controller
 @RequiredArgsConstructor
 public class ChatStompController {
@@ -16,6 +18,12 @@ public class ChatStompController {
 
     @MessageMapping("/chat.send")
     public void sendMessage(ChatSendStompPayload payload, StompHeaderAccessor accessor) {
+        Principal principal = accessor.getUser();
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            chatMessageService.sendFromStomp(principal.getName(), payload);
+            return;
+        }
+
         if (accessor.getSessionAttributes() == null) {
             return;
         }

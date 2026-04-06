@@ -5,16 +5,34 @@ import { TextInput, View } from 'react-native';
 interface ChatInputBarProps {
   placeholder?: string;
   onHeightChange?: (height: number) => void;
+  isSending?: boolean;
+  onSend?: (content: string) => Promise<void> | void;
 }
 
 const MIN_INPUT_HEIGHT = 24;
 const MAX_INPUT_HEIGHT = 112;
+const INPUT_VERTICAL_PADDING = 6;
 
-export function ChatInputBar({ placeholder = 'Tin nhắn', onHeightChange }: ChatInputBarProps) {
+export function ChatInputBar({
+  placeholder = 'Tin nhắn',
+  onHeightChange,
+  isSending = false,
+  onSend,
+}: ChatInputBarProps) {
   const [message, setMessage] = useState('');
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
 
   const hasContent = message.trim().length > 0;
+
+  const handleSend = async () => {
+    const content = message.trim();
+    if (!content || isSending) {
+      return;
+    }
+    await onSend?.(content);
+    setMessage('');
+    setInputHeight(MIN_INPUT_HEIGHT);
+  };
 
   return (
     <View
@@ -22,7 +40,7 @@ export function ChatInputBar({ placeholder = 'Tin nhắn', onHeightChange }: Cha
       onLayout={(event) => {
         onHeightChange?.(event.nativeEvent.layout.height);
       }}>
-      <View className="flex-row items-end">
+      <View className="flex-row items-center">
         <View className="h-9 w-9 items-center justify-center rounded-full">
           <Ionicons name="happy-outline" size={25} color="#6b7280" />
         </View>
@@ -48,12 +66,17 @@ export function ChatInputBar({ placeholder = 'Tin nhắn', onHeightChange }: Cha
           selectionColor="#1e98f3"
           disableFullscreenUI
           scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
-          style={{ minHeight: MIN_INPUT_HEIGHT, height: inputHeight, paddingTop: 2, paddingBottom: 2 }}
+          style={{
+            minHeight: MIN_INPUT_HEIGHT + INPUT_VERTICAL_PADDING * 2,
+            height: inputHeight + INPUT_VERTICAL_PADDING * 2,
+            paddingTop: INPUT_VERTICAL_PADDING,
+            paddingBottom: INPUT_VERTICAL_PADDING,
+          }}
         />
 
         {hasContent ? (
           <View className="ml-1 h-9 w-9 items-center justify-center rounded-full">
-            <Ionicons name="send" size={24} color="#1e98f3" />
+            <Ionicons name="send" size={24} color={isSending ? '#94a3b8' : '#1e98f3'} onPress={() => void handleSend()} />
           </View>
         ) : (
           <>

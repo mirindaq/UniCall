@@ -2,27 +2,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
 import { Text, View } from 'react-native';
 
+import { ConversationAvatar } from '@/components/messages/conversation-avatar';
 import type { MockAvatar } from '@/mock/chat-conversations';
 import type { MockChatMessage } from '@/mock/chat-thread-messages';
 
 interface ChatMessageRowProps {
   message: MockChatMessage;
   otherAvatar: MockAvatar;
-}
-
-function MiniAvatar({ avatar }: { avatar: MockAvatar }) {
-  const textColor = avatar.textColor ?? '#ffffff';
-
-  return (
-    <View className="h-[30px] w-[30px] items-center justify-center rounded-full" style={{ backgroundColor: avatar.backgroundColor }}>
-      <Text
-        allowFontScaling={false}
-        className={avatar.type === 'emoji' ? 'text-[14px]' : 'text-[13px] font-semibold'}
-        style={{ color: textColor }}>
-        {avatar.value}
-      </Text>
-    </View>
-  );
+  otherAvatarUrl?: string | null;
 }
 
 function StickerBlock() {
@@ -38,7 +25,7 @@ function StickerBlock() {
   );
 }
 
-export function ChatMessageRow({ message, otherAvatar }: ChatMessageRowProps) {
+export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl }: ChatMessageRowProps) {
   const isMine = message.sender === 'me';
 
   return (
@@ -46,11 +33,17 @@ export function ChatMessageRow({ message, otherAvatar }: ChatMessageRowProps) {
       <View className={`flex-row items-end ${isMine ? 'justify-end' : 'justify-start'}`}>
         {!isMine ? (
           <View className="mr-2 w-[30px] items-center">
-            {message.showAvatar ? <MiniAvatar avatar={otherAvatar} /> : null}
+            {message.showAvatar ? <ConversationAvatar avatar={otherAvatar} avatarUrl={otherAvatarUrl} size={30} /> : null}
           </View>
         ) : null}
 
         <View className={`max-w-[80%] ${isMine ? 'items-end' : 'items-start'}`}>
+          {!isMine && message.senderName ? (
+            <Text allowFontScaling={false} className="mb-1 ml-1 text-[11px] font-medium text-slate-500">
+              {message.senderName}
+            </Text>
+          ) : null}
+
           {message.kind === 'text' ? (
             <View
               className={`rounded-[16px] px-3.5 py-2.5 ${
@@ -80,6 +73,14 @@ export function ChatMessageRow({ message, otherAvatar }: ChatMessageRowProps) {
             <View className="-mt-2 ml-2 h-8 w-8 items-center justify-center rounded-full bg-white">
               <Text allowFontScaling={false} className="text-[20px] text-slate-700">
                 {message.reaction}
+              </Text>
+            </View>
+          ) : null}
+
+          {message.kind === 'text' && isMine && message.statusText ? (
+            <View className="mt-1 items-end">
+              <Text allowFontScaling={false} className="text-[11px] text-slate-500">
+                {message.statusText}
               </Text>
             </View>
           ) : null}

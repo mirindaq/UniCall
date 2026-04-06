@@ -17,3 +17,20 @@ export type UpdateMyProfileRequest = {
   gender: string;
   dateOfBirth: string;
 };
+
+export type UserSearchItem = {
+  identityUserId: string;
+  phoneNumber: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  avatar?: string | null;
+};
+
+export type UserSearchQuery = {
+  keyword: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  search?: string;
+};
