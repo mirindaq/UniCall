@@ -15,8 +15,10 @@ public class FriendRequestResponse {
     private String idFriendRequest;
     private String idAccountSent;
     private String pathAvartar;
-    private String firstName;
-    private String lastName;
+    private String firstNameSender;
+    private String lastNameSender;
+    private String firstNameReceiver;
+    private String lastNameReceiver;
     private String content;
     private LocalDateTime timeRequest;
     private FriendRequestEnum status;

@@ -29,7 +29,11 @@ public class GlobalExceptionHandler {
         public ResponseEntity<ResponseError> handleGeneralException(
                         Exception e,
                         HttpServletRequest request) {
-                System.out.println("Exception: " + e.getClass().getName() + " - " + e.getMessage());
+                Throwable cause = e;
+                while (cause.getCause() != null) {
+                        cause = cause.getCause();
+                }
+                System.out.println("Root cause: " + cause.getClass().getName() + " - " + cause.getMessage());
                 return buildErrorResponse(
                                 INTERNAL_SERVER_ERROR,
                                 "Đã xảy ra lỗi nội bộ, vui lòng thử lại sau",
