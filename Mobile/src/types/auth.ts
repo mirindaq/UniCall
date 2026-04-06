@@ -7,6 +7,7 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   phoneNumber: string;
+  email: string;
   firstName: string;
   lastName: string;
   gender: Gender;
@@ -26,7 +27,25 @@ export interface RegisterResponse {
 
 export interface AccessTokenResponse {
   accessToken: string;
+  refreshToken: string;
   tokenType: string;
   expiresIn: number;
+  refreshExpiresIn: number;
   scope: string;
+}
+
+export interface ResendVerificationEmailRequest {
+  phoneNumber: string;
+  email: string;
+}
+
+export interface ForgotPasswordRequest {
+  phoneNumber: string;
+  email: string;
+}
+
+export interface ChangePasswordRequest {
+  phoneNumber: string;
+  currentPassword: string;
+  newPassword: string;
 }

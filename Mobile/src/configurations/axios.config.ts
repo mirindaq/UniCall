@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 
@@ -7,6 +8,7 @@ const DEFAULT_GATEWAY_PORT = process.env.EXPO_PUBLIC_API_PORT ?? '8088';
 const DEFAULT_GATEWAY_PATH = process.env.EXPO_PUBLIC_API_GATEWAY_PATH ?? '/api-gateway';
 const LOGIN_PATH = process.env.EXPO_PUBLIC_LOGIN_PATH ?? '/login';
 const AUTH_API_PREFIX = '/identity-service/api/v1/auth';
+const MOBILE_CLIENT_TYPE = 'mobile';
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 const ensureLeadingSlash = (value: string) => (value.startsWith('/') ? value : `/${value}`);
@@ -64,46 +66,84 @@ const REFRESH_TOKEN_KEY = 'refreshToken';
 
 let memoryAccessToken: string | null = null;
 let memoryRefreshToken: string | null = null;
+let hydrated = Platform.OS === 'web';
+let hydratePromise: Promise<void> | null = null;
 
-const readStorage = (key: string): string | null => {
+const readStorage = async (key: string): Promise<string | null> => {
   if (Platform.OS === 'web') {
     return localStorage.getItem(key);
   }
+  await ensureHydrated();
   if (key === ACCESS_TOKEN_KEY) return memoryAccessToken;
   if (key === REFRESH_TOKEN_KEY) return memoryRefreshToken;
   return null;
 };
 
-const writeStorage = (key: string, value: string) => {
+const writeStorage = async (key: string, value: string) => {
   if (Platform.OS === 'web') {
     localStorage.setItem(key, value);
     return;
   }
-  if (key === ACCESS_TOKEN_KEY) memoryAccessToken = value;
-  if (key === REFRESH_TOKEN_KEY) memoryRefreshToken = value;
+  await SecureStore.setItemAsync(key, value);
+  if (key === ACCESS_TOKEN_KEY) {
+    memoryAccessToken = value;
+  }
+  if (key === REFRESH_TOKEN_KEY) {
+    memoryRefreshToken = value;
+  }
 };
 
-const removeStorage = (key: string) => {
+const removeStorage = async (key: string) => {
   if (Platform.OS === 'web') {
     localStorage.removeItem(key);
     return;
   }
-  if (key === ACCESS_TOKEN_KEY) memoryAccessToken = null;
-  if (key === REFRESH_TOKEN_KEY) memoryRefreshToken = null;
+  await SecureStore.deleteItemAsync(key);
+  if (key === ACCESS_TOKEN_KEY) {
+    memoryAccessToken = null;
+  }
+  if (key === REFRESH_TOKEN_KEY) {
+    memoryRefreshToken = null;
+  }
 };
 
-const clearAuthData = () => {
-  removeStorage(ACCESS_TOKEN_KEY);
-  removeStorage(REFRESH_TOKEN_KEY);
+const ensureHydrated = async () => {
+  if (Platform.OS === 'web' || hydrated) {
+    return;
+  }
+
+  if (!hydratePromise) {
+    hydratePromise = (async () => {
+      const [storedAccessToken, storedRefreshToken] = await Promise.all([
+        SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+        SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+      ]);
+      memoryAccessToken = storedAccessToken;
+      memoryRefreshToken = storedRefreshToken;
+      hydrated = true;
+    })().finally(() => {
+      hydratePromise = null;
+    });
+  }
+
+  await hydratePromise;
+};
+
+const clearAuthData = async () => {
+  await Promise.all([removeStorage(ACCESS_TOKEN_KEY), removeStorage(REFRESH_TOKEN_KEY)]);
 };
 
 export const authTokenStore = {
   get: () => readStorage(ACCESS_TOKEN_KEY),
-  set: (accessToken: string) => {
-    writeStorage(ACCESS_TOKEN_KEY, accessToken);
+  getRefresh: () => readStorage(REFRESH_TOKEN_KEY),
+  set: async (accessToken: string, refreshToken?: string | null) => {
+    await writeStorage(ACCESS_TOKEN_KEY, accessToken);
+    if (refreshToken) {
+      await writeStorage(REFRESH_TOKEN_KEY, refreshToken);
+    }
   },
-  clear: () => {
-    clearAuthData();
+  clear: async () => {
+    await clearAuthData();
   },
 };
 
@@ -122,15 +162,17 @@ const axiosClient = axios.create({
 });
 
 let isRefreshing = false;
-let failedQueue: Array<{
+let failedQueue: {
   resolve: (token: string) => void;
   reject: (error: unknown) => void;
-}> = [];
+}[] = [];
 
 const isAuthRequest = (url?: string) =>
   Boolean(
     url?.includes(`${AUTH_API_PREFIX}/login`) ||
       url?.includes(`${AUTH_API_PREFIX}/register`) ||
+      url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
+      url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
       url?.includes(`${AUTH_API_PREFIX}/logout`)
   );
@@ -147,8 +189,9 @@ const processQueue = (error: unknown, token: string | null = null) => {
 };
 
 axiosClient.interceptors.request.use(
-  (config) => {
-    const accessToken = readStorage(ACCESS_TOKEN_KEY);
+  async (config) => {
+    config.headers['X-Client-Type'] = MOBILE_CLIENT_TYPE;
+    const accessToken = await readStorage(ACCESS_TOKEN_KEY);
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -174,7 +217,7 @@ axiosClient.interceptors.response.use(
 
     if (status === 401) {
       if (isAuthRequest(originalRequest.url) || originalRequest._retry) {
-        clearAuthData();
+        await clearAuthData();
         navigateToLogin();
         return Promise.reject(error);
       }
@@ -196,21 +239,29 @@ axiosClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
+        const currentRefreshToken = await readStorage(REFRESH_TOKEN_KEY);
+        if (!currentRefreshToken) {
+          throw new Error('No refresh token available');
+        }
+
         const { data } = await axios.post(
           `${API_BASE_URL}${AUTH_API_PREFIX}/refresh`,
-          {},
+          { refreshToken: currentRefreshToken },
           {
-            withCredentials: true,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Client-Type': MOBILE_CLIENT_TYPE,
+            },
           }
         );
 
         const newAccessToken = data?.data?.accessToken;
+        const rotatedRefreshToken = data?.data?.refreshToken;
         if (!newAccessToken) {
           throw new Error('No access token in refresh response');
         }
 
-        authTokenStore.set(newAccessToken);
+        await authTokenStore.set(newAccessToken, rotatedRefreshToken);
 
         axiosClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
         processQueue(null, newAccessToken);
@@ -219,7 +270,7 @@ axiosClient.interceptors.response.use(
         return axiosClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        clearAuthData();
+        await clearAuthData();
         navigateToLogin();
         return Promise.reject(refreshError);
       } finally {

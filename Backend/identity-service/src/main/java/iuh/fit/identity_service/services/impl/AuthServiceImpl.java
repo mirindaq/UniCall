@@ -70,7 +70,8 @@ public class AuthServiceImpl implements AuthService {
                 List.of(
                         createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
                         createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
-                )
+                ),
+                tokens
         );
     }
 
@@ -92,7 +93,15 @@ public class AuthServiceImpl implements AuthService {
                 List.of(
                         createAccessCookie(tokenResponse.getAccessToken(), tokenResponse.getExpiresIn()),
                         createRefreshCookie(rotatedRefreshToken, tokenResponse.getRefreshExpiresIn())
-                )
+                ),
+                AuthTokenResponse.builder()
+                        .accessToken(tokenResponse.getAccessToken())
+                        .refreshToken(rotatedRefreshToken)
+                        .tokenType(tokenResponse.getTokenType())
+                        .expiresIn(tokenResponse.getExpiresIn())
+                        .refreshExpiresIn(tokenResponse.getRefreshExpiresIn())
+                        .scope(tokenResponse.getScope())
+                        .build()
         );
     }
 

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
@@ -6,11 +6,6 @@ import { chatService } from "@/services/chat/chat.service"
 import { userService } from "@/services/user/user.service"
 import type { ConversationResponse } from "@/types/chat"
 import type { UserProfile, UserSearchItem } from "@/types/user.type"
-import {
-  displayNameFromProfile,
-  getPeerAccountId,
-  searchItemToProfile,
-} from "@/utils/chat-display.util"
 
 type ChatPageContextValue = {
   currentUserId: string | null
@@ -35,9 +30,7 @@ const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
-  const [peerById, setPeerById] = useState<Record<string, UserProfile>>({})
   const [isStartingChat, setIsStartingChat] = useState(false)
-  const fetchedPeersRef = useRef(new Set<string>())
 
   const { data: profileResponse } = useQuery(() => userService.getMyProfile(), {
     onError: () => undefined,
@@ -62,57 +55,16 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     [conversationsResponse?.data],
   )
 
-  useEffect(() => {
-    if (!currentUserId || conversations.length === 0) {
-      return
-    }
-
-    for (const c of conversations) {
-      const peerId = getPeerAccountId(c, currentUserId)
-      if (!peerId || fetchedPeersRef.current.has(peerId)) {
-        continue
-      }
-      fetchedPeersRef.current.add(peerId)
-      void userService
-        .getProfileByIdentityUserId(peerId)
-        .then((res) => {
-          setPeerById((prev) => ({ ...prev, [peerId]: res.data }))
-        })
-        .catch(() => {
-          fetchedPeersRef.current.delete(peerId)
-        })
-    }
-  }, [conversations, currentUserId])
-
   const conversationTitle = useCallback(
     (c: ConversationResponse) => {
-      if (c.type === "GROUP") {
-        return c.name?.trim() || "Nhóm"
-      }
-      if (!currentUserId) {
-        return "Cuộc trò chuyện"
-      }
-      const peerId = getPeerAccountId(c, currentUserId)
-      if (!peerId) {
-        return "Cuộc trò chuyện"
-      }
-      const name = displayNameFromProfile(peerById[peerId])
-      return name || `Người dùng ${peerId.slice(0, 8)}…`
+      return c.name?.trim() || (c.type === "GROUP" ? "Nhóm" : "Cuộc trò chuyện")
     },
-    [currentUserId, peerById],
+    [],
   )
 
   const conversationAvatar = useCallback(
-    (c: ConversationResponse) => {
-      if (c.type === "GROUP") {
-        return c.avatar ?? undefined
-      }
-      if (!currentUserId) return undefined
-      const peerId = getPeerAccountId(c, currentUserId)
-      if (!peerId) return undefined
-      return peerById[peerId]?.avatar ?? undefined
-    },
-    [currentUserId, peerById],
+    (c: ConversationResponse) => c.avatar ?? undefined,
+    [],
   )
 
   const selectedConversation = useMemo(
@@ -120,14 +72,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     [conversations, selectedConversationId],
   )
 
-  const selectedPeerProfile = useMemo(() => {
-    if (!selectedConversation || !currentUserId || selectedConversation.type !== "DOUBLE") {
-      return null
-    }
-    const peerId = getPeerAccountId(selectedConversation, currentUserId)
-    if (!peerId) return null
-    return peerById[peerId] ?? null
-  }, [selectedConversation, currentUserId, peerById])
+  const selectedPeerProfile = useMemo(() => null, [])
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
@@ -140,11 +85,6 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       try {
         const res = await chatService.getOrCreateDirect(user.identityUserId)
         const conv = res.data
-
-        setPeerById((prev) => ({
-          ...prev,
-          [user.identityUserId]: prev[user.identityUserId] ?? searchItemToProfile(user),
-        }))
 
         setSelectedConversationId(conv.idConversation)
         void refetchConversations()

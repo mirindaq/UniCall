@@ -1,5 +1,6 @@
 package iuh.fit.chat_service.services.impl;
 
+import iuh.fit.chat_service.clients.GrpcUserServiceClient;
 import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.entities.Conversation;
@@ -16,7 +17,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -25,14 +28,16 @@ import java.util.stream.Stream;
 public class ChatConversationServiceImpl implements ChatConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Override
     public List<ConversationResponse> listMyConversations(String identityUserId) {
         if (identityUserId == null || identityUserId.isBlank()) {
             throw new InvalidParamException("Thiếu người dùng đã xác thực");
         }
+        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
         return conversationRepository.findByParticipantAccount(identityUserId).stream()
-                .map(ConversationResponse::from)
+                .map(conversation -> toConversationResponse(conversation, identityUserId, userDisplayCache))
                 .toList();
     }
 
@@ -51,9 +56,14 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         List<String> pair = Stream.of(identityUserId, other)
                 .sorted(Comparator.naturalOrder())
                 .toList();
+        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
         return conversationRepository.findDirectConversationBetweenPair(pair)
-                .map(ConversationResponse::from)
-                .orElseGet(() -> ConversationResponse.from(conversationRepository.save(newDirectConversation(identityUserId, other))));
+                .map(conversation -> toConversationResponse(conversation, identityUserId, userDisplayCache))
+                .orElseGet(() -> toConversationResponse(
+                        conversationRepository.save(newDirectConversation(identityUserId, other)),
+                        identityUserId,
+                        userDisplayCache
+                ));
     }
 
     @Override
@@ -90,5 +100,45 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         conversation.setNumberMember(2);
         conversation.setParticipantInfos(participantInfos);
         return conversation;
+    }
+
+    private ConversationResponse toConversationResponse(
+            Conversation conversation,
+            String currentIdentityUserId,
+            Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache
+    ) {
+        ConversationResponse response = ConversationResponse.from(conversation);
+        if (response == null) {
+            return null;
+        }
+        if (conversation.getType() != ConversationType.DOUBLE) {
+            return response;
+        }
+        if (response.getName() != null && !response.getName().isBlank()) {
+            return response;
+        }
+
+        String peerIdentityUserId = conversation.getParticipantInfos() == null
+                ? null
+                : conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(id -> id != null && !id.isBlank() && !id.equals(currentIdentityUserId))
+                .findFirst()
+                .orElse(null);
+        if (peerIdentityUserId == null || peerIdentityUserId.isBlank()) {
+            return response;
+        }
+
+        GrpcUserServiceClient.UserDisplayInfo displayInfo = userDisplayCache.computeIfAbsent(
+                peerIdentityUserId,
+                key -> grpcUserServiceClient.getUserDisplayInfo(key)
+                        .orElse(new GrpcUserServiceClient.UserDisplayInfo(key, null))
+        );
+
+        response.setName(displayInfo.displayName());
+        if (response.getAvatar() == null || response.getAvatar().isBlank()) {
+            response.setAvatar(displayInfo.avatar());
+        }
+        return response;
     }
 }

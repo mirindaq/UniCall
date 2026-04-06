@@ -8,6 +8,7 @@ export interface MockChatMessage {
   sender: MockMessageSender;
   kind: MockMessageKind;
   content: string;
+  senderName?: string;
   timeLabel?: string;
   showAvatar?: boolean;
   reaction?: string;
