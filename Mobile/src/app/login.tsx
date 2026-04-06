@@ -59,6 +59,7 @@ export default function LoginScreen() {
   const [resendEmail, setResendEmail] = useState('');
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [forgotPasswordPhone, setForgotPasswordPhone] = useState('');
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [isSubmittingForgotPassword, setIsSubmittingForgotPassword] = useState(false);
 
@@ -70,6 +71,13 @@ export default function LoginScreen() {
       }
     })();
   }, [router]);
+
+  useEffect(() => {
+    if (!showForgotPasswordModal) {
+      return;
+    }
+    setForgotPasswordPhone(phoneNumber.trim());
+  }, [showForgotPasswordModal, phoneNumber]);
 
   const canSubmit = useMemo(() => {
     return phoneNumber.trim().length > 0 && password.trim().length > 0 && !isSubmitting;
@@ -168,7 +176,7 @@ export default function LoginScreen() {
   };
 
   const handleForgotPassword = async () => {
-    const normalizedPhoneNumber = normalizePhone(phoneNumber);
+    const normalizedPhoneNumber = normalizePhone(forgotPasswordPhone);
     if (!isValidPhoneNumber(normalizedPhoneNumber)) {
       Toast.show({
         type: 'error',
@@ -313,8 +321,16 @@ export default function LoginScreen() {
           <View className="w-full max-w-md rounded-2xl bg-white p-5">
             <Text className="text-lg font-bold text-slate-900">Quên mật khẩu</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Nhập email đã đăng ký để nhận link đặt lại mật khẩu qua email.
+              Nhập số điện thoại và email đã đăng ký để nhận link đặt lại mật khẩu qua email.
             </Text>
+            <TextInput
+              value={forgotPasswordPhone}
+              onChangeText={setForgotPasswordPhone}
+              placeholder="Nhập số điện thoại tài khoản"
+              placeholderTextColor="#9ca3af"
+              keyboardType="phone-pad"
+              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+            />
             <TextInput
               value={forgotPasswordEmail}
               onChangeText={setForgotPasswordEmail}
@@ -322,7 +338,7 @@ export default function LoginScreen() {
               placeholderTextColor="#9ca3af"
               keyboardType="email-address"
               autoCapitalize="none"
-              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+              className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
             />
             <View className="mt-4 flex-row justify-end gap-2">
               <Pressable
