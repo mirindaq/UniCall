@@ -68,6 +68,7 @@ const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
 export default function RegisterScreen() {
   const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [gender, setGender] = useState<Gender>('MALE');
@@ -81,6 +82,7 @@ export default function RegisterScreen() {
   const canSubmit = useMemo(() => {
     return (
       phoneNumber.trim().length > 0 &&
+      email.trim().length > 0 &&
       lastName.trim().length > 0 &&
       firstName.trim().length > 0 &&
       dateOfBirth !== null &&
@@ -89,7 +91,7 @@ export default function RegisterScreen() {
       acceptedTerm2 &&
       !isSubmitting
     );
-  }, [acceptedTerm1, acceptedTerm2, dateOfBirth, firstName, isSubmitting, lastName, password, phoneNumber]);
+  }, [acceptedTerm1, acceptedTerm2, dateOfBirth, email, firstName, isSubmitting, lastName, password, phoneNumber]);
 
   const handleRegister = async () => {
     const normalizedPhoneNumber = normalizePhone(phoneNumber);
@@ -108,6 +110,17 @@ export default function RegisterScreen() {
         type: 'error',
         text1: 'Mật khẩu chưa hợp lệ',
         text2: 'Mật khẩu cần tối thiểu 6 ký tự.',
+      });
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Email chưa hợp lệ',
+        text2: 'Vui lòng nhập đúng định dạng email.',
       });
       return;
     }
@@ -152,8 +165,9 @@ export default function RegisterScreen() {
 
     setIsSubmitting(true);
     try {
-      const response = await authService.register({
+      await authService.register({
         phoneNumber: normalizedPhoneNumber,
+        email: normalizedEmail,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         gender,
@@ -164,7 +178,7 @@ export default function RegisterScreen() {
       Toast.show({
         type: 'success',
         text1: 'Đăng ký thành công',
-        text2: response.message || 'Bạn có thể đăng nhập ngay bây giờ.',
+        text2: 'Vui lòng kiểm tra email để kích hoạt tài khoản trước khi đăng nhập.',
       });
       router.replace('/login');
     } catch (error) {
@@ -225,6 +239,16 @@ export default function RegisterScreen() {
                 className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
               />
             </View>
+
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email (ví dụ: abc@gmail.com)"
+              placeholderTextColor="#9ca3af"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
+            />
 
             <View className="flex-row gap-2.5">
               <GenderOption label="Nam" selected={gender === 'MALE'} onPress={() => setGender('MALE')} />

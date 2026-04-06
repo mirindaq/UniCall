@@ -16,7 +16,7 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
-    @Value("${app.security.cors.allowed-origins:http://localhost:5173}")
+    @Value("${app.security.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,http://localhost:5273,http://127.0.0.1:5273}")
     private String allowedOrigins;
 
     @Bean
@@ -34,7 +34,7 @@ public class SecurityConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();  
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
