@@ -42,6 +42,8 @@ export function FriendsListTab() {
   )
 
   const currentUserId = (myProfileResponse as any)?.data?.identityUserId
+  const myFirstName = (myProfileResponse as any)?.data?.firstName
+  const myLastName = (myProfileResponse as any)?.data?.lastName
 
   const [friendsData, setFriendsData] = useState<any[]>([])
 
@@ -58,19 +60,29 @@ export function FriendsListTab() {
         })
     }
   }, [currentUserId])
+  console.log('response friends: ', friendsData);
+  console.log('my profile: ', myProfileResponse);
 
-  const friends = friendsData.map((friend: any) => ({
-    id: friend.idFriend,
-    name: `${friend.firstName} ${friend.lastName}`.trim(),
-    firstName: friend.firstName,
-    lastName: friend.lastName,
-    fallback: `${friend.firstName?.[0] ?? ""}${friend.lastName?.[0] ?? ""}`.toUpperCase(),
-    tone: "base",
-    avatar: friend.pathAvartar,
-    label: null,
-    friendType: "NORMAL_FRIEND",
-    recentOrder: 0,
-  }))
+
+  const friends = friendsData.map((friend: any) => {
+    // Determine if current user is the sender or receiver
+    const isMeSender = friend.idAccountSent === currentUserId
+    const friendFirstName = isMeSender ? friend.firstNameReceiver : friend.firstNameSender
+    const friendLastName = isMeSender ? friend.lastNameReceiver : friend.lastNameSender
+
+    return {
+      id: friend.idFriend,
+      name: `${friendFirstName} ${friendLastName}`.trim(),
+      firstName: friendFirstName,
+      lastName: friendLastName,
+      fallback: `${friendFirstName?.[0] ?? ""}${friendLastName?.[0] ?? ""}`.toUpperCase(),
+      tone: "base",
+      avatar: friend.pathAvartar,
+      label: null,
+      friendType: friend.friendType || "NORMAL_FRIEND",
+      recentOrder: 0,
+    }
+  })
 
   const filteredFriends = useMemo(() => {
     let result: any[] = friends

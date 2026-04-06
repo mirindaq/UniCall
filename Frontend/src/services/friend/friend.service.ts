@@ -2,6 +2,7 @@ import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
 import type { ResponseSuccess } from "@/types/api-response"
 import type { FriendItem } from "@/types/friendship"
+import type { FriendRequestStatus } from "@/constants/friend"
 
 const FRIEND_API_PREFIX = "/friend-service/api/v1"
 const friendApiUrl = (path: string) => buildApiUrl(`${FRIEND_API_PREFIX}${path}`)
@@ -39,13 +40,13 @@ export const friendService = {
 
 // friend request
 
-export type FriendRequestStatus = "SENT" | "ACCEPTED" | "REJECTED" | "CANCELLED"
-
 export type FriendRequestPayload = {
     idAccountSent: string
     idAccountReceive: string
-    firstName: string
-    lastName: string
+    firstNameSender: string
+    lastNameSender: string
+    firstNameReceiver: string
+    lastNameReceiver: string
     content: string
 }
 
