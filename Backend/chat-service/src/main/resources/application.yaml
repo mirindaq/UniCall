@@ -12,8 +12,6 @@ spring:
 
 server:
   port: 8083
-  servlet:
-    context-path: /chat-service
 
 api:
   prefix: /api/v1

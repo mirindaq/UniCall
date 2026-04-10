@@ -48,6 +48,7 @@ import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
+import { userService } from "@/services/user/user.service"
 import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
 
@@ -120,6 +121,7 @@ export default function ChatWindow() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const [socketExtras, setSocketExtras] = useState<ChatMessageResponse[]>([])
+  const [senderProfiles, setSenderProfiles] = useState<Record<string, { displayName: string; avatar?: string }>>({})
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
@@ -279,6 +281,50 @@ export default function ChatWindow() {
     setSelectedMessageIds(new Set())
     setReplyingTo(null)
   }, [selectedConversationId])
+
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      setSenderProfiles((prev) => (Object.keys(prev).length > 0 ? {} : prev))
+      return
+    }
+    const senderIds = Array.from(
+      new Set(
+        displayMessages
+          .map((message) => message.idAccountSent)
+          .filter((id) => id && id !== currentUserId),
+      ),
+    )
+    const missingIds = senderIds.filter((id) => !senderProfiles[id])
+    if (missingIds.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      missingIds.map(async (identityUserId) => {
+        try {
+          const response = await userService.getProfileByIdentityUserId(identityUserId)
+          const profile = response.data
+          const displayName = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || identityUserId
+          return [identityUserId, { displayName, avatar: profile.avatar ?? undefined }] as const
+        } catch {
+          return [identityUserId, { displayName: identityUserId }] as const
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) {
+        return
+      }
+      if (entries.length === 0) {
+        return
+      }
+      setSenderProfiles((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, displayMessages, selectedConversation, senderProfiles])
 
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds((prev) => {
@@ -585,7 +631,17 @@ export default function ChatWindow() {
                 )}
                 {displayMessages.map((msg) => {
                   const isMe = msg.idAccountSent === currentUserId
-                  const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
+                  const showAvatar = !isMe
+                  const showSenderName = !isMe && selectedConversation.type === "GROUP"
+                  const senderInfo = senderProfiles[msg.idAccountSent]
+                  const senderName =
+                    selectedConversation.type === "GROUP"
+                      ? senderInfo?.displayName ?? msg.idAccountSent
+                      : headerTitle
+                  const senderAvatar =
+                    selectedConversation.type === "GROUP"
+                      ? senderInfo?.avatar
+                      : headerAvatar
                   const firstAttachment = msg.attachments?.[0]
 
                   const replyParent = msg.replyToMessageId
@@ -598,9 +654,9 @@ export default function ChatWindow() {
                       className={cn("flex gap-2", isMe ? "justify-end" : "justify-start")}
                     >
                       {showAvatar && (
-                        <Avatar size="sm" className="mb-1 self-end">
-                          <AvatarImage src={headerAvatar} alt={headerTitle} />
-                          <AvatarFallback>{headerTitle.slice(0, 2)}</AvatarFallback>
+                        <Avatar size="sm" className={cn("shrink-0", showSenderName ? "mt-5 self-start" : "mb-1 self-end")}>
+                          <AvatarImage src={senderAvatar} alt={senderName} />
+                          <AvatarFallback>{senderName.slice(0, 2)}</AvatarFallback>
                         </Avatar>
                       )}
                       <div
@@ -636,6 +692,9 @@ export default function ChatWindow() {
                               isMe ? "items-end" : "items-start",
                             )}
                           >
+                            {showSenderName ? (
+                              <p className="mb-1 px-1 text-xs font-medium text-slate-600">{senderName}</p>
+                            ) : null}
                             {msg.replyToMessageId && !msg.recalled ? (
                               <div
                                 className={cn(
