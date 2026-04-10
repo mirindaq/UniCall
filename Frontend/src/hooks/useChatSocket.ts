@@ -29,16 +29,24 @@ export function useChatSocket({ autoConnect = true, conversationId, onMessage }:
     }
 
     let subscription: ReturnType<typeof chatSocketService.subscribeConversation>
-
-    chatSocketService.connect(() => {
+    const handleConnected = () => {
       subscription = chatSocketService.subscribeConversation(conversationId, (msg) =>
         onMessageRef.current?.(msg)
       )
-    })
+    }
+    const handleDisconnected = () => {
+      subscription?.unsubscribe()
+      subscription = undefined
+    }
+
+    chatSocketService.connect(handleConnected, handleDisconnected)
 
     return () => {
       subscription?.unsubscribe()
-      chatSocketService.disconnect()
+      chatSocketService.disconnect({
+        onConnected: handleConnected,
+        onDisconnected: handleDisconnected,
+      })
     }
   }, [autoConnect, conversationId, isAuthenticated])
 }

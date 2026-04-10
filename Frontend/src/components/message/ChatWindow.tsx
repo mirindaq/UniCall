@@ -22,6 +22,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import ConversationCallBanner from "@/components/message/ConversationCallBanner"
+import IncomingCallPopup from "@/components/message/IncomingCallPopup"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,10 +46,12 @@ import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { useChatPage } from "@/contexts/ChatPageContext"
+import { useConversationCall } from "@/hooks/useConversationCall"
 import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
+import { userService } from "@/services/user/user.service"
 import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
 
@@ -73,6 +77,9 @@ function messagePlainTextForCopy(msg: ChatMessageResponse): string {
   if (msg.recalled) {
     return msg.content ?? ""
   }
+  if (msg.type === "CALL") {
+    return "Cuộc gọi thoại"
+  }
   if (msg.type === "TEXT") {
     return msg.content ?? ""
   }
@@ -84,6 +91,60 @@ function messagePlainTextForCopy(msg: ChatMessageResponse): string {
     return "[GIF]"
   }
   return msg.content ?? ""
+}
+
+const formatCallDuration = (seconds?: number) => {
+  if (!seconds || seconds <= 0) {
+    return "0 phút 0 giây"
+  }
+  const minute = Math.floor(seconds / 60)
+  const second = seconds % 60
+  return `${minute} phút ${second} giây`
+}
+
+function buildCallMessageCard(
+  msg: ChatMessageResponse,
+  currentUserId: string | null
+): {
+  title: string
+  subtitle: string
+  tone: "danger" | "neutral" | "success"
+} {
+  const info = msg.callInfo
+  if (!info || !currentUserId) {
+    return {
+      title: "Cuộc gọi thoại",
+      subtitle: "Gọi lại",
+      tone: "neutral",
+    }
+  }
+  const isCaller = info.callerUserId === currentUserId
+  if (info.outcome === "COMPLETED") {
+    return {
+      title: isCaller ? "Cuộc gọi thoại đi" : "Cuộc gọi thoại đến",
+      subtitle: formatCallDuration(info.durationSeconds),
+      tone: "success",
+    }
+  }
+  if (info.outcome === "NO_ANSWER") {
+    return {
+      title: isCaller ? "Bạn đã hủy" : "Bạn bị nhỡ",
+      subtitle: "Cuộc gọi thoại",
+      tone: "danger",
+    }
+  }
+  if (info.outcome === "REJECTED") {
+    return {
+      title: isCaller ? "Cuộc gọi bị từ chối" : "Bạn đã từ chối",
+      subtitle: "Cuộc gọi thoại",
+      tone: "danger",
+    }
+  }
+  return {
+    title: "Cuộc gọi đã kết thúc",
+    subtitle: "Cuộc gọi thoại",
+    tone: "neutral",
+  }
 }
 
 export default function ChatWindow() {
@@ -112,6 +173,23 @@ export default function ChatWindow() {
   const headerTitle = selectedConversation ? conversationTitle(selectedConversation) : ""
   const headerAvatar = selectedConversation ? conversationAvatar(selectedConversation) : undefined
   const peerFallback = displayNameFromProfile(selectedPeerProfile)
+  const peerUserId = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId)
+        ?.idAccount ?? null
+    )
+  }, [currentUserId, selectedConversation])
+
+  const conversationCall = useConversationCall({
+    conversationId: selectedConversationId ?? undefined,
+    conversationType: selectedConversation?.type,
+    currentUserId,
+    peerUserId,
+    peerDisplayName: headerTitle,
+  })
 
   const [apiMessages, setApiMessages] = useState<ChatMessageResponse[]>([])
   const [page, setPage] = useState(1)
@@ -120,6 +198,7 @@ export default function ChatWindow() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const [socketExtras, setSocketExtras] = useState<ChatMessageResponse[]>([])
+  const [senderProfiles, setSenderProfiles] = useState<Record<string, { displayName: string; avatar?: string }>>({})
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
@@ -279,6 +358,50 @@ export default function ChatWindow() {
     setSelectedMessageIds(new Set())
     setReplyingTo(null)
   }, [selectedConversationId])
+
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      setSenderProfiles((prev) => (Object.keys(prev).length > 0 ? {} : prev))
+      return
+    }
+    const senderIds = Array.from(
+      new Set(
+        displayMessages
+          .map((message) => message.idAccountSent)
+          .filter((id) => id && id !== currentUserId),
+      ),
+    )
+    const missingIds = senderIds.filter((id) => !senderProfiles[id])
+    if (missingIds.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      missingIds.map(async (identityUserId) => {
+        try {
+          const response = await userService.getProfileByIdentityUserId(identityUserId)
+          const profile = response.data
+          const displayName = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || identityUserId
+          return [identityUserId, { displayName, avatar: profile.avatar ?? undefined }] as const
+        } catch {
+          return [identityUserId, { displayName: identityUserId }] as const
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) {
+        return
+      }
+      if (entries.length === 0) {
+        return
+      }
+      setSenderProfiles((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, displayMessages, selectedConversation, senderProfiles])
 
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds((prev) => {
@@ -551,10 +674,21 @@ export default function ChatWindow() {
           <Button variant="ghost" size="icon-sm" title="Tìm kiếm">
             <Search className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Cuộc gọi thoại">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Cuộc gọi thoại"
+            disabled={!conversationCall.canStartAudioCall}
+            onClick={() => conversationCall.startAudioCall()}
+          >
             <Phone className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Cuộc gọi video">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Cuộc gọi video"
+            onClick={() => toast.info("Tạm thời chỉ hỗ trợ gọi thoại 1-1")}
+          >
             <Video className="h-5 w-5" />
           </Button>
           <Button
@@ -568,6 +702,22 @@ export default function ChatWindow() {
           </Button>
         </div>
       </div>
+      <ConversationCallBanner
+        phase={conversationCall.phase === "incoming" ? "idle" : conversationCall.phase}
+        statusText={conversationCall.statusText}
+        startedAt={conversationCall.activeCall?.startedAt}
+        onAccept={conversationCall.acceptIncomingCall}
+        onReject={conversationCall.rejectIncomingCall}
+        onEnd={conversationCall.endCurrentCall}
+      />
+      <IncomingCallPopup
+        open={conversationCall.phase === "incoming"}
+        callerName={headerTitle}
+        callerAvatar={headerAvatar}
+        onAccept={conversationCall.acceptIncomingCall}
+        onReject={conversationCall.rejectIncomingCall}
+      />
+      <audio ref={conversationCall.remoteAudioRef} autoPlay playsInline className="hidden" />
 
       <div ref={scrollAreaRef} className="min-h-0 flex-1">
         <ScrollArea className="h-full min-h-0">
@@ -585,8 +735,20 @@ export default function ChatWindow() {
                 )}
                 {displayMessages.map((msg) => {
                   const isMe = msg.idAccountSent === currentUserId
-                  const showAvatar = !isMe && selectedConversation.type === "DOUBLE"
+                  const showAvatar = !isMe
+                  const showSenderName = !isMe && selectedConversation.type === "GROUP"
+                  const senderInfo = senderProfiles[msg.idAccountSent]
+                  const senderName =
+                    selectedConversation.type === "GROUP"
+                      ? senderInfo?.displayName ?? msg.idAccountSent
+                      : headerTitle
+                  const senderAvatar =
+                    selectedConversation.type === "GROUP"
+                      ? senderInfo?.avatar
+                      : headerAvatar
                   const firstAttachment = msg.attachments?.[0]
+                  const isCallMessage = msg.type === "CALL" && msg.callInfo != null
+                  const callCard = isCallMessage ? buildCallMessageCard(msg, currentUserId) : null
 
                   const replyParent = msg.replyToMessageId
                     ? messageById.get(msg.replyToMessageId)
@@ -598,9 +760,9 @@ export default function ChatWindow() {
                       className={cn("flex gap-2", isMe ? "justify-end" : "justify-start")}
                     >
                       {showAvatar && (
-                        <Avatar size="sm" className="mb-1 self-end">
-                          <AvatarImage src={headerAvatar} alt={headerTitle} />
-                          <AvatarFallback>{headerTitle.slice(0, 2)}</AvatarFallback>
+                        <Avatar size="sm" className={cn("shrink-0", showSenderName ? "mt-5 self-start" : "mb-1 self-end")}>
+                          <AvatarImage src={senderAvatar} alt={senderName} />
+                          <AvatarFallback>{senderName.slice(0, 2)}</AvatarFallback>
                         </Avatar>
                       )}
                       <div
@@ -636,6 +798,9 @@ export default function ChatWindow() {
                               isMe ? "items-end" : "items-start",
                             )}
                           >
+                            {showSenderName ? (
+                              <p className="mb-1 px-1 text-xs font-medium text-slate-600">{senderName}</p>
+                            ) : null}
                             {msg.replyToMessageId && !msg.recalled ? (
                               <div
                                 className={cn(
@@ -670,6 +835,41 @@ export default function ChatWindow() {
                               >
                                 {msg.content}
                               </div>
+                            ) : isCallMessage ? (
+                              <div
+                                className={cn(
+                                  "w-52 rounded-xl border px-4 py-3 shadow-xs",
+                                  callCard?.tone === "danger"
+                                    ? "border-red-200 bg-red-50"
+                                    : callCard?.tone === "success"
+                                      ? "border-emerald-200 bg-emerald-50"
+                                      : "border-slate-200 bg-slate-50"
+                                )}
+                              >
+                                <p
+                                  className={cn(
+                                    "text-base font-semibold",
+                                    callCard?.tone === "danger"
+                                      ? "text-red-600"
+                                      : callCard?.tone === "success"
+                                        ? "text-emerald-700"
+                                        : "text-slate-700"
+                                  )}
+                                >
+                                  {callCard?.title}
+                                </p>
+                                <p className="mt-1 border-b pb-2 text-sm text-slate-600">{callCard?.subtitle}</p>
+                                <button
+                                  type="button"
+                                  className="mt-2 text-sm font-semibold text-blue-600 hover:underline"
+                                  disabled={!conversationCall.canStartAudioCall}
+                                  onClick={() => {
+                                    void conversationCall.startAudioCall()
+                                  }}
+                                >
+                                  Gọi lại
+                                </button>
+                              </div>
                             ) : firstAttachment?.type === "STICKER" ? (
                               <div className="rounded-2xl bg-amber-50 p-2 shadow-xs ring-1 ring-amber-200">
                                 <img src={firstAttachment.url} alt="sticker" className="h-20 w-20 object-contain" />
@@ -688,7 +888,7 @@ export default function ChatWindow() {
                             </span>
                           </div>
 
-                          {!msg.recalled && !multiSelectActive ? (
+                          {!msg.recalled && !multiSelectActive && !isCallMessage ? (
                             <div
                               className={cn(
                                 "mb-5 flex shrink-0 gap-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100",

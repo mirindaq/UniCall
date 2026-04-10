@@ -1,4 +1,5 @@
 import axiosClient from "@/configurations/axios.config"
+import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
   UpdateMyProfileRequest,
@@ -7,7 +8,7 @@ import type {
   UserSearchQuery,
 } from "@/types/user.type"
 
-const USER_API_PREFIX = "/user-service/api/v1/users"
+const USER_API_PREFIX = API_PREFIXES.users
 const MY_PROFILE_CACHE_TTL_MS = 15_000
 
 let myProfileCache: ResponseSuccess<UserProfile> | null = null
@@ -21,11 +22,11 @@ const setMyProfileCache = (value: ResponseSuccess<UserProfile>) => {
 
 export const userService = {
   getMyProfile: async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<ResponseSuccess<UserProfile>> => {
-    const isCacheFresh =
+    if (
+      !forceRefresh &&
       myProfileCache != null &&
       Date.now() - myProfileCacheAt < MY_PROFILE_CACHE_TTL_MS
-
-    if (!forceRefresh && isCacheFresh) {
+    ) {
       return myProfileCache
     }
 
