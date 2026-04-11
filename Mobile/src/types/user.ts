@@ -11,6 +11,7 @@ export type UserProfile = {
   isActive: boolean;
   deletionPending?: boolean;
   deletionRequestedAt?: string | null;
+  allowFriendInvites?: boolean;
 };
 
 export type UpdateMyProfileRequest = {
@@ -49,4 +50,9 @@ export type AccountDeletionStatus = {
   pendingDays: number;
   remainingDays: number;
   deletionReason?: string | null;
+};
+
+export type FriendInvitePrivacy = {
+  identityUserId: string;
+  allowFriendInvites: boolean;
 };

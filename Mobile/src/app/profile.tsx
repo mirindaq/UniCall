@@ -84,6 +84,9 @@ export default function ProfileScreen() {
               params: { phone: profile?.phoneNumber ?? '' },
             });
           }}
+          onOpenPrivacy={() => {
+            router.push('/privacy-settings');
+          }}
           onLogout={() => {
             void (async () => {
               await authTokenStore.clear();

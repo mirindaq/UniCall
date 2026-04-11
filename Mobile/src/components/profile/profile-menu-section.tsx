@@ -11,6 +11,7 @@ interface StaticMenuItem {
 interface ProfileMenuSectionProps {
   onOpenMyDocuments: () => void;
   onOpenAccountSecurity: () => void;
+  onOpenPrivacy: () => void;
   onLogout: () => void;
 }
 
@@ -99,7 +100,12 @@ function MenuGroup({
   );
 }
 
-export function ProfileMenuSection({ onOpenMyDocuments, onOpenAccountSecurity, onLogout }: ProfileMenuSectionProps) {
+export function ProfileMenuSection({
+  onOpenMyDocuments,
+  onOpenAccountSecurity,
+  onOpenPrivacy,
+  onLogout,
+}: ProfileMenuSectionProps) {
   return (
     <View>
       <MenuGroup
@@ -115,6 +121,10 @@ export function ProfileMenuSection({ onOpenMyDocuments, onOpenAccountSecurity, o
         onPressItem={(item) => {
           if (item.id === 'security') {
             onOpenAccountSecurity();
+            return;
+          }
+          if (item.id === 'privacy') {
+            onOpenPrivacy();
           }
         }}
       />

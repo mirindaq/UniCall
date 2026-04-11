@@ -2,6 +2,7 @@ import axiosClient from '@/configurations/axios.config';
 import type { PageResponse, ResponseSuccess } from '@/types/api-response';
 import type {
   AccountDeletionStatus,
+  FriendInvitePrivacy,
   RequestAccountDeletionRequest,
   UpdateMyProfileRequest,
   UserProfile,
@@ -65,6 +66,21 @@ export const userService = {
   getMyAccountDeletionStatus: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
     const response = await axiosClient.get<ResponseSuccess<AccountDeletionStatus>>(
       `${USER_API_PREFIX}/me/deletion-request/status`
+    );
+    return response.data;
+  },
+
+  getMyFriendInvitePrivacy: async (): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.get<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`
+    );
+    return response.data;
+  },
+
+  updateMyFriendInvitePrivacy: async (allowFriendInvites: boolean): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.put<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`,
+      { allowFriendInvites }
     );
     return response.data;
   },

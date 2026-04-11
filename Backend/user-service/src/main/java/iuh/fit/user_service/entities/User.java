@@ -58,4 +58,8 @@ public class User {
 
     @Column(length = 500)
     private String deletionReason;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean allowFriendInvites = true;
 }
