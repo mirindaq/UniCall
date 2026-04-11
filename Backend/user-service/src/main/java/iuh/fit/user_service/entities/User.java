@@ -62,4 +62,8 @@ public class User {
     @Column(nullable = false)
     @Builder.Default
     private Boolean allowFriendInvites = true;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean allowPhoneSearch = true;
 }

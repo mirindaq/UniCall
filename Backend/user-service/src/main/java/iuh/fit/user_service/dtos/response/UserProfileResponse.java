@@ -23,6 +23,7 @@ public class UserProfileResponse {
     private Boolean deletionPending;
     private LocalDateTime deletionRequestedAt;
     private Boolean allowFriendInvites;
+    private Boolean allowPhoneSearch;
 
     public static UserProfileResponse from(User user) {
         return UserProfileResponse.builder()
@@ -39,6 +40,7 @@ public class UserProfileResponse {
                 .deletionPending(user.getDeletionPending())
                 .deletionRequestedAt(user.getDeletionRequestedAt())
                 .allowFriendInvites(user.getAllowFriendInvites())
+                .allowPhoneSearch(user.getAllowPhoneSearch())
                 .build();
     }
 }
