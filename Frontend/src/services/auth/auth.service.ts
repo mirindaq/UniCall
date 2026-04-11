@@ -2,6 +2,7 @@ import axios from "axios"
 
 import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
+import { API_PREFIXES } from "@/constants/api-prefixes"
 import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -12,7 +13,7 @@ import type {
 } from "@/types/auth"
 import type { ResponseSuccess } from "@/types/api-response"
 
-const AUTH_API_PREFIX = "/identity-service/api/v1/auth"
+const AUTH_API_PREFIX = API_PREFIXES.auth
 const authApiUrl = (path: string) => buildApiUrl(`${AUTH_API_PREFIX}${path}`)
 
 export const authService = {

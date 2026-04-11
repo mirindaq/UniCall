@@ -1,4 +1,5 @@
 import axiosClient from "@/configurations/axios.config"
+import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
   AddGroupMembersRequest,
@@ -13,8 +14,8 @@ import type {
   UpdateGroupMemberRoleRequest,
 } from "@/types/chat"
 
-const CHAT_API_PREFIX = "/chat-service/api/v1/conversations"
-const CHAT_PREFIX = "/chat-service/api/v1/chat"
+const CHAT_API_PREFIX = API_PREFIXES.conversations
+const CHAT_PREFIX = API_PREFIXES.chat
 
 export const chatService = {
   listConversations: async () => {
