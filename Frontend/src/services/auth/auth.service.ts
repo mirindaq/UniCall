@@ -18,7 +18,16 @@ const authApiUrl = (path: string) => buildApiUrl(`${AUTH_API_PREFIX}${path}`)
 
 export const authService = {
   login: async (payload: LoginRequest): Promise<ResponseSuccess<void>> => {
-    const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/login`, payload)
+    const normalizedPayload: LoginRequest = {
+      ...payload,
+      phoneNumber: payload.phoneNumber.trim(),
+      password: payload.password.trim(),
+      firebaseIdToken: payload.firebaseIdToken.trim(),
+    }
+    const response = await axiosClient.post<ResponseSuccess<void>>(
+      `${AUTH_API_PREFIX}/login`,
+      normalizedPayload
+    )
     return response.data
   },
 

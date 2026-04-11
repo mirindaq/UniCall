@@ -6,11 +6,13 @@ export interface RegisterRequest {
   gender: "MALE" | "FEMALE" | "OTHER"
   dateOfBirth: string
   password: string
+  firebaseIdToken: string
 }
 
 export interface LoginRequest {
   phoneNumber: string
   password: string
+  firebaseIdToken: string
 }
 
 export interface ResendVerificationEmailRequest {

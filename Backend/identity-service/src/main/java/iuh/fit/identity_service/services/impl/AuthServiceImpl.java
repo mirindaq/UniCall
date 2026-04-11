@@ -9,6 +9,7 @@ import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
+import iuh.fit.identity_service.services.FirebasePhoneVerificationService;
 import iuh.fit.identity_service.services.KeycloakAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class AuthServiceImpl implements AuthService {
     private static final String REFRESH_COOKIE_NAME = "unicall_rt";
 
     private final KeycloakAuthService keycloakAuthService;
+    private final FirebasePhoneVerificationService firebasePhoneVerificationService;
 
     @Value("${app.security.cookie.secure:true}")
     private boolean cookieSecure;
@@ -34,6 +36,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
+        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
         return keycloakAuthService.register(request);
     }
 
@@ -58,6 +61,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResult login(LoginRequest request) {
+        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
             throw new UnauthenticatedException("Missing access token from identity provider");

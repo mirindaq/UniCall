@@ -215,20 +215,6 @@ public class KeycloakIdentityClient {
             Map<String, Object> tokenMap = requestPasswordToken(phoneNumber, password);
             return toAuthTokenResponse(tokenMap);
         } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized e) {
-            if (isAccountNotFullySetUpError(e) && cleanupVerifyEmailActionIfNeeded(phoneNumber)) {
-                try {
-                    Map<String, Object> tokenMap = requestPasswordToken(phoneNumber, password);
-                    return toAuthTokenResponse(tokenMap);
-                } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized retryError) {
-                    if (isAccountNotFullySetUpError(retryError)) {
-                        throw new UnauthenticatedException("Account is not activated. Please verify your email");
-                    }
-                    throw new UnauthenticatedException("Phone number or password is invalid");
-                }
-            }
-            if (isAccountNotFullySetUpError(e)) {
-                throw new UnauthenticatedException("Account is not activated. Please verify your email");
-            }
             throw new UnauthenticatedException("Phone number or password is invalid");
         }
     }
@@ -311,8 +297,8 @@ public class KeycloakIdentityClient {
         user.put("firstName", request.getFirstName());
         user.put("lastName", request.getLastName());
         user.put("enabled", true);
-        user.put("emailVerified", false);
-        user.put("requiredActions", List.of("VERIFY_EMAIL"));
+        user.put("emailVerified", true);
+        user.put("requiredActions", List.of());
         user.put("attributes", Map.of(
                 "phoneNumber", List.of(request.getPhoneNumber()),
                 "email", List.of(request.getEmail()),
