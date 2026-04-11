@@ -10,6 +10,7 @@ interface StaticMenuItem {
 
 interface ProfileMenuSectionProps {
   onOpenMyDocuments: () => void;
+  onOpenAccountSecurity: () => void;
   onLogout: () => void;
 }
 
@@ -98,7 +99,7 @@ function MenuGroup({
   );
 }
 
-export function ProfileMenuSection({ onOpenMyDocuments, onLogout }: ProfileMenuSectionProps) {
+export function ProfileMenuSection({ onOpenMyDocuments, onOpenAccountSecurity, onLogout }: ProfileMenuSectionProps) {
   return (
     <View>
       <MenuGroup
@@ -109,7 +110,14 @@ export function ProfileMenuSection({ onOpenMyDocuments, onLogout }: ProfileMenuS
           }
         }}
       />
-      <MenuGroup items={ACCOUNT_ITEMS} />
+      <MenuGroup
+        items={ACCOUNT_ITEMS}
+        onPressItem={(item) => {
+          if (item.id === 'security') {
+            onOpenAccountSecurity();
+          }
+        }}
+      />
 
       <View className="mt-3 bg-white px-5 py-3">
         <Pressable

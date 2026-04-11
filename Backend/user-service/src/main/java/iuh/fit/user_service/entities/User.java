@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -47,4 +48,14 @@ public class User {
     @Column(nullable = false)
     @Builder.Default
     private Boolean isActive = true;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deletionPending = false;
+
+    @Column
+    private LocalDateTime deletionRequestedAt;
+
+    @Column(length = 500)
+    private String deletionReason;
 }

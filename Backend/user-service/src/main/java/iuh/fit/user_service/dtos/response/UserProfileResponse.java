@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Builder
@@ -19,6 +20,8 @@ public class UserProfileResponse {
     private LocalDate dateOfBirth;
     private String avatar;
     private Boolean isActive;
+    private Boolean deletionPending;
+    private LocalDateTime deletionRequestedAt;
 
     public static UserProfileResponse from(User user) {
         return UserProfileResponse.builder()
@@ -32,6 +35,8 @@ public class UserProfileResponse {
                 .dateOfBirth(user.getDateOfBirth())
                 .avatar(user.getAvatar())
                 .isActive(user.getIsActive())
+                .deletionPending(user.getDeletionPending())
+                .deletionRequestedAt(user.getDeletionRequestedAt())
                 .build();
     }
 }

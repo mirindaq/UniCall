@@ -78,6 +78,12 @@ export default function ProfileScreen() {
           onOpenMyDocuments={() => {
             router.push('/message/my-documents');
           }}
+          onOpenAccountSecurity={() => {
+            router.push({
+              pathname: '/account-security',
+              params: { phone: profile?.phoneNumber ?? '' },
+            });
+          }}
           onLogout={() => {
             void (async () => {
               await authTokenStore.clear();
