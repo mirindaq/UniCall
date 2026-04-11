@@ -1,13 +1,24 @@
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { authTokenStore } from "@/configurations/axios.config";
 
 const PAGE_DOTS = 5;
 const ACTIVE_DOT_INDEX = 4;
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  useEffect(() => {
+    void (async () => {
+      const accessToken = await authTokenStore.get();
+      if (accessToken) {
+        router.replace("/message");
+      }
+    })();
+  }, [router]);
 
   return (
     <SafeAreaView

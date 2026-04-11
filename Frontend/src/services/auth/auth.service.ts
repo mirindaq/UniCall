@@ -3,6 +3,7 @@ import axios from "axios"
 import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
 import type {
+  ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
@@ -35,6 +36,11 @@ export const authService = {
 
   forgotPassword: async (payload: ForgotPasswordRequest): Promise<ResponseSuccess<void>> => {
     const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/forgot-password`, payload)
+    return response.data
+  },
+
+  changePassword: async (payload: ChangePasswordRequest): Promise<ResponseSuccess<void>> => {
+    const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/change-password`, payload)
     return response.data
   },
 

@@ -1,6 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
@@ -47,6 +48,15 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public void changePassword(ChangePasswordRequest request) {
+        keycloakAuthService.changePassword(
+                request.getPhoneNumber(),
+                request.getCurrentPassword(),
+                request.getNewPassword()
+        );
+    }
+
+    @Override
     public LoginResult login(LoginRequest request) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
@@ -60,7 +70,8 @@ public class AuthServiceImpl implements AuthService {
                 List.of(
                         createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
                         createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
-                )
+                ),
+                tokens
         );
     }
 
@@ -82,7 +93,15 @@ public class AuthServiceImpl implements AuthService {
                 List.of(
                         createAccessCookie(tokenResponse.getAccessToken(), tokenResponse.getExpiresIn()),
                         createRefreshCookie(rotatedRefreshToken, tokenResponse.getRefreshExpiresIn())
-                )
+                ),
+                AuthTokenResponse.builder()
+                        .accessToken(tokenResponse.getAccessToken())
+                        .refreshToken(rotatedRefreshToken)
+                        .tokenType(tokenResponse.getTokenType())
+                        .expiresIn(tokenResponse.getExpiresIn())
+                        .refreshExpiresIn(tokenResponse.getRefreshExpiresIn())
+                        .scope(tokenResponse.getScope())
+                        .build()
         );
     }
 

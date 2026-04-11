@@ -11,6 +11,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.security.Principal;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,7 +32,10 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-            requireUserId(accessor);
+            String userId = requireUserId(accessor);
+            if (accessor.getUser() == null) {
+                accessor.setUser(() -> userId);
+            }
             return message;
         }
 
@@ -59,6 +63,11 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     }
 
     private static String requireUserId(StompHeaderAccessor accessor) {
+        Principal principal = accessor.getUser();
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return principal.getName();
+        }
+
         Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
         if (sessionAttrs == null) {
             throw new InvalidParamException("Thiếu session WebSocket");

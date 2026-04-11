@@ -1,13 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useMemo } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 
 import { ConversationAvatar } from '@/components/messages/conversation-avatar';
 import type { FriendActionItem, FriendContactItem } from '@/mock/contacts-data';
 
+type FriendContactViewItem = FriendContactItem & { avatarUrl?: string | null };
+
 interface ContactsFriendsTabProps {
   friendActions: FriendActionItem[];
-  friendContacts: FriendContactItem[];
+  friendContacts: FriendContactViewItem[];
 }
 
 function FriendActionRow({ action }: { action: FriendActionItem }) {
@@ -26,10 +28,14 @@ function FriendActionRow({ action }: { action: FriendActionItem }) {
   );
 }
 
-function FriendContactRow({ item }: { item: FriendContactItem }) {
+function FriendContactRow({ item }: { item: FriendContactViewItem }) {
   return (
     <View className="flex-row items-center px-5 py-4">
-      <ConversationAvatar avatar={item.avatar} />
+      {item.avatarUrl ? (
+        <Image source={{ uri: item.avatarUrl }} className="h-[54px] w-[54px] rounded-full bg-slate-200" />
+      ) : (
+        <ConversationAvatar avatar={item.avatar} />
+      )}
       <Text allowFontScaling={false} className="ml-4 flex-1 text-[17px] text-slate-900">
         {item.name}
       </Text>
@@ -66,7 +72,7 @@ export function ContactsFriendsTab({ friendActions, friendContacts }: ContactsFr
       <View className="flex-row items-center px-5 py-3">
         <View className="rounded-full bg-slate-200 px-4 py-2">
           <Text allowFontScaling={false} className="text-[14px] font-semibold text-slate-900">
-            Tất cả 93
+            Tất cả {friendContacts.length}
           </Text>
         </View>
         <View className="ml-3 rounded-full border border-slate-300 px-4 py-2">

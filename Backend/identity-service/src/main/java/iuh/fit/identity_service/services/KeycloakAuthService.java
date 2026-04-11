@@ -11,6 +11,8 @@ public interface KeycloakAuthService {
 
     void forgotPassword(String phoneNumber, String email);
 
+    void changePassword(String phoneNumber, String currentPassword, String newPassword);
+
     AuthTokenResponse login(String phoneNumber, String password);
 
     AuthTokenResponse refreshToken(String refreshToken);
