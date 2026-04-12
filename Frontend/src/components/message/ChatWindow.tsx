@@ -1,7 +1,8 @@
 import {
+  CalendarDays,
   ChevronDown,
-  ChevronUp,
   Copy,
+  FileText,
   Forward,
   Image as ImageIcon,
   ListChecks,
@@ -17,6 +18,7 @@ import {
   Sticker,
   Trash2,
   Undo2,
+  UserRound,
   Users,
   Video,
   X,
@@ -54,10 +56,10 @@ import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
-import { fileService } from "@/services/file/file.service"
+import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { userService } from "@/services/user/user.service"
 import type { ChatAttachment, ChatMessageResponse, UserRealtimeEvent } from "@/types/chat"
-import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
+import { displayNameFromProfile, formatChatMessageTime, formatChatSidebarTime } from "@/utils/chat-display.util"
 import {
   extractFileNameFromFileMessage,
   getOriginalFileNameFromUrl,
@@ -82,6 +84,34 @@ const GIFS = [
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26ufdipQqU2lhNA4g/giphy.gif",
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7aD2saalBwwftBIY/giphy.gif",
 ]
+const SEARCH_PAGE_SIZE = 12
+const SEARCH_DEBOUNCE_MS = 500
+const SEARCH_FILES_PREVIEW_LIMIT = 8
+
+function renderHighlightedSearchText(content: string, keyword: string): ReactNode {
+  const normalizedKeyword = keyword.trim()
+  if (!normalizedKeyword) {
+    return content
+  }
+
+  const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const regex = new RegExp(`(${escapedKeyword})`, "ig")
+  const chunks = content.split(regex)
+
+  return chunks.map((chunk, index) => {
+    if (!chunk) {
+      return null
+    }
+    if (chunk.toLowerCase() === normalizedKeyword.toLowerCase()) {
+      return (
+        <span key={`highlight-${index}-${chunk}`} className="font-semibold text-blue-600">
+          {chunk}
+        </span>
+      )
+    }
+    return <span key={`plain-${index}`}>{chunk}</span>
+  })
+}
 
 function messagePlainTextForCopy(msg: ChatMessageResponse): string {
   const normalizedContent = normalizeFileMessageContent(msg.content)
@@ -214,10 +244,13 @@ export default function ChatWindow() {
     conversationAvatar,
     onRealtimeMessage,
     selectedPeerProfile,
+    detailsView,
     setDetailsView,
     isDetailsPanelOpen,
     setDetailsPanelOpen,
     toggleDetailsPanel,
+    messageFocusRequestId,
+    clearMessageFocusRequest,
     conversations,
   } = useChatPage()
 
@@ -268,9 +301,19 @@ export default function ChatWindow() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false)
   const [messageSearchKeyword, setMessageSearchKeyword] = useState("")
+  const [searchKeywordDebounced, setSearchKeywordDebounced] = useState("")
+  const [searchSenderId, setSearchSenderId] = useState("")
+  const [searchFromDate, setSearchFromDate] = useState("")
+  const [searchToDate, setSearchToDate] = useState("")
+  const [isSearchSenderPopoverOpen, setIsSearchSenderPopoverOpen] = useState(false)
+  const [isSearchDatePopoverOpen, setIsSearchDatePopoverOpen] = useState(false)
   const [searchMatchMessages, setSearchMatchMessages] = useState<ChatMessageResponse[]>([])
+  const [searchMessagePage, setSearchMessagePage] = useState(1)
+  const [searchMessageHasMore, setSearchMessageHasMore] = useState(false)
+  const [isLoadingMoreSearchMessages, setIsLoadingMoreSearchMessages] = useState(false)
   const [isSearchingMessages, setIsSearchingMessages] = useState(false)
-  const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(-1)
+  const [searchMatchedFiles, setSearchMatchedFiles] = useState<AttachmentResponse[]>([])
+  const [isSearchingFiles, setIsSearchingFiles] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -428,6 +471,74 @@ export default function ChatWindow() {
     return new Set(searchMatchIds)
   }, [searchMatchIds])
 
+  const searchSenderOptions = useMemo(() => {
+    if (!selectedConversation) {
+      return [] as Array<{ id: string; name: string; avatar?: string }>
+    }
+
+    const ids = Array.from(
+      new Set(
+        (selectedConversation.participantInfos ?? [])
+          .map((participant) => participant.idAccount)
+          .filter((id): id is string => !!id),
+      ),
+    )
+
+    return ids.map((id) => {
+      if (id === currentUserId) {
+        return { id, name: "Bạn" }
+      }
+      if (selectedConversation.type === "DOUBLE") {
+        return {
+          id,
+          name: headerTitle || id,
+          avatar: headerAvatar,
+        }
+      }
+      return {
+        id,
+        name: senderProfiles[id]?.displayName ?? id,
+        avatar: senderProfiles[id]?.avatar,
+      }
+    })
+  }, [currentUserId, headerAvatar, headerTitle, selectedConversation, senderProfiles])
+
+  const selectedSearchSenderLabel = useMemo(() => {
+    if (!searchSenderId) {
+      return "Người gửi"
+    }
+    return searchSenderOptions.find((option) => option.id === searchSenderId)?.name ?? "Người gửi"
+  }, [searchSenderId, searchSenderOptions])
+
+  const matchesSearchFilters = useCallback((message: ChatMessageResponse) => {
+    if (searchSenderId && message.idAccountSent !== searchSenderId) {
+      return false
+    }
+
+    const sentAt = new Date(message.timeSent).getTime()
+    if (Number.isNaN(sentAt)) {
+      return true
+    }
+
+    if (searchFromDate) {
+      const fromDate = new Date(searchFromDate)
+      fromDate.setHours(0, 0, 0, 0)
+      if (sentAt < fromDate.getTime()) {
+        return false
+      }
+    }
+
+    if (searchToDate) {
+      const toDate = new Date(searchToDate)
+      toDate.setHours(23, 59, 59, 999)
+      if (sentAt > toDate.getTime()) {
+        return false
+      }
+    }
+
+    return true
+  }, [searchFromDate, searchSenderId, searchToDate])
+
   const loadMissingMessageById = useCallback((
     messageId: string,
     options?: { silentIfMissing?: boolean; focusAfterLoad?: boolean; forceRetry?: boolean },
@@ -541,6 +652,18 @@ export default function ChatWindow() {
   }, [loadMissingMessageById, replyTargetCache, selectedConversationId])
 
   useEffect(() => {
+    if (!messageFocusRequestId) {
+      return
+    }
+
+    focusReplyTargetMessage(messageFocusRequestId, {
+      silentIfMissing: false,
+      forceRetryWhenMissing: true,
+    })
+    clearMessageFocusRequest()
+  }, [clearMessageFocusRequest, focusReplyTargetMessage, messageFocusRequestId])
+
+  useEffect(() => {
     setReplyTargetCache((prev) => {
       let changed = false
       const next = { ...prev }
@@ -600,30 +723,6 @@ export default function ChatWindow() {
     }
   }, [displayMessages, loadMissingMessageById, messageById, replyTargetCache, selectedConversationId])
 
-  const goToPreviousSearchMatch = useCallback(() => {
-    if (searchMatchIds.length === 0) {
-      return
-    }
-    setActiveSearchMatchIndex((prev) => {
-      if (prev <= 0) {
-        return searchMatchIds.length - 1
-      }
-      return prev - 1
-    })
-  }, [searchMatchIds.length])
-
-  const goToNextSearchMatch = useCallback(() => {
-    if (searchMatchIds.length === 0) {
-      return
-    }
-    setActiveSearchMatchIndex((prev) => {
-      if (prev < 0 || prev >= searchMatchIds.length - 1) {
-        return 0
-      }
-      return prev + 1
-    })
-  }, [searchMatchIds.length])
-
   useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current != null) {
@@ -646,106 +745,135 @@ export default function ChatWindow() {
   }, [isMessageSearchOpen])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchKeywordDebounced(messageSearchKeyword.trim())
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [messageSearchKeyword])
+
+  const fetchSearchMessages = useCallback(async (targetPage: number, append: boolean) => {
     if (!isMessageSearchOpen || !selectedConversationId) {
       setSearchMatchMessages([])
+      setSearchMessagePage(1)
+      setSearchMessageHasMore(false)
       setIsSearchingMessages(false)
+      setIsLoadingMoreSearchMessages(false)
       return
     }
 
-    const keyword = messageSearchKeyword.trim()
-    if (!keyword) {
+    if (!searchKeywordDebounced) {
       setSearchMatchMessages([])
+      setSearchMessagePage(1)
+      setSearchMessageHasMore(false)
       setIsSearchingMessages(false)
+      setIsLoadingMoreSearchMessages(false)
+      return
+    }
+
+    if (append) {
+      setIsLoadingMoreSearchMessages(true)
+    } else {
+      setIsSearchingMessages(true)
+    }
+
+    try {
+      const response = await chatService.searchMessages(selectedConversationId, searchKeywordDebounced, targetPage, SEARCH_PAGE_SIZE)
+      const rawItems = response.data.items ?? []
+      const filteredItems = rawItems.filter(matchesSearchFilters)
+
+      setSearchMatchMessages((prev) => {
+        if (!append) {
+          return filteredItems
+        }
+
+        const existingIds = new Set(prev.map((message) => message.idMessage))
+        const nextItems = filteredItems.filter((message) => !existingIds.has(message.idMessage))
+        return [...prev, ...nextItems]
+      })
+
+      setSocketExtras((prev) => {
+        const byId = new Map<string, ChatMessageResponse>()
+        for (const message of prev) {
+          byId.set(message.idMessage, message)
+        }
+        for (const message of filteredItems) {
+          byId.set(message.idMessage, message)
+        }
+        return [...byId.values()]
+      })
+
+      const currentPage = response.data.page ?? targetPage
+      const totalPage = response.data.totalPage ?? targetPage
+      setSearchMessagePage(targetPage)
+      setSearchMessageHasMore(currentPage < totalPage)
+    } catch {
+      if (!append) {
+        toast.error("Không tìm kiếm được tin nhắn")
+      }
+    } finally {
+      setIsSearchingMessages(false)
+      setIsLoadingMoreSearchMessages(false)
+    }
+  }, [isMessageSearchOpen, matchesSearchFilters, searchKeywordDebounced, selectedConversationId])
+
+  useEffect(() => {
+    void fetchSearchMessages(1, false)
+  }, [fetchSearchMessages, searchSenderId, searchFromDate, searchToDate])
+
+  const loadMoreSearchMessages = useCallback(() => {
+    if (!searchKeywordDebounced || !searchMessageHasMore || isSearchingMessages || isLoadingMoreSearchMessages) {
+      return
+    }
+    void fetchSearchMessages(searchMessagePage + 1, true)
+  }, [fetchSearchMessages, isLoadingMoreSearchMessages, isSearchingMessages, searchKeywordDebounced, searchMessageHasMore, searchMessagePage])
+
+  useEffect(() => {
+    if (!isMessageSearchOpen || !selectedConversationId) {
+      setSearchMatchedFiles([])
+      setIsSearchingFiles(false)
       return
     }
 
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      setIsSearchingMessages(true)
-      void chatService
-        .searchMessages(selectedConversationId, keyword, 1, 100)
-        .then((response) => {
-          if (cancelled) {
-            return
-          }
-          const resultItems = response.data.items ?? []
-          const sortedMatches = [...resultItems].sort(
-            (a, b) => new Date(a.timeSent).getTime() - new Date(b.timeSent).getTime(),
-          )
-          setSearchMatchMessages(sortedMatches)
+    setIsSearchingFiles(true)
 
-          // Ensure searched messages are rendered so jump-to-result works even for older messages.
-          setSocketExtras((prev) => {
-            const byId = new Map<string, ChatMessageResponse>()
-            for (const message of prev) {
-              byId.set(message.idMessage, message)
-            }
-            for (const message of sortedMatches) {
-              byId.set(message.idMessage, message)
-            }
-            return [...byId.values()]
-          })
+    void fileService
+      .getAttachments(selectedConversationId, {
+        type: "files",
+        search: searchKeywordDebounced || undefined,
+        senderId: searchSenderId || undefined,
+        fromDate: searchFromDate || undefined,
+        toDate: searchToDate || undefined,
+      })
+      .then((response) => {
+        if (cancelled) {
+          return
+        }
+        const sortedFiles = (response.data ?? []).slice().sort((a, b) => {
+          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+          return right - left
         })
-        .catch(() => {
-          if (cancelled) {
-            return
-          }
-          setSearchMatchMessages([])
-          toast.error("Không tìm kiếm được tin nhắn")
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setIsSearchingMessages(false)
-          }
-        })
-    }, 600)
+        setSearchMatchedFiles(sortedFiles.slice(0, SEARCH_FILES_PREVIEW_LIMIT))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSearchMatchedFiles([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsSearchingFiles(false)
+        }
+      })
 
     return () => {
       cancelled = true
-      window.clearTimeout(timer)
     }
-  }, [isMessageSearchOpen, messageSearchKeyword, selectedConversationId])
-
-  useEffect(() => {
-    if (!isMessageSearchOpen) {
-      setActiveSearchMatchIndex(-1)
-      return
-    }
-
-    if (searchMatchIds.length === 0) {
-      setActiveSearchMatchIndex(-1)
-      return
-    }
-
-    setActiveSearchMatchIndex((prev) => {
-      if (prev < 0) {
-        return 0
-      }
-      return Math.min(prev, searchMatchIds.length - 1)
-    })
-  }, [isMessageSearchOpen, searchMatchIds])
-
-  useEffect(() => {
-    if (!isMessageSearchOpen) {
-      return
-    }
-    if (activeSearchMatchIndex < 0 || activeSearchMatchIndex >= searchMatchIds.length) {
-      return
-    }
-    const targetMessageId = searchMatchIds[activeSearchMatchIndex]
-    const focusedImmediately = focusReplyTargetMessage(targetMessageId, { silentIfMissing: true })
-    if (focusedImmediately) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      focusReplyTargetMessage(targetMessageId, { silentIfMissing: true })
-    }, 80)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [activeSearchMatchIndex, isMessageSearchOpen, searchMatchIds, focusReplyTargetMessage])
+  }, [isMessageSearchOpen, searchFromDate, searchKeywordDebounced, searchSenderId, searchToDate, selectedConversationId])
 
   useEffect(() => {
     setMultiSelectActive(false)
@@ -757,9 +885,19 @@ export default function ChatWindow() {
     setReplyTargetCache({})
     setIsMessageSearchOpen(false)
     setMessageSearchKeyword("")
+    setSearchKeywordDebounced("")
+    setSearchSenderId("")
+    setSearchFromDate("")
+    setSearchToDate("")
+    setIsSearchSenderPopoverOpen(false)
+    setIsSearchDatePopoverOpen(false)
     setSearchMatchMessages([])
+    setSearchMessagePage(1)
+    setSearchMessageHasMore(false)
+    setIsLoadingMoreSearchMessages(false)
     setIsSearchingMessages(false)
-    setActiveSearchMatchIndex(-1)
+    setSearchMatchedFiles([])
+    setIsSearchingFiles(false)
   }, [selectedConversationId])
 
   useEffect(() => {
@@ -1225,7 +1363,7 @@ export default function ChatWindow() {
   }
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col bg-muted/20">
+    <div className="relative flex h-full min-w-0 flex-1 flex-col bg-muted/20">
       <div className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-4">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar size="lg">
@@ -1256,8 +1394,19 @@ export default function ChatWindow() {
             variant="ghost"
             size="icon-sm"
             title="Tìm kiếm"
-            className={cn(isMessageSearchOpen ? "bg-blue-50 text-blue-700" : undefined)}
-            onClick={() => setIsMessageSearchOpen((prev) => !prev)}
+            className={cn(
+              "rounded-md",
+              isDetailsPanelOpen && detailsView === "search" ? "bg-blue-50 text-blue-700" : undefined,
+            )}
+            onClick={() => {
+              if (isDetailsPanelOpen && detailsView === "search") {
+                setDetailsView("main")
+                return
+              }
+              setDetailsView("search")
+              setDetailsPanelOpen(true)
+              setIsMessageSearchOpen(false)
+            }}
           >
             <Search className="h-5 w-5" />
           </Button>
@@ -1297,56 +1446,280 @@ export default function ChatWindow() {
       </div>
 
       {isMessageSearchOpen ? (
-        <div className="flex shrink-0 items-center gap-2 border-b bg-background px-4 py-2">
-          <Input
-            ref={searchInputRef}
-            value={messageSearchKeyword}
-            onChange={(event) => setMessageSearchKeyword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault()
-                if (event.shiftKey) {
-                  goToPreviousSearchMatch()
-                  return
-                }
-                goToNextSearchMatch()
-              }
-            }}
-            placeholder="Tìm trong cuộc trò chuyện"
-            className="h-9"
-          />
-          <div className="flex w-16 shrink-0 items-center justify-center gap-1 text-center text-xs text-muted-foreground">
-            {isSearchingMessages ? <Spinner className="size-3 text-muted-foreground" /> : null}
-            <span>
-              {searchMatchIds.length > 0 ? `${activeSearchMatchIndex + 1}/${searchMatchIds.length}` : "0/0"}
-            </span>
+        <div className="absolute bottom-0 right-0 top-16 z-30 w-[380px] border-l bg-slate-100 shadow-[-8px_0_24px_rgba(15,23,42,0.08)]">
+          <div className="flex h-full flex-col">
+            <div className="border-b bg-white px-4 pb-4 pt-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-2xl font-semibold text-slate-800">Tìm kiếm trong trò chuyện</h3>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="rounded-full"
+                  onClick={() => setIsMessageSearchOpen(false)}
+                  title="Đóng tìm kiếm"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  ref={searchInputRef}
+                  value={messageSearchKeyword}
+                  onChange={(event) => setMessageSearchKeyword(event.target.value)}
+                  placeholder="Tìm kiếm"
+                  className="h-11 rounded-md border-slate-300 bg-white pl-9 pr-12"
+                />
+                {messageSearchKeyword ? (
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 hover:text-slate-700"
+                    onClick={() => setMessageSearchKeyword("")}
+                  >
+                    Xóa
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-sm text-slate-500">Lọc theo:</span>
+                <Popover open={isSearchSenderPopoverOpen} onOpenChange={setIsSearchSenderPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="h-8 rounded-md border-slate-300 bg-slate-50 px-2 text-slate-700">
+                      <UserRound className="mr-1.5 h-3.5 w-3.5" />
+                      <span className="max-w-[100px] truncate text-sm">{selectedSearchSenderLabel}</span>
+                      <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2" align="start">
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                      onClick={() => {
+                        setSearchSenderId("")
+                        setIsSearchSenderPopoverOpen(false)
+                      }}
+                    >
+                      Tất cả
+                    </button>
+                    <div className="max-h-56 space-y-0.5 overflow-y-auto">
+                      {searchSenderOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => {
+                            setSearchSenderId(option.id)
+                            setIsSearchSenderPopoverOpen(false)
+                          }}
+                        >
+                          <Avatar size="sm">
+                            <AvatarImage src={option.avatar} alt={option.name} />
+                            <AvatarFallback>{option.name.slice(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{option.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={isSearchDatePopoverOpen} onOpenChange={setIsSearchDatePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="h-8 rounded-md border-slate-300 bg-slate-50 px-2 text-slate-700">
+                      <CalendarDays className="mr-1.5 h-3.5 w-3.5" />
+                      <span className="max-w-[90px] truncate text-sm">
+                        {searchFromDate || searchToDate ? "Đang lọc ngày" : "Ngày gửi"}
+                      </span>
+                      <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[320px] p-0" align="start">
+                    <div className="border-b px-4 py-3">
+                      <p className="text-sm font-medium">Gợi ý thời gian</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const toDate = new Date()
+                            const fromDate = new Date()
+                            fromDate.setDate(toDate.getDate() - 6)
+                            setSearchFromDate(fromDate.toISOString().slice(0, 10))
+                            setSearchToDate(toDate.toISOString().slice(0, 10))
+                          }}
+                        >
+                          7 ngày
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const toDate = new Date()
+                            const fromDate = new Date()
+                            fromDate.setDate(toDate.getDate() - 29)
+                            setSearchFromDate(fromDate.toISOString().slice(0, 10))
+                            setSearchToDate(toDate.toISOString().slice(0, 10))
+                          }}
+                        >
+                          30 ngày
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="px-4 py-3">
+                      <p className="mb-2 text-sm font-medium">Khoảng thời gian</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input type="date" value={searchFromDate} onChange={(event) => setSearchFromDate(event.target.value)} />
+                        <Input type="date" value={searchToDate} onChange={(event) => setSearchToDate(event.target.value)} />
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSearchFromDate("")
+                            setSearchToDate("")
+                          }}
+                        >
+                          Xóa lọc
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="px-4 py-3">
+                <p className="text-[22px] font-semibold text-slate-800">Tin nhắn</p>
+
+                {!searchKeywordDebounced ? (
+                  <p className="mt-3 text-sm text-slate-500">Nhập từ khóa để tìm tin nhắn trong cuộc trò chuyện.</p>
+                ) : null}
+
+                {isSearchingMessages ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner className="size-5 text-muted-foreground" />
+                  </div>
+                ) : null}
+
+                {searchKeywordDebounced && !isSearchingMessages && searchMatchMessages.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-500">Không tìm thấy tin nhắn phù hợp.</p>
+                ) : null}
+
+                <div className="mt-2 space-y-1">
+                  {searchMatchMessages.map((message) => {
+                    const sender = searchSenderOptions.find((option) => option.id === message.idAccountSent)
+                    const senderName = sender?.name ?? message.idAccountSent
+                    const senderAvatar = sender?.avatar
+                    const plainText = messagePlainTextForCopy(message)
+
+                    return (
+                      <button
+                        key={`search-message-${message.idMessage}`}
+                        type="button"
+                        className="w-full rounded-md border-b border-slate-200 px-1 py-2 text-left hover:bg-slate-200/70"
+                        onClick={() => {
+                          focusReplyTargetMessage(message.idMessage, {
+                            silentIfMissing: false,
+                            forceRetryWhenMissing: true,
+                          })
+                        }}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <Avatar size="default">
+                            <AvatarImage src={senderAvatar} alt={senderName} />
+                            <AvatarFallback>{senderName.slice(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-slate-700">{senderName}</p>
+                              <span className="shrink-0 text-xs text-slate-500">{formatChatSidebarTime(message.timeSent)}</span>
+                            </div>
+                            <p className="mt-0.5 line-clamp-2 text-sm text-slate-700">
+                              {renderHighlightedSearchText(plainText, searchKeywordDebounced)}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {searchMessageHasMore ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-2 h-8 w-full bg-slate-300 text-slate-700 hover:bg-slate-400"
+                    disabled={isLoadingMoreSearchMessages}
+                    onClick={loadMoreSearchMessages}
+                  >
+                    {isLoadingMoreSearchMessages ? "Đang tải..." : "Xem thêm"}
+                  </Button>
+                ) : null}
+              </div>
+
+              <Separator className="bg-slate-300" />
+
+              <div className="px-4 py-4">
+                <p className="text-2xl font-semibold text-slate-800">File</p>
+
+                {isSearchingFiles ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner className="size-5 text-muted-foreground" />
+                  </div>
+                ) : null}
+
+                {!isSearchingFiles && searchMatchedFiles.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">Không có file phù hợp.</p>
+                ) : null}
+
+                <div className="mt-2 space-y-1.5">
+                  {searchMatchedFiles.map((file) => {
+                    const fileName = getOriginalFileNameFromUrl(file.url)
+                    const ext = fileName.split(".").pop()?.toUpperCase().slice(0, 3) ?? "FILE"
+                    const senderName = searchSenderOptions.find((option) => option.id === file.senderId)?.name
+                      ?? file.senderId
+                      ?? "Người gửi"
+                    const fileDate = new Date(file.timeSent ?? file.timeUpload).toLocaleDateString("vi-VN", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "2-digit",
+                    })
+
+                    return (
+                      <a
+                        key={`search-file-${file.idAttachment}`}
+                        href={file.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="flex items-start gap-2.5 rounded-md px-1 py-1.5 hover:bg-slate-200/70"
+                      >
+                        <div className="flex h-11 w-10 shrink-0 items-center justify-center rounded-md bg-red-500 text-xs font-semibold text-white">
+                          {ext === "DOC" || ext === "DOCX" ? "W" : ext === "XLS" || ext === "XLSX" ? "X" : ext}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base text-slate-800">{renderHighlightedSearchText(fileName, searchKeywordDebounced)}</p>
+                          <p className="truncate text-sm text-slate-500">
+                            {file.size || "Unknown size"} - {senderName}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center text-xs text-slate-500">
+                          <FileText className="mr-1 h-3.5 w-3.5" />
+                          {fileDate}
+                        </div>
+                      </a>
+                    )
+                  })}
+                </div>
+              </div>
+            </ScrollArea>
           </div>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            title="Kết quả trước"
-            disabled={isSearchingMessages || searchMatchIds.length === 0}
-            onClick={goToPreviousSearchMatch}
-          >
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            title="Kết quả sau"
-            disabled={isSearchingMessages || searchMatchIds.length === 0}
-            onClick={goToNextSearchMatch}
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Đóng tìm kiếm"
-            onClick={() => setIsMessageSearchOpen(false)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
         </div>
       ) : null}
       <IncomingCallPopup

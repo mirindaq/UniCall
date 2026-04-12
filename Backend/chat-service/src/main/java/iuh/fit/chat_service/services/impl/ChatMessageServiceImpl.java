@@ -57,6 +57,19 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}[-_]+(.+)$",
         Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern UUID_AT_START_REGEX = Pattern.compile(
+        "^([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(.*)$",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern LONG_HASH_PREFIX_REGEX = Pattern.compile(
+        "^[0-9a-f]{20,}[-_]+(.+)$",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern ID_ONLY_FILENAME_REGEX = Pattern.compile(
+        "^[0-9a-f-]{24,}(\\.[a-z0-9]{1,8})?$",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern FILE_MESSAGE_REGEX = Pattern.compile("^Đã gửi file:\\s*(.+)$", Pattern.CASE_INSENSITIVE);
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
@@ -456,13 +469,15 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 if (attachment == null) {
                     continue;
                 }
+
+                String attachmentDisplayFileName = deriveAttachmentDisplayFileName(attachment, message.getContent());
                 
                 // Filter by type if specified
                 if (!matchesAttachmentTypeFilter(attachment.getType(), type)) {
                     continue;
                 }
 
-                if (!matchesAttachmentSearchFilter(attachment, normalizedSearch)) {
+                if (!matchesAttachmentSearchFilter(attachment, normalizedSearch, type, attachmentDisplayFileName)) {
                     continue;
                 }
                 
@@ -470,6 +485,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                         .idAttachment(attachment.getIdAttachment())
                         .type(attachment.getType())
                         .url(attachment.getUrl())
+                        .fileName(attachmentDisplayFileName)
                         .size(attachment.getSize())
                         .timeUpload(attachment.getTimeUpload())
                         .timeSent(message.getTimeSent())
@@ -532,22 +548,46 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         return search.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static boolean matchesAttachmentSearchFilter(Attachment attachment, String normalizedSearch) {
+    private static boolean matchesAttachmentSearchFilter(
+            Attachment attachment,
+            String normalizedSearch,
+            String requestedType,
+            String displayFileName
+    ) {
         if (!StringUtils.hasText(normalizedSearch)) {
             return true;
         }
 
-        String url = attachment.getUrl();
-        String domain = extractDomain(url);
-        String originalFileName = deriveOriginalFileNameFromUrl(url);
-        String typeName = attachment.getType() == null ? "" : attachment.getType().name();
-        String size = attachment.getSize();
+        if (attachment == null) {
+            return false;
+        }
 
-        return containsIgnoreCase(url, normalizedSearch)
-                || containsIgnoreCase(domain, normalizedSearch)
-                || containsIgnoreCase(originalFileName, normalizedSearch)
-                || containsIgnoreCase(typeName, normalizedSearch)
-                || containsIgnoreCase(size, normalizedSearch);
+        AttachmentType attachmentType = attachment.getType();
+        boolean isFileSearch = "files".equalsIgnoreCase(requestedType)
+                || attachmentType == AttachmentType.FILE
+                || attachmentType == AttachmentType.AUDIO;
+        if (isFileSearch) {
+            return containsIgnoreCase(displayFileName, normalizedSearch);
+        }
+
+        boolean isImageSearch = "images".equalsIgnoreCase(requestedType)
+                || attachmentType == AttachmentType.IMAGE
+                || attachmentType == AttachmentType.VIDEO
+                || attachmentType == AttachmentType.GIF;
+        if (isImageSearch) {
+            return containsIgnoreCase(displayFileName, normalizedSearch);
+        }
+
+        boolean isLinkSearch = "links".equalsIgnoreCase(requestedType)
+                || attachmentType == AttachmentType.LINK;
+        if (isLinkSearch) {
+            String url = attachment.getUrl();
+            String domain = extractDomain(url);
+            return containsIgnoreCase(url, normalizedSearch)
+                    || containsIgnoreCase(domain, normalizedSearch);
+        }
+
+        return containsIgnoreCase(displayFileName, normalizedSearch);
     }
 
     private static boolean containsIgnoreCase(String source, String normalizedSearch) {
@@ -584,6 +624,47 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         return stripped == null ? "" : stripped;
     }
 
+    private static String deriveAttachmentDisplayFileName(Attachment attachment, String messageContent) {
+        String fromUrl = deriveOriginalFileNameFromUrl(attachment == null ? null : attachment.getUrl());
+        String fromMessage = extractFileNameFromMessageContent(messageContent);
+
+        if (looksLikeStorageGeneratedName(fromUrl) && StringUtils.hasText(fromMessage)) {
+            return fromMessage;
+        }
+        if (StringUtils.hasText(fromUrl)) {
+            return fromUrl;
+        }
+        if (StringUtils.hasText(fromMessage)) {
+            return fromMessage;
+        }
+        return "file";
+    }
+
+    private static String extractFileNameFromMessageContent(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+
+        Matcher matcher = FILE_MESSAGE_REGEX.matcher(content.trim());
+        if (matcher.matches() && matcher.group(1) != null) {
+            return stripUuidPrefix(matcher.group(1).trim());
+        }
+        return "";
+    }
+
+    private static boolean looksLikeStorageGeneratedName(String fileName) {
+        if (!StringUtils.hasText(fileName)) {
+            return true;
+        }
+
+        String normalized = fileName.trim();
+        if (ID_ONLY_FILENAME_REGEX.matcher(normalized).matches()) {
+            return true;
+        }
+
+        return !normalized.contains(".") && normalized.length() >= 24;
+    }
+
     private static String stripUuidPrefix(String fileName) {
         if (!StringUtils.hasText(fileName)) {
             return fileName;
@@ -600,11 +681,35 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             return anywhereMatch.group(1).trim();
         }
 
+        Matcher startsWithUuidMatch = UUID_AT_START_REGEX.matcher(normalized);
+        if (startsWithUuidMatch.matches()) {
+            String remainder = startsWithUuidMatch.group(2);
+            if (remainder != null) {
+                String cleaned = remainder.replaceFirst("^[-_]+", "").trim();
+                if (!cleaned.isBlank()) {
+                    return cleaned;
+                }
+            }
+        }
+
+        Matcher longHashPrefixMatch = LONG_HASH_PREFIX_REGEX.matcher(normalized);
+        if (longHashPrefixMatch.matches() && longHashPrefixMatch.group(1) != null) {
+            return longHashPrefixMatch.group(1).trim();
+        }
+
         if (normalized.length() > 37) {
             char separator = normalized.charAt(36);
             if (separator == '-' || separator == '_') {
                 return normalized.substring(37).trim();
             }
+        }
+
+        if (ID_ONLY_FILENAME_REGEX.matcher(normalized).matches()) {
+            Matcher extensionMatcher = Pattern.compile("\\.[a-z0-9]{1,8}$", Pattern.CASE_INSENSITIVE).matcher(normalized);
+            if (extensionMatcher.find()) {
+                return "file" + extensionMatcher.group();
+            }
+            return "file";
         }
 
         return normalized;

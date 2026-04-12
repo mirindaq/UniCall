@@ -23,11 +23,14 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
-  detailsView: "main" | "storage" | "group-members"
-  setDetailsView: (view: "main" | "storage" | "group-members") => void
+  detailsView: "main" | "storage" | "group-members" | "search"
+  setDetailsView: (view: "main" | "storage" | "group-members" | "search") => void
   isDetailsPanelOpen: boolean
   setDetailsPanelOpen: (open: boolean) => void
   toggleDetailsPanel: () => void
+  messageFocusRequestId: string | null
+  requestMessageFocus: (messageId: string) => void
+  clearMessageFocusRequest: () => void
   onRealtimeMessage: (message: ChatMessageResponse) => void
 }
 
@@ -83,8 +86,9 @@ const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
-  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "search">("main")
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
+  const [messageFocusRequestId, setMessageFocusRequestId] = useState<string | null>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
 
   const { data: profileResponse } = useQuery(() => userService.getMyProfile(), {
@@ -190,6 +194,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
     setDetailsView("main")
+    setMessageFocusRequestId(null)
   }, [])
 
   const setDetailsPanelOpen = useCallback((open: boolean) => {
@@ -198,6 +203,14 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
 
   const toggleDetailsPanel = useCallback(() => {
     setIsDetailsPanelOpen((prev) => !prev)
+  }, [])
+
+  const requestMessageFocus = useCallback((messageId: string) => {
+    setMessageFocusRequestId(messageId)
+  }, [])
+
+  const clearMessageFocusRequest = useCallback(() => {
+    setMessageFocusRequestId(null)
   }, [])
 
   const startChatWithUser = useCallback(
@@ -239,6 +252,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       isDetailsPanelOpen,
       setDetailsPanelOpen,
       toggleDetailsPanel,
+      messageFocusRequestId,
+      requestMessageFocus,
+      clearMessageFocusRequest,
       onRealtimeMessage,
     }),
     [
@@ -257,6 +273,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       isDetailsPanelOpen,
       setDetailsPanelOpen,
       toggleDetailsPanel,
+      messageFocusRequestId,
+      requestMessageFocus,
+      clearMessageFocusRequest,
       onRealtimeMessage,
       selectedConversationId,
       startChatWithUser,
