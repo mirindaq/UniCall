@@ -10,10 +10,13 @@ import type {
 
 const USER_API_PREFIX = API_PREFIXES.users
 const MY_PROFILE_CACHE_TTL_MS = 15_000
+const PROFILE_CACHE_TTL_MS = 5 * 60_000
 
 let myProfileCache: ResponseSuccess<UserProfile> | null = null
 let myProfileCacheAt = 0
 let myProfilePending: Promise<ResponseSuccess<UserProfile>> | null = null
+const profileByIdentityCache = new Map<string, { data: ResponseSuccess<UserProfile>; at: number }>()
+const profileByIdentityPending = new Map<string, Promise<ResponseSuccess<UserProfile>>>()
 
 const setMyProfileCache = (value: ResponseSuccess<UserProfile>) => {
   myProfileCache = value
@@ -72,10 +75,32 @@ export const userService = {
   getProfileByIdentityUserId: async (
     identityUserId: string,
   ): Promise<ResponseSuccess<UserProfile>> => {
-    const response = await axiosClient.get<ResponseSuccess<UserProfile>>(
-      `${USER_API_PREFIX}/identity/${identityUserId}`,
-    )
-    return response.data
+    const key = identityUserId.trim()
+    const cached = profileByIdentityCache.get(key)
+    if (cached && Date.now() - cached.at < PROFILE_CACHE_TTL_MS) {
+      return cached.data
+    }
+
+    const pending = profileByIdentityPending.get(key)
+    if (pending) {
+      return pending
+    }
+
+    const request = axiosClient
+      .get<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/identity/${key}`)
+      .then((response) => {
+        profileByIdentityCache.set(key, {
+          data: response.data,
+          at: Date.now(),
+        })
+        return response.data
+      })
+      .finally(() => {
+        profileByIdentityPending.delete(key)
+      })
+
+    profileByIdentityPending.set(key, request)
+    return request
   },
 
   searchUsers: async ({

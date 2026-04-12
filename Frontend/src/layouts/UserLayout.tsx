@@ -14,9 +14,10 @@ import {
   Users,
 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { NavLink, Outlet, useNavigate } from "react-router"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router"
 import { toast } from "sonner"
 
+import IncomingCallPopup from "@/components/message/IncomingCallPopup"
 import { UserProfileDialog } from "@/components/profile/UserProfileDialog"
 import {
   AlertDialog,
@@ -38,6 +39,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
+import { useConversationCall } from "@/hooks/useConversationCall"
 import { USER_PATH } from "@/constants/user"
 import { authService } from "@/services/auth/auth.service"
 import { userService } from "@/services/user/user.service"
@@ -62,12 +64,59 @@ const userTabs = [
 ]
 
 export function UserLayout() {
-  const { clearAuthenticated, setIdentityUserId } = useAuth()
+  const { clearAuthenticated, setIdentityUserId, identityUserId } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [me, setMe] = useState<UserProfile | null>(null)
+  const [globalCallPeer, setGlobalCallPeer] = useState<{ name: string; avatar?: string } | null>(null)
+
+  const isOnChatRoute = location.pathname.startsWith(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)
+  const globalCall = useConversationCall({
+    currentUserId: isOnChatRoute ? null : identityUserId,
+  })
+
+  useEffect(() => {
+    if (isOnChatRoute) {
+      setGlobalCallPeer(null)
+      return
+    }
+    const peerId = globalCall.activeCall?.peerUserId
+    if (!peerId) {
+      setGlobalCallPeer(null)
+      return
+    }
+
+    let cancelled = false
+    void userService
+      .getProfileByIdentityUserId(peerId)
+      .then((response) => {
+        if (cancelled) {
+          return
+        }
+        const profile = response.data
+        const name = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || peerId
+        setGlobalCallPeer({
+          name,
+          avatar: profile.avatar ?? undefined,
+        })
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+        setGlobalCallPeer({
+          name: peerId,
+          avatar: undefined,
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [globalCall.activeCall?.peerUserId, isOnChatRoute])
 
   useEffect(() => {
     let mounted = true
@@ -241,6 +290,34 @@ export function UserLayout() {
         onOpenChange={setIsProfileOpen}
         onProfileChanged={(profile) => setMe(profile)}
       />
+
+      {!isOnChatRoute ? (
+        <>
+          <IncomingCallPopup
+            open={globalCall.phase !== "idle"}
+            phase={globalCall.phase === "idle" ? "outgoing" : globalCall.phase}
+            callerName={globalCallPeer?.name ?? "Người dùng"}
+            callerAvatar={globalCallPeer?.avatar}
+            audioOnly={globalCall.activeCall?.audioOnly ?? true}
+            startedAt={globalCall.activeCall?.startedAt}
+            ringDeadlineAt={globalCall.ringDeadlineAt}
+            ringDurationMs={globalCall.ringDurationMs}
+            statusMessage={globalCall.statusMessage}
+            micEnabled={globalCall.micEnabled}
+            cameraEnabled={globalCall.cameraEnabled}
+            canToggleCamera={globalCall.canToggleCamera}
+            remoteAudioRef={globalCall.remoteAudioRef}
+            remoteVideoRef={globalCall.remoteVideoRef}
+            localVideoRef={globalCall.localVideoRef}
+            onAccept={globalCall.acceptIncomingCall}
+            onAcceptWithoutCamera={globalCall.acceptIncomingCallWithoutCamera}
+            onReject={globalCall.rejectIncomingCall}
+            onEnd={globalCall.endCurrentCall}
+            onToggleMic={globalCall.toggleMicrophone}
+            onToggleCamera={globalCall.toggleCamera}
+          />
+        </>
+      ) : null}
     </div>
   )
 }

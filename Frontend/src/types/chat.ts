@@ -46,6 +46,16 @@ export interface ConversationCallSignal {
   sentAt: string
 }
 
+export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL"
+
+export interface UserRealtimeEvent {
+  eventType: UserRealtimeEventType
+  conversationId: string
+  sentAt: string
+  message?: ChatMessageResponse
+  callSignal?: ConversationCallSignal
+}
+
 export interface ChatAttachment {
   idAttachment: string
   type: AttachmentType
