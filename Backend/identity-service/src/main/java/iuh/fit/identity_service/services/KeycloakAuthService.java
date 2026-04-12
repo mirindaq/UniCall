@@ -13,6 +13,10 @@ public interface KeycloakAuthService {
 
     void changePassword(String phoneNumber, String currentPassword, String newPassword);
 
+    void verifyPassword(String phoneNumber, String password);
+
+    String findIdentityUserIdByPhoneNumber(String phoneNumber);
+
     AuthTokenResponse login(String phoneNumber, String password);
 
     AuthTokenResponse refreshToken(String refreshToken);

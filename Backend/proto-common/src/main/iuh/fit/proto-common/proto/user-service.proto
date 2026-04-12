@@ -10,6 +10,8 @@ service UserService {
   rpc CreateUserProfile(CreateUserProfileRequest) returns (CreateUserProfileResponse);
   rpc DeleteUserProfile(DeleteUserProfileRequest) returns (DeleteUserProfileResponse);
   rpc GetUserProfileByIdentity(GetUserProfileByIdentityRequest) returns (GetUserProfileByIdentityResponse);
+  rpc GetFriendInvitePrivacyByIdentity(GetFriendInvitePrivacyByIdentityRequest) returns (GetFriendInvitePrivacyByIdentityResponse);
+  rpc CancelAccountDeletionRequest(CancelAccountDeletionByIdentityRequest) returns (CancelAccountDeletionByIdentityResponse);
 }
 
 message CreateUserProfileRequest {
@@ -50,4 +52,20 @@ message GetUserProfileByIdentityResponse {
   string avatar = 8;
   bool isActive = 9;
   string email = 10;
+}
+
+message GetFriendInvitePrivacyByIdentityRequest {
+  string identityUserId = 1;
+}
+
+message GetFriendInvitePrivacyByIdentityResponse {
+  bool allowFriendInvites = 1;
+}
+
+message CancelAccountDeletionByIdentityRequest {
+  string identityUserId = 1;
+}
+
+message CancelAccountDeletionByIdentityResponse {
+  bool success = 1;
 }

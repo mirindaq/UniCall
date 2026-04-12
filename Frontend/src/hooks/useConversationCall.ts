@@ -275,9 +275,21 @@ export function useConversationCall({
       setRemoteStream(inboundStream)
 
       pc.ontrack = (event) => {
-        event.streams[0]
-          ?.getTracks()
-          .forEach((track) => inboundStream.addTrack(track))
+        const sourceStream = event.streams[0]
+        if (sourceStream) {
+          sourceStream.getTracks().forEach((track) => {
+            const exists = inboundStream.getTracks().some((t) => t.id === track.id)
+            if (!exists) {
+              inboundStream.addTrack(track)
+            }
+          })
+          return
+        }
+
+        const exists = inboundStream.getTracks().some((t) => t.id === event.track.id)
+        if (!exists) {
+          inboundStream.addTrack(event.track)
+        }
       }
       pc.onicecandidate = (event) => {
         if (!event.candidate) {
@@ -817,22 +829,21 @@ export function useConversationCall({
     const audio = remoteAudioRef.current
     const video = remoteVideoRef.current
 
+    // Always route remote audio through dedicated <audio> for stable playback across browsers.
+    if (audio) {
+      audio.srcObject = remoteStream
+      if (remoteStream) {
+        void audio.play().catch(() => undefined)
+      }
+    }
+
     if (isAudioOnly) {
       if (video) {
         video.srcObject = null
       }
-      if (audio) {
-        audio.srcObject = remoteStream
-        if (remoteStream) {
-          void audio.play().catch(() => undefined)
-        }
-      }
       return
     }
 
-    if (audio) {
-      audio.srcObject = null
-    }
     if (video) {
       video.srcObject = remoteStream
       if (remoteStream) {

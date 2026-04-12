@@ -1,6 +1,14 @@
 import axiosClient from '@/configurations/axios.config';
 import type { PageResponse, ResponseSuccess } from '@/types/api-response';
-import type { UpdateMyProfileRequest, UserProfile, UserSearchItem, UserSearchQuery } from '@/types/user';
+import type {
+  AccountDeletionStatus,
+  FriendInvitePrivacy,
+  RequestAccountDeletionRequest,
+  UpdateMyProfileRequest,
+  UserProfile,
+  UserSearchItem,
+  UserSearchQuery,
+} from '@/types/user';
 
 const USER_API_PREFIX = '/user-service/api/v1/users';
 
@@ -41,6 +49,38 @@ export const userService = {
   getProfileByIdentityUserId: async (identityUserId: string): Promise<ResponseSuccess<UserProfile>> => {
     const response = await axiosClient.get<ResponseSuccess<UserProfile>>(
       `${USER_API_PREFIX}/identity/${identityUserId}`
+    );
+    return response.data;
+  },
+
+  requestAccountDeletion: async (
+    payload: RequestAccountDeletionRequest
+  ): Promise<ResponseSuccess<AccountDeletionStatus>> => {
+    const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
+      `${USER_API_PREFIX}/me/deletion-request`,
+      payload
+    );
+    return response.data;
+  },
+
+  getMyAccountDeletionStatus: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
+    const response = await axiosClient.get<ResponseSuccess<AccountDeletionStatus>>(
+      `${USER_API_PREFIX}/me/deletion-request/status`
+    );
+    return response.data;
+  },
+
+  getMyFriendInvitePrivacy: async (): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.get<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`
+    );
+    return response.data;
+  },
+
+  updateMyFriendInvitePrivacy: async (allowFriendInvites: boolean): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.put<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`,
+      { allowFriendInvites }
     );
     return response.data;
   },

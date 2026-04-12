@@ -2,6 +2,9 @@ import axiosClient from "@/configurations/axios.config"
 import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
+  AccountDeletionStatus,
+  FriendInvitePrivacy,
+  RequestAccountDeletionPayload,
   UpdateMyProfileRequest,
   UserProfile,
   UserSearchItem,
@@ -119,6 +122,47 @@ export const userService = {
         search,
       },
     })
+    return response.data
+  },
+
+  getMyFriendInvitePrivacy: async (): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.get<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`,
+    )
+    return response.data
+  },
+
+  updateMyFriendInvitePrivacy: async (
+    allowFriendInvites: boolean,
+  ): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
+    const response = await axiosClient.put<ResponseSuccess<FriendInvitePrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/friend-invites`,
+      { allowFriendInvites },
+    )
+    return response.data
+  },
+
+  requestMyAccountDeletion: async (
+    payload: RequestAccountDeletionPayload,
+  ): Promise<ResponseSuccess<AccountDeletionStatus>> => {
+    const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
+      `${USER_API_PREFIX}/me/deletion-request`,
+      payload,
+    )
+    return response.data
+  },
+
+  getMyAccountDeletionStatus: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
+    const response = await axiosClient.get<ResponseSuccess<AccountDeletionStatus>>(
+      `${USER_API_PREFIX}/me/deletion-request/status`,
+    )
+    return response.data
+  },
+
+  cancelMyAccountDeletionRequest: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
+    const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
+      `${USER_API_PREFIX}/me/deletion-request/cancel`,
+    )
     return response.data
   },
 }

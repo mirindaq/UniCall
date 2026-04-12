@@ -21,6 +21,8 @@ public interface AuthService {
 
     void changePassword(ChangePasswordRequest request);
 
+    void verifyPassword(String identityUserId, String phoneNumber, String password);
+
     LoginResult login(LoginRequest request);
 
     RefreshResult refresh(String refreshToken);

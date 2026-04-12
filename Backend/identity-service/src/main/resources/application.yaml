@@ -21,6 +21,8 @@ app:
       activation-email-lifespan-seconds: ${KEYCLOAK_ACTIVATION_EMAIL_LIFESPAN_SECONDS:86400}
 
 grpc:
+  server:
+    port: ${IDENTITY_SERVICE_GRPC_PORT:9092}
   client:
     user-service:
       address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
