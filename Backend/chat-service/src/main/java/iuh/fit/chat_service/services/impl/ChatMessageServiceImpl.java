@@ -1,9 +1,12 @@
 package iuh.fit.chat_service.services.impl;
 
 import iuh.fit.chat_service.dtos.request.ChatSendStompPayload;
+import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
+import iuh.fit.chat_service.dtos.request.ForwardMessageRequest;
 import iuh.fit.chat_service.dtos.request.MessageAttachmentRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
+import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.entities.Attachment;
 import iuh.fit.chat_service.entities.Conversation;
@@ -298,6 +301,62 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     }
 
     @Override
+    public ForwardMessageResponse forwardMessage(
+            String identityUserId,
+            String conversationId,
+            String messageId,
+            ForwardMessageRequest request
+    ) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message sourceMessage = requireMessageInConversation(conversationId, messageId);
+
+        List<String> hiddenForIds = sourceMessage.getHiddenForAccountIds();
+        if (hiddenForIds != null && hiddenForIds.contains(identityUserId)) {
+            throw new ResourceNotFoundException("Không tìm thấy tin nhắn");
+        }
+        if (sourceMessage.isRecalled()) {
+            throw new InvalidParamException("Không thể chuyển tiếp tin nhắn đã thu hồi");
+        }
+        if (sourceMessage.getType() == MessageType.CALL) {
+            throw new InvalidParamException("Không thể chuyển tiếp tin nhắn cuộc gọi");
+        }
+
+        List<String> targetConversationIds = resolveForwardTargetConversationIds(identityUserId, conversationId, request);
+        String note = request == null || request.getNote() == null ? "" : request.getNote().trim();
+        MessageType sourceType = sourceMessage.getType() == null ? MessageType.TEXT : sourceMessage.getType();
+        List<MessageAttachmentRequest> sourceAttachments = toAttachmentRequests(sourceMessage.getAttachments());
+
+        for (String targetConversationId : targetConversationIds) {
+            chatConversationService.requireParticipant(targetConversationId, identityUserId);
+
+            if (StringUtils.hasText(note)) {
+                persistAndBroadcast(
+                        identityUserId,
+                        targetConversationId,
+                        note,
+                        MessageType.TEXT,
+                        List.of(),
+                        null
+                );
+            }
+
+            persistAndBroadcast(
+                    identityUserId,
+                    targetConversationId,
+                    sourceMessage.getContent(),
+                    sourceType,
+                    sourceAttachments,
+                    null
+            );
+        }
+
+        return ForwardMessageResponse.builder()
+                .forwardedConversationCount(targetConversationIds.size())
+                .targetConversationIds(targetConversationIds)
+                .build();
+    }
+
+    @Override
     public void hideMessageForMe(String identityUserId, String conversationId, String messageId) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
         Message message = requireMessageInConversation(conversationId, messageId);
@@ -327,6 +386,78 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
 
         return message;
+    }
+
+    private List<String> resolveForwardTargetConversationIds(
+            String identityUserId,
+            String sourceConversationId,
+            ForwardMessageRequest request
+    ) {
+        LinkedHashSet<String> targetConversationIds = new LinkedHashSet<>();
+
+        if (request != null && request.getTargetConversationIds() != null) {
+            for (String rawConversationId : request.getTargetConversationIds()) {
+                if (rawConversationId == null) {
+                    continue;
+                }
+                String conversationId = rawConversationId.trim();
+                if (conversationId.isBlank()) {
+                    continue;
+                }
+                targetConversationIds.add(conversationId);
+            }
+        }
+
+        if (request != null && request.getTargetUserIds() != null) {
+            for (String rawUserId : request.getTargetUserIds()) {
+                if (rawUserId == null) {
+                    continue;
+                }
+                String targetUserId = rawUserId.trim();
+                if (targetUserId.isBlank() || identityUserId.equals(targetUserId)) {
+                    continue;
+                }
+
+                CreateDirectConversationRequest directRequest = new CreateDirectConversationRequest();
+                directRequest.setOtherUserId(targetUserId);
+                String directConversationId = chatConversationService
+                        .getOrCreateDirect(identityUserId, directRequest)
+                        .getIdConversation();
+                if (StringUtils.hasText(directConversationId)) {
+                    targetConversationIds.add(directConversationId);
+                }
+            }
+        }
+
+        targetConversationIds.remove(sourceConversationId);
+        if (targetConversationIds.isEmpty()) {
+            throw new InvalidParamException("Cần chọn ít nhất một nơi nhận để chuyển tiếp");
+        }
+
+        return new ArrayList<>(targetConversationIds);
+    }
+
+    private static List<MessageAttachmentRequest> toAttachmentRequests(List<Attachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return List.of();
+        }
+
+        List<MessageAttachmentRequest> requests = new ArrayList<>(attachments.size());
+        for (Attachment attachment : attachments) {
+            if (attachment == null || attachment.getType() == null || !StringUtils.hasText(attachment.getUrl())) {
+                continue;
+            }
+
+            MessageAttachmentRequest request = new MessageAttachmentRequest();
+            request.setType(attachment.getType());
+            request.setUrl(attachment.getUrl());
+            request.setSize(attachment.getSize());
+            request.setMetaData(attachment.getMetaData());
+            request.setOrder(attachment.getOrder());
+            requests.add(request);
+        }
+
+        return requests;
     }
 
     private String resolveReplyToMessageId(String conversationId, String replyToMessageId) {

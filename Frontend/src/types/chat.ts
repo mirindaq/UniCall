@@ -67,6 +67,17 @@ export interface ChatAttachment {
   order?: number
 }
 
+export type ForwardMessageRequest = {
+  targetConversationIds?: string[]
+  targetUserIds?: string[]
+  note?: string
+}
+
+export type ForwardMessageResponse = {
+  forwardedConversationCount: number
+  targetConversationIds: string[]
+}
+
 export type ConversationType = "DOUBLE" | "GROUP"
 export type GroupParticipantRole = "ADMIN" | "DEPUTY" | "USER"
 

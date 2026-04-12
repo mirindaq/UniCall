@@ -10,6 +10,8 @@ import type {
   CreateGroupConversationResponse,
   DissolveGroupConversationResponse,
   ManageGroupParticipantsResponse,
+  ForwardMessageRequest,
+  ForwardMessageResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
 } from "@/types/chat"
@@ -79,6 +81,17 @@ export const chatService = {
   unpinMessage: async (conversationId: string, messageId: string) => {
     const { data } = await axiosClient.delete<ResponseSuccess<ChatMessageResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`
+    )
+    return data
+  },
+  forwardMessage: async (
+    conversationId: string,
+    messageId: string,
+    payload: ForwardMessageRequest
+  ) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ForwardMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/forward`,
+      payload
     )
     return data
   },

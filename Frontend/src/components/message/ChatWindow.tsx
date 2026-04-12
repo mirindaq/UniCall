@@ -1,4 +1,5 @@
 import {
+  Check,
   CalendarDays,
   ChevronDown,
   Copy,
@@ -48,6 +49,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/auth-context"
 import { useChatPage } from "@/contexts/ChatPageContext"
@@ -57,8 +59,9 @@ import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
+import { friendService } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
-import type { ChatAttachment, ChatMessageResponse, UserRealtimeEvent } from "@/types/chat"
+import type { ChatAttachment, ChatMessageResponse, ConversationResponse, UserRealtimeEvent } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime, formatChatSidebarTime } from "@/utils/chat-display.util"
 import {
   extractFileNameFromFileMessage,
@@ -87,6 +90,18 @@ const GIFS = [
 const SEARCH_PAGE_SIZE = 12
 const SEARCH_DEBOUNCE_MS = 500
 const SEARCH_FILES_PREVIEW_LIMIT = 8
+
+type ForwardTab = "recent" | "groups" | "friends"
+
+type ForwardTargetOption = {
+  key: string
+  mode: "conversation" | "user"
+  conversationId?: string
+  userId?: string
+  label: string
+  subtitle?: string
+  avatar?: string
+}
 
 function renderHighlightedSearchText(content: string, keyword: string): ReactNode {
   const normalizedKeyword = keyword.trim()
@@ -218,6 +233,16 @@ function buildCallMessageCard(
   }
 }
 
+function getDirectPeerId(conversation: ConversationResponse, currentUserId: string | null): string | null {
+  if (conversation.type !== "DOUBLE" || !currentUserId) {
+    return null
+  }
+
+  return (
+    conversation.participantInfos.find((participant) => participant.idAccount !== currentUserId)?.idAccount ?? null
+  )
+}
+
 export default function ChatWindow() {
   const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -253,6 +278,7 @@ export default function ChatWindow() {
     messageFocusRequestId,
     clearMessageFocusRequest,
     conversations,
+    refetchConversations,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -295,6 +321,13 @@ export default function ChatWindow() {
   const [stickerOpen, setStickerOpen] = useState(false)
   const [gifOpen, setGifOpen] = useState(false)
   const [forwardTarget, setForwardTarget] = useState<ChatMessageResponse | null>(null)
+  const [forwardKeyword, setForwardKeyword] = useState("")
+  const [forwardTab, setForwardTab] = useState<ForwardTab>("recent")
+  const [forwardSelectedTargets, setForwardSelectedTargets] = useState<Set<string>>(() => new Set())
+  const [forwardNote, setForwardNote] = useState("")
+  const [forwardFriendOptions, setForwardFriendOptions] = useState<ForwardTargetOption[]>([])
+  const [isLoadingForwardFriends, setIsLoadingForwardFriends] = useState(false)
+  const [isSubmittingForward, setIsSubmittingForward] = useState(false)
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set())
@@ -500,6 +533,184 @@ export default function ChatWindow() {
       setSelectedReplyTargetMessageId(null)
     }
   }, [displayMessages, selectedReplyTargetMessageId])
+
+  const normalizedForwardKeyword = useMemo(() => forwardKeyword.trim().toLowerCase(), [forwardKeyword])
+
+  const directConversationIdByPeerId = useMemo(() => {
+    const directMap = new Map<string, string>()
+    if (!currentUserId) {
+      return directMap
+    }
+
+    for (const conversation of conversations) {
+      if (conversation.type !== "DOUBLE") {
+        continue
+      }
+
+      const peerId = getDirectPeerId(conversation, currentUserId)
+      if (!peerId) {
+        continue
+      }
+      directMap.set(peerId, conversation.idConversation)
+    }
+
+    return directMap
+  }, [conversations, currentUserId])
+
+  const recentForwardOptions = useMemo<ForwardTargetOption[]>(() => {
+    return conversations
+      .filter((conversation) => conversation.idConversation !== selectedConversationId)
+      .map((conversation) => ({
+        key: `conversation:${conversation.idConversation}`,
+        mode: "conversation",
+        conversationId: conversation.idConversation,
+        label: conversationTitle(conversation),
+        subtitle:
+          conversation.type === "GROUP"
+            ? `${conversation.numberMember} thành viên`
+            : conversation.lastMessageContent || "Trò chuyện trực tiếp",
+        avatar: conversationAvatar(conversation),
+      }))
+  }, [conversationAvatar, conversationTitle, conversations, selectedConversationId])
+
+  const groupForwardOptions = useMemo<ForwardTargetOption[]>(() => {
+    return recentForwardOptions.filter((option) => {
+      const conversation = conversations.find((item) => item.idConversation === option.conversationId)
+      return conversation?.type === "GROUP"
+    })
+  }, [conversations, recentForwardOptions])
+
+  useEffect(() => {
+    if (!forwardTarget || !currentUserId) {
+      setForwardFriendOptions([])
+      setIsLoadingForwardFriends(false)
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingForwardFriends(true)
+
+    void friendService
+      .getAllFriends(currentUserId)
+      .then(async (response) => {
+        if (cancelled) {
+          return
+        }
+
+        const peers = Array.from(
+          new Set(
+            (response.data ?? [])
+              .map((friend) =>
+                friend.idAccountSent === currentUserId ? friend.idAccountReceive : friend.idAccountSent,
+              )
+              .filter((peerId): peerId is string => !!peerId && peerId.trim().length > 0),
+          ),
+        )
+
+        if (peers.length === 0) {
+          setForwardFriendOptions([])
+          return
+        }
+
+        const profiles = await Promise.all(
+          peers.map(async (peerId) => {
+            try {
+              const profileResponse = await userService.getProfileByIdentityUserId(peerId)
+              const profile = profileResponse.data
+              const displayName = `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || peerId
+              return {
+                userId: peerId,
+                label: displayName,
+                avatar: profile.avatar ?? undefined,
+              }
+            } catch {
+              return {
+                userId: peerId,
+                label: peerId,
+                avatar: undefined,
+              }
+            }
+          }),
+        )
+
+        if (cancelled) {
+          return
+        }
+
+        const options = profiles
+          .map<ForwardTargetOption | null>((profile) => {
+            const existingDirectConversationId = directConversationIdByPeerId.get(profile.userId)
+            if (existingDirectConversationId && existingDirectConversationId === selectedConversationId) {
+              return null
+            }
+
+            if (existingDirectConversationId) {
+              return {
+                key: `conversation:${existingDirectConversationId}`,
+                mode: "conversation",
+                conversationId: existingDirectConversationId,
+                userId: profile.userId,
+                label: profile.label,
+                subtitle: "Bạn bè",
+                avatar: profile.avatar,
+              }
+            }
+
+            return {
+              key: `user:${profile.userId}`,
+              mode: "user",
+              userId: profile.userId,
+              label: profile.label,
+              subtitle: "Bạn bè",
+              avatar: profile.avatar,
+            }
+          })
+          .filter((item): item is ForwardTargetOption => item != null)
+          .sort((left, right) => left.label.localeCompare(right.label, "vi"))
+
+        setForwardFriendOptions(options)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setForwardFriendOptions([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingForwardFriends(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, directConversationIdByPeerId, forwardTarget, selectedConversationId])
+
+  const allForwardTargetsByKey = useMemo(() => {
+    const targetMap = new Map<string, ForwardTargetOption>()
+    for (const option of [...recentForwardOptions, ...groupForwardOptions, ...forwardFriendOptions]) {
+      targetMap.set(option.key, option)
+    }
+    return targetMap
+  }, [forwardFriendOptions, groupForwardOptions, recentForwardOptions])
+
+  const visibleForwardOptions = useMemo(() => {
+    const source =
+      forwardTab === "groups"
+        ? groupForwardOptions
+        : forwardTab === "friends"
+          ? forwardFriendOptions
+          : recentForwardOptions
+
+    if (!normalizedForwardKeyword) {
+      return source
+    }
+
+    return source.filter((option) => {
+      const haystack = `${option.label} ${option.subtitle ?? ""}`.toLowerCase()
+      return haystack.includes(normalizedForwardKeyword)
+    })
+  }, [forwardFriendOptions, forwardTab, groupForwardOptions, normalizedForwardKeyword, recentForwardOptions])
 
   const searchMatchIds = useMemo(() => {
     return searchMatchMessages.map((message) => message.idMessage)
@@ -959,6 +1170,12 @@ export default function ChatWindow() {
     setSelectedMessageIds(new Set())
     setSelectedPinnedMessageId(null)
     setSelectedReplyTargetMessageId(null)
+    setForwardTarget(null)
+    setForwardKeyword("")
+    setForwardTab("recent")
+    setForwardSelectedTargets(new Set())
+    setForwardNote("")
+    setIsSubmittingForward(false)
     setReplyingTo(null)
     loadingMissingMessageIdsRef.current.clear()
     failedMissingMessageIdsRef.current.clear()
@@ -1403,37 +1620,100 @@ export default function ChatWindow() {
     [mergeIncomingOrUpdatedMessage, selectedConversationId, selectedPinnedMessageId, selectedReplyTargetMessageId],
   )
 
-  const handleForwardTo = useCallback(
-    async (targetConversationId: string) => {
-      if (!forwardTarget) {
-        return
+  const closeForwardDialog = useCallback(() => {
+    setForwardTarget(null)
+    setForwardKeyword("")
+    setForwardTab("recent")
+    setForwardSelectedTargets(new Set())
+    setForwardNote("")
+    setIsSubmittingForward(false)
+  }, [])
+
+  const openForwardDialog = useCallback((message: ChatMessageResponse) => {
+    setForwardTarget(message)
+    setForwardKeyword("")
+    setForwardTab("recent")
+    setForwardSelectedTargets(new Set())
+    setForwardNote("")
+    setIsSubmittingForward(false)
+  }, [])
+
+  const toggleForwardTargetSelection = useCallback((targetKey: string) => {
+    setForwardSelectedTargets((prev) => {
+      const next = new Set(prev)
+      if (next.has(targetKey)) {
+        next.delete(targetKey)
+      } else {
+        next.add(targetKey)
       }
-      const content = (forwardTarget.content ?? "").trim()
-      const attachments = forwardTarget.attachments?.map((a) => ({
-        type: a.type,
-        url: a.url,
-        size: a.size,
-        order: a.order ?? 0,
-      }))
-      if (!content && (!attachments || attachments.length === 0)) {
-        toast.error("Không có nội dung để chuyển")
-        return
-      }
-      try {
-        await chatService.sendMessageRest(
-          targetConversationId,
-          content || " ",
-          forwardTarget.type,
-          attachments && attachments.length > 0 ? attachments : undefined,
-        )
-        toast.success("Đã chuyển tin nhắn")
-        setForwardTarget(null)
-      } catch {
-        toast.error("Chuyển tin nhắn thất bại")
-      }
-    },
-    [forwardTarget],
-  )
+      return next
+    })
+  }, [])
+
+  const handleSubmitForward = useCallback(async () => {
+    if (!selectedConversationId || !forwardTarget) {
+      return
+    }
+
+    const selectedOptions = [...forwardSelectedTargets]
+      .map((targetKey) => allForwardTargetsByKey.get(targetKey))
+      .filter((option): option is ForwardTargetOption => option != null)
+
+    if (selectedOptions.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một nơi nhận")
+      return
+    }
+
+    const targetConversationIds = Array.from(
+      new Set(
+        selectedOptions
+          .filter((option) => option.mode === "conversation" && !!option.conversationId)
+          .map((option) => option.conversationId as string),
+      ),
+    )
+    const targetUserIds = Array.from(
+      new Set(
+        selectedOptions
+          .filter((option) => option.mode === "user" && !!option.userId)
+          .map((option) => option.userId as string),
+      ),
+    )
+
+    if (targetConversationIds.length === 0 && targetUserIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một nơi nhận")
+      return
+    }
+
+    setIsSubmittingForward(true)
+    try {
+      const response = await chatService.forwardMessage(selectedConversationId, forwardTarget.idMessage, {
+        targetConversationIds,
+        targetUserIds,
+        note: forwardNote.trim() || undefined,
+      })
+
+      const forwardedCount = response.data.forwardedConversationCount ?? 0
+      toast.success(
+        forwardedCount > 0
+          ? `Đã chia sẻ tới ${forwardedCount} cuộc trò chuyện`
+          : "Đã chia sẻ tin nhắn",
+      )
+      closeForwardDialog()
+      void refetchConversations()
+    } catch {
+      toast.error("Chia sẻ tin nhắn thất bại")
+    } finally {
+      setIsSubmittingForward(false)
+    }
+  }, [
+    allForwardTargetsByKey,
+    closeForwardDialog,
+    forwardNote,
+    forwardSelectedTargets,
+    forwardTarget,
+    refetchConversations,
+    selectedConversationId,
+  ])
 
   if (!selectedConversationId || !selectedConversation) {
     return (
@@ -2221,7 +2501,7 @@ export default function ChatWindow() {
                                 title="Chuyển tiếp"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setForwardTarget(msg)
+                                  openForwardDialog(msg)
                                 }}
                               >
                                 <Forward className="size-3.5" />
@@ -2470,35 +2750,113 @@ export default function ChatWindow() {
         </div>
       </div>
 
-      <Dialog open={forwardTarget != null} onOpenChange={(open) => !open && setForwardTarget(null)}>
-        <DialogContent className="sm:max-w-md" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Chuyển tin nhắn</DialogTitle>
-            <DialogDescription>Chọn cuộc trò chuyện để gửi bản sao nội dung này.</DialogDescription>
+      <Dialog open={forwardTarget != null} onOpenChange={(open) => !open && closeForwardDialog()}>
+        <DialogContent className="p-0 sm:max-w-xl" showCloseButton>
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle>Chia sẻ</DialogTitle>
+            <DialogDescription>Chọn cuộc trò chuyện hoặc bạn bè để chia sẻ tin nhắn.</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-72">
-            <div className="flex flex-col gap-1 pr-3">
-              {conversations.filter((c) => c.idConversation !== selectedConversationId).length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  Chưa có hội thoại khác để chuyển.
+
+          <div className="space-y-3 border-b px-4 py-3">
+            <Input
+              value={forwardKeyword}
+              onChange={(event) => setForwardKeyword(event.target.value)}
+              placeholder="Tìm kiếm..."
+            />
+
+            <Tabs value={forwardTab} onValueChange={(value) => setForwardTab(value as ForwardTab)}>
+              <TabsList variant="line" className="h-9 p-0">
+                <TabsTrigger value="recent" className="px-2">Gần đây</TabsTrigger>
+                <TabsTrigger value="groups" className="px-2">Nhóm trò chuyện</TabsTrigger>
+                <TabsTrigger value="friends" className="px-2">Bạn bè</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          <ScrollArea className="h-[280px] px-2">
+            <div className="space-y-1 py-2">
+              {forwardTab === "friends" && isLoadingForwardFriends ? (
+                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  <Spinner className="mr-2 size-4" />
+                  Đang tải danh sách bạn bè...
+                </div>
+              ) : null}
+
+              {(forwardTab !== "friends" || !isLoadingForwardFriends) && visibleForwardOptions.length === 0 ? (
+                <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                  Không có nơi nhận phù hợp để chia sẻ.
                 </p>
-              ) : (
-                conversations
-                  .filter((c) => c.idConversation !== selectedConversationId)
-                  .map((c) => (
-                    <Button
-                      key={c.idConversation}
-                      type="button"
-                      variant="ghost"
-                      className="h-auto justify-start px-3 py-2.5 font-normal"
-                      onClick={() => void handleForwardTo(c.idConversation)}
+              ) : null}
+
+              {(forwardTab !== "friends" || !isLoadingForwardFriends) && visibleForwardOptions.map((option) => {
+                const selected = forwardSelectedTargets.has(option.key)
+
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/70",
+                      selected && "bg-blue-50",
+                    )}
+                    onClick={() => toggleForwardTargetSelection(option.key)}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
+                        selected
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-muted-foreground/40 bg-background",
+                      )}
                     >
-                      {conversationTitle(c)}
-                    </Button>
-                  ))
-              )}
+                      {selected ? <Check className="size-3.5" /> : null}
+                    </span>
+                    <Avatar size="default">
+                      <AvatarImage src={option.avatar} alt={option.label} />
+                      <AvatarFallback>{option.label.slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">{option.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{option.subtitle ?? ""}</span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </ScrollArea>
+
+          <div className="space-y-2 border-t bg-muted/20 px-4 py-3">
+            <div className="rounded-md border bg-background px-3 py-2">
+              <p className="text-xs font-medium text-muted-foreground">Chia sẻ tin nhắn</p>
+              <p className="mt-1 line-clamp-2 text-sm text-foreground">
+                {forwardTarget ? messagePlainTextForCopy(forwardTarget) : ""}
+              </p>
+            </div>
+
+            <Input
+              value={forwardNote}
+              onChange={(event) => setForwardNote(event.target.value)}
+              placeholder="Nhập tin nhắn..."
+              maxLength={300}
+            />
+          </div>
+
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <span className="text-xs text-muted-foreground">Đã chọn {forwardSelectedTargets.size} nơi nhận</span>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={closeForwardDialog}>
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={isSubmittingForward || forwardSelectedTargets.size === 0}
+                onClick={() => void handleSubmitForward()}
+              >
+                {isSubmittingForward ? "Đang chia sẻ..." : "Chia sẻ"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

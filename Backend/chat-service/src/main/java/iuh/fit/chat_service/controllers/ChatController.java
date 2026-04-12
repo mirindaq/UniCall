@@ -1,10 +1,12 @@
 package iuh.fit.chat_service.controllers;
 
 import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
+import iuh.fit.chat_service.dtos.request.ForwardMessageRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.dtos.response.FileUploadResponse;
+import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
@@ -155,6 +157,20 @@ public class ChatController {
         MessageResponse data = chatMessageService.unpinMessage(identityUserId, conversationId, messageId);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Bỏ ghim tin nhắn thành công", data)
+        );
+    }
+
+    @PostMapping("/conversations/{conversationId}/messages/{messageId}/forward")
+    public ResponseEntity<ResponseSuccess<ForwardMessageResponse>> forwardMessage(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @RequestBody ForwardMessageRequest request
+    ) {
+        requireUser(identityUserId);
+        ForwardMessageResponse data = chatMessageService.forwardMessage(identityUserId, conversationId, messageId, request);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Chuyển tiếp tin nhắn thành công", data)
         );
     }
 
