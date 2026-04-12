@@ -2,7 +2,9 @@ package iuh.fit.user_service.controllers;
 
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import iuh.fit.user_service.dtos.request.UpdateFriendInvitePrivacyRequest;
+import iuh.fit.user_service.dtos.request.UpdatePhoneSearchPrivacyRequest;
 import iuh.fit.user_service.dtos.response.FriendInvitePrivacyResponse;
+import iuh.fit.user_service.dtos.response.PhoneSearchPrivacyResponse;
 import iuh.fit.user_service.services.UserPrivacyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -50,5 +52,25 @@ public class UserPrivacyController {
     ) {
         FriendInvitePrivacyResponse data = userPrivacyService.getFriendInvitePrivacyByIdentityUserId(identityUserId);
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Get friend invite privacy by identity success", data));
+    }
+
+    @GetMapping("/me/privacy/phone-search")
+    public ResponseEntity<ResponseSuccess<PhoneSearchPrivacyResponse>> getMyPhoneSearchPrivacy(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId
+    ) {
+        PhoneSearchPrivacyResponse data = userPrivacyService.getMyPhoneSearchPrivacy(identityUserId);
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Get phone search privacy success", data));
+    }
+
+    @PutMapping("/me/privacy/phone-search")
+    public ResponseEntity<ResponseSuccess<PhoneSearchPrivacyResponse>> updateMyPhoneSearchPrivacy(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @Valid @RequestBody UpdatePhoneSearchPrivacyRequest request
+    ) {
+        PhoneSearchPrivacyResponse data = userPrivacyService.updateMyPhoneSearchPrivacy(
+                identityUserId,
+                Boolean.TRUE.equals(request.getAllowPhoneSearch())
+        );
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Update phone search privacy success", data));
     }
 }

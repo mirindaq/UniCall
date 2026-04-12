@@ -11,18 +11,24 @@ import { userService } from '@/services/user.service';
 export default function PrivacySettingsScreen() {
   const router = useRouter();
   const [allowFriendInvites, setAllowFriendInvites] = useState(true);
+  const [allowPhoneSearch, setAllowPhoneSearch] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdatingFriendInvites, setIsUpdatingFriendInvites] = useState(false);
+  const [isUpdatingPhoneSearch, setIsUpdatingPhoneSearch] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const response = await userService.getMyFriendInvitePrivacy();
+        const [friendInviteResponse, phoneSearchResponse] = await Promise.all([
+          userService.getMyFriendInvitePrivacy(),
+          userService.getMyPhoneSearchPrivacy(),
+        ]);
         if (!mounted) {
           return;
         }
-        setAllowFriendInvites(Boolean(response.data.allowFriendInvites));
+        setAllowFriendInvites(Boolean(friendInviteResponse.data.allowFriendInvites));
+        setAllowPhoneSearch(Boolean(phoneSearchResponse.data.allowPhoneSearch));
       } catch {
         if (!mounted) {
           return;
@@ -44,15 +50,16 @@ export default function PrivacySettingsScreen() {
   }, []);
 
   const switchValue = useMemo(() => allowFriendInvites, [allowFriendInvites]);
+  const phoneSearchSwitchValue = useMemo(() => allowPhoneSearch, [allowPhoneSearch]);
 
-  const handleToggle = async (nextValue: boolean) => {
-    if (isUpdating || isLoading) {
+  const handleToggleFriendInvites = async (nextValue: boolean) => {
+    if (isUpdatingFriendInvites || isLoading) {
       return;
     }
 
     const previous = allowFriendInvites;
     setAllowFriendInvites(nextValue);
-    setIsUpdating(true);
+    setIsUpdatingFriendInvites(true);
 
     try {
       await userService.updateMyFriendInvitePrivacy(nextValue);
@@ -67,7 +74,35 @@ export default function PrivacySettingsScreen() {
         text1: 'Không thể cập nhật cài đặt',
       });
     } finally {
-      setIsUpdating(false);
+      setIsUpdatingFriendInvites(false);
+    }
+  };
+
+  const handleTogglePhoneSearch = async (nextValue: boolean) => {
+    if (isUpdatingPhoneSearch || isLoading) {
+      return;
+    }
+
+    const previous = allowPhoneSearch;
+    setAllowPhoneSearch(nextValue);
+    setIsUpdatingPhoneSearch(true);
+
+    try {
+      await userService.updateMyPhoneSearchPrivacy(nextValue);
+      Toast.show({
+        type: 'success',
+        text1: nextValue
+          ? 'Đã bật cho phép tìm kiếm bằng số điện thoại'
+          : 'Đã tắt cho phép tìm kiếm bằng số điện thoại',
+      });
+    } catch {
+      setAllowPhoneSearch(previous);
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể cập nhật cài đặt',
+      });
+    } finally {
+      setIsUpdatingPhoneSearch(false);
     }
   };
 
@@ -101,9 +136,32 @@ export default function PrivacySettingsScreen() {
           <Switch
             value={switchValue}
             onValueChange={(value) => {
-              void handleToggle(value);
+              void handleToggleFriendInvites(value);
             }}
-            disabled={isLoading || isUpdating}
+            disabled={isLoading || isUpdatingFriendInvites}
+            trackColor={{ false: '#d1d5db', true: '#1f6fff' }}
+            thumbColor="#ffffff"
+          />
+        </View>
+      </View>
+
+      <View className="mt-3 bg-white px-5 py-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 pr-4">
+            <Text allowFontScaling={false} className="text-[17px] text-slate-900">
+              Cho phép người khác tìm kiếm bằng số điện thoại
+            </Text>
+            <Text allowFontScaling={false} className="mt-1 text-[13px] text-slate-500">
+              Khi tắt, người khác sẽ không thể tìm thấy bạn bằng số điện thoại.
+            </Text>
+          </View>
+
+          <Switch
+            value={phoneSearchSwitchValue}
+            onValueChange={(value) => {
+              void handleTogglePhoneSearch(value);
+            }}
+            disabled={isLoading || isUpdatingPhoneSearch}
             trackColor={{ false: '#d1d5db', true: '#1f6fff' }}
             thumbColor="#ffffff"
           />

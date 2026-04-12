@@ -19,6 +19,7 @@ import { toast } from "sonner"
 
 import IncomingCallPopup from "@/components/message/IncomingCallPopup"
 import { UserProfileDialog } from "@/components/profile/UserProfileDialog"
+import { UserSettingsDialog } from "@/components/profile/UserSettingsDialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +71,7 @@ export function UserLayout() {
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [me, setMe] = useState<UserProfile | null>(null)
   const [globalCallPeer, setGlobalCallPeer] = useState<{ name: string; avatar?: string } | null>(null)
 
@@ -225,7 +227,10 @@ export function UserLayout() {
                 <User className="mr-2 size-4.5 text-slate-700" />
                 <span className="text-sm text-slate-800">Thông tin tài khoản</span>
               </DropdownMenuItem>
-              <DropdownMenuItem className="h-10 rounded-md px-2.5">
+              <DropdownMenuItem
+                className="h-10 rounded-md px-2.5"
+                onSelect={() => setIsSettingsOpen(true)}
+              >
                 <Settings className="mr-2 size-4.5 text-slate-700" />
                 <span className="text-sm text-slate-800">Cài đặt</span>
               </DropdownMenuItem>
@@ -289,6 +294,10 @@ export function UserLayout() {
         open={isProfileOpen}
         onOpenChange={setIsProfileOpen}
         onProfileChanged={(profile) => setMe(profile)}
+      />
+      <UserSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
       />
 
       {!isOnChatRoute ? (

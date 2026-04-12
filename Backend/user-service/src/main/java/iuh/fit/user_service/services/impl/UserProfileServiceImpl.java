@@ -200,6 +200,16 @@ public class UserProfileServiceImpl implements UserProfileService {
         String mergedSearch = mergeSearchWithKeyword(search, keyword);
         SpecificationBuildQuery<User> buildQuery = SearchQueryParser.parse(mergedSearch);
         buildQuery.withCustom((root, query, cb) -> cb.isTrue(root.get("isActive")));
+        if (keyword != null && !keyword.isBlank()) {
+            String normalizedKeyword = keyword.trim().toLowerCase();
+            String likePattern = "%" + normalizedKeyword + "%";
+            buildQuery.withCustom((root, query, cb) -> cb.or(
+                    cb.isTrue(root.get("allowPhoneSearch")),
+                    cb.like(cb.lower(root.get("firstName")), likePattern),
+                    cb.like(cb.lower(root.get("lastName")), likePattern),
+                    cb.like(cb.lower(root.get("email")), likePattern)
+            ));
+        }
 
         int safePage = Math.max(page, 1);
         int safeLimit = Math.max(1, Math.min(limit, 30));

@@ -12,6 +12,7 @@ export type UserProfile = {
   deletionPending?: boolean;
   deletionRequestedAt?: string | null;
   allowFriendInvites?: boolean;
+  allowPhoneSearch?: boolean;
 };
 
 export type UpdateMyProfileRequest = {
@@ -55,4 +56,9 @@ export type AccountDeletionStatus = {
 export type FriendInvitePrivacy = {
   identityUserId: string;
   allowFriendInvites: boolean;
+};
+
+export type PhoneSearchPrivacy = {
+  identityUserId: string;
+  allowPhoneSearch: boolean;
 };
