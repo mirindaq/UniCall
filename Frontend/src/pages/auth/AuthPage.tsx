@@ -46,6 +46,8 @@ const PHONE_COUNTRY_OPTIONS: CountryOption[] = [
 ]
 
 const REGISTER_EMAIL_DOMAIN = "@gmail.com"
+const STRONG_PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 
 function normalizePhoneInput(value: string) {
   return value.replace(/\D/g, "").slice(0, 15)
@@ -123,17 +125,15 @@ export function AuthPage() {
   const [showOtpDialog, setShowOtpDialog] = useState(false)
   const [otpCode, setOtpCode] = useState("")
   const [otpPhoneNumber, setOtpPhoneNumber] = useState("")
-  const [otpPurpose, setOtpPurpose] = useState<"login" | "register" | null>(
-    null
-  )
+  const [otpPurpose, setOtpPurpose] = useState<"register" | null>(null)
+  const [hasAutoSentOtp, setHasAutoSentOtp] = useState(false)
   const [confirmationResult, setConfirmationResult] =
     useState<ConfirmationResult | null>(null)
   const [isSendingOtp, setIsSendingOtp] = useState(false)
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
-  const [pendingLoginPayload, setPendingLoginPayload] =
-    useState<LoginRequest | null>(null)
   const [pendingRegisterPayload, setPendingRegisterPayload] =
     useState<RegisterRequest | null>(null)
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
   const [recaptchaVerifier, setRecaptchaVerifier] =
     useState<RecaptchaVerifier | null>(null)
 
@@ -186,8 +186,8 @@ export function AuthPage() {
     setOtpCode("")
     setOtpPhoneNumber("")
     setOtpPurpose(null)
+    setHasAutoSentOtp(false)
     setConfirmationResult(null)
-    setPendingLoginPayload(null)
     setPendingRegisterPayload(null)
 
     if (recaptchaVerifier) {
@@ -209,24 +209,36 @@ export function AuthPage() {
     return verifier
   }
 
-  const openOtpDialog = (
-    purpose: "login" | "register",
-    phoneNumber: string,
-    payload: LoginRequest | RegisterRequest
-  ) => {
+  const openOtpDialog = (phoneNumber: string, payload: RegisterRequest) => {
     resetOtpFlow()
-    setOtpPurpose(purpose)
+    setOtpPurpose("register")
     setOtpPhoneNumber(phoneNumber)
-
-    if (purpose === "login") {
-      setPendingLoginPayload(payload as LoginRequest)
-    } else {
-      setPendingRegisterPayload(payload as RegisterRequest)
-    }
+    setPendingRegisterPayload(payload)
 
     setShowOtpDialog(true)
     toast.info(`Vui lòng xác thực OTP gửi đến số ${phoneNumber}.`)
   }
+
+  useEffect(() => {
+    if (!showOtpDialog || otpPurpose !== "register" || hasAutoSentOtp) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      const recaptchaContainer = document.getElementById(
+        "firebase-recaptcha-container"
+      )
+
+      if (!recaptchaContainer) {
+        return
+      }
+
+      setHasAutoSentOtp(true)
+      void handleSendOtp(otpPhoneNumber)
+    }, 150)
+
+    return () => window.clearTimeout(timer)
+  }, [showOtpDialog, otpPurpose, hasAutoSentOtp, otpPhoneNumber])
 
   const handleSendOtp = async (phoneNumberOverride?: string) => {
     const targetPhoneNumber = (phoneNumberOverride ?? otpPhoneNumber).trim()
@@ -274,23 +286,6 @@ export function AuthPage() {
     navigate(AUTH_PATH.LOGIN)
   }
 
-  const doLoginAfterOtp = async (
-    firebaseIdToken: string,
-    payload: LoginRequest
-  ) => {
-    const response = await authService.login({
-      ...payload,
-      firebaseIdToken,
-    })
-
-    setAuthenticated()
-    setShowResendVerification(false)
-    toast.success(response.message || "Đăng nhập thành công")
-    setShowOtpDialog(false)
-    resetOtpFlow()
-    navigate(AUTH_PATH.HOME)
-  }
-
   const handleVerifyOtp = async () => {
     if (!confirmationResult) {
       toast.error("Vui lòng gửi OTP trước.")
@@ -331,11 +326,6 @@ export function AuthPage() {
           return
         }
 
-        if (otpPurpose === "login" && pendingLoginPayload) {
-          await doLoginAfterOtp(firebaseIdToken, pendingLoginPayload)
-          return
-        }
-
         toast.error("Dữ liệu OTP không hợp lệ.")
       } catch (authError) {
         clearAuthenticated()
@@ -343,16 +333,8 @@ export function AuthPage() {
           authError,
           "Đăng nhập/đăng ký thất bại."
         )
-
-        if (otpPurpose === "login" && isEmailNotVerifiedError(authMessage)) {
-          setShowResendVerification(true)
-          toast.error(
-            "Tài khoản chưa kích hoạt. Vui lòng xác nhận email trước khi đăng nhập."
-          )
-        } else {
-          setShowResendVerification(false)
-          toast.error(authMessage)
-        }
+        setShowResendVerification(false)
+        toast.error(authMessage)
       }
     } finally {
       setIsVerifyingOtp(false)
@@ -387,8 +369,10 @@ export function AuthPage() {
       return
     }
 
-    if (!registerData.password || registerData.password.length < 6) {
-      toast.error("Mật khẩu phải có ít nhất 6 ký tự.")
+    if (!STRONG_PASSWORD_REGEX.test(registerData.password)) {
+      toast.error(
+        "Mật khẩu tối thiểu 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt."
+      )
       return
     }
 
@@ -399,10 +383,10 @@ export function AuthPage() {
       firebaseIdToken: "",
     }
 
-    openOtpDialog("register", payload.phoneNumber, payload)
+    openOtpDialog(payload.phoneNumber, payload)
   }
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!isValidVietnamPhoneForBackend(loginData.phoneNumber)) {
@@ -423,7 +407,30 @@ export function AuthPage() {
       firebaseIdToken: "",
     }
 
-    openOtpDialog("login", payload.phoneNumber, payload)
+    setIsSubmittingLogin(true)
+
+    try {
+      const response = await authService.login(payload)
+      setAuthenticated()
+      setShowResendVerification(false)
+      toast.success(response.message || "Đăng nhập thành công")
+      navigate(AUTH_PATH.HOME)
+    } catch (error) {
+      clearAuthenticated()
+      const message = extractErrorMessage(error, "Đăng nhập thất bại.")
+
+      if (isEmailNotVerifiedError(message)) {
+        setShowResendVerification(true)
+        toast.error(
+          "Tài khoản chưa kích hoạt. Vui lòng xác nhận email trước khi đăng nhập."
+        )
+      } else {
+        setShowResendVerification(false)
+        toast.error(message)
+      }
+    } finally {
+      setIsSubmittingLogin(false)
+    }
   }
 
   const handleResendVerificationEmail = async () => {
@@ -621,9 +628,9 @@ export function AuthPage() {
                 <Button
                   type="submit"
                   className="mt-2 h-11 w-full bg-sky-500 text-white hover:bg-sky-600"
-                  disabled={isOtpBusy}
+                  disabled={isSubmittingLogin}
                 >
-                  {isOtpBusy ? "Đang xử lý..." : "Đăng nhập"}
+                  {isSubmittingLogin ? "Dang dang nhap..." : "Đăng nhập"}
                 </Button>
 
                 <button
@@ -807,7 +814,7 @@ export function AuthPage() {
                   <Input
                     id="register-password"
                     type="password"
-                    placeholder="Tối thiểu 6 ký tự"
+                    placeholder="Toi thieu 8 ky tu: hoa, thuong, so, ky tu dac biet"
                     value={registerData.password}
                     onChange={(event) =>
                       setRegisterData({
@@ -816,7 +823,7 @@ export function AuthPage() {
                       })
                     }
                     required
-                    minLength={6}
+                    minLength={8}
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
                 </div>
@@ -832,7 +839,7 @@ export function AuthPage() {
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
                 </div>
@@ -898,13 +905,15 @@ export function AuthPage() {
                 onClick={() => void handleSendOtp()}
                 disabled={isSendingOtp}
               >
-                {isSendingOtp ? "Đang gửi OTP..." : "Gửi OTP"}
+                {isSendingOtp ? "Dang gui OTP..." : "Gửi lại OTP"}
               </Button>
 
               <Button
                 type="button"
                 onClick={() => void handleVerifyOtp()}
-                disabled={isVerifyingOtp || !otpCode.trim()}
+                disabled={
+                  isVerifyingOtp || !confirmationResult || !otpCode.trim()
+                }
                 className="bg-sky-500 text-white hover:bg-sky-600"
               >
                 {isVerifyingOtp ? "Đang xác thực..." : "Xác thực"}

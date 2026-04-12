@@ -61,7 +61,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResult login(LoginRequest request) {
-        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
             throw new UnauthenticatedException("Missing access token from identity provider");

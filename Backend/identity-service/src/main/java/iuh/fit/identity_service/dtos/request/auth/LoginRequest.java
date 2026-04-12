@@ -13,6 +13,5 @@ public class LoginRequest {
     @NotBlank(message = "Password is required")
     private String password;
 
-    @NotBlank(message = "Firebase OTP token is required")
     private String firebaseIdToken;
 }
