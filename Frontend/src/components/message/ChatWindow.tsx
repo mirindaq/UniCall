@@ -321,6 +321,7 @@ export default function ChatWindow() {
   const [stickerOpen, setStickerOpen] = useState(false)
   const [gifOpen, setGifOpen] = useState(false)
   const [forwardTarget, setForwardTarget] = useState<ChatMessageResponse | null>(null)
+  const [forwardSourceMessageIds, setForwardSourceMessageIds] = useState<string[]>([])
   const [forwardKeyword, setForwardKeyword] = useState("")
   const [forwardTab, setForwardTab] = useState<ForwardTab>("recent")
   const [forwardSelectedTargets, setForwardSelectedTargets] = useState<Set<string>>(() => new Set())
@@ -331,6 +332,8 @@ export default function ChatWindow() {
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set())
+  const [isRecallingSelectedMessages, setIsRecallingSelectedMessages] = useState(false)
+  const [isDeletingSelectedMessages, setIsDeletingSelectedMessages] = useState(false)
   const [selectedPinnedMessageId, setSelectedPinnedMessageId] = useState<string | null>(null)
   const [selectedReplyTargetMessageId, setSelectedReplyTargetMessageId] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{ url: string; alt: string } | null>(null)
@@ -711,6 +714,34 @@ export default function ChatWindow() {
       return haystack.includes(normalizedForwardKeyword)
     })
   }, [forwardFriendOptions, forwardTab, groupForwardOptions, normalizedForwardKeyword, recentForwardOptions])
+
+  const selectedMessages = useMemo(() => {
+    if (selectedMessageIds.size === 0) {
+      return [] as ChatMessageResponse[]
+    }
+    return displayMessages.filter((message) => selectedMessageIds.has(message.idMessage))
+  }, [displayMessages, selectedMessageIds])
+
+  const canRecallSelectedMessages = useMemo(() => {
+    if (!currentUserId || selectedMessages.length === 0) {
+      return false
+    }
+
+    return selectedMessages.every(
+      (message) =>
+        message.idAccountSent === currentUserId
+        && !message.recalled
+        && message.type !== "CALL",
+    )
+  }, [currentUserId, selectedMessages])
+
+  const canForwardSelectedMessages = useMemo(() => {
+    if (selectedMessages.length === 0) {
+      return false
+    }
+
+    return selectedMessages.every((message) => !message.recalled && message.type !== "CALL")
+  }, [selectedMessages])
 
   const searchMatchIds = useMemo(() => {
     return searchMatchMessages.map((message) => message.idMessage)
@@ -1168,9 +1199,12 @@ export default function ChatWindow() {
   useEffect(() => {
     setMultiSelectActive(false)
     setSelectedMessageIds(new Set())
+    setIsRecallingSelectedMessages(false)
+    setIsDeletingSelectedMessages(false)
     setSelectedPinnedMessageId(null)
     setSelectedReplyTargetMessageId(null)
     setForwardTarget(null)
+    setForwardSourceMessageIds([])
     setForwardKeyword("")
     setForwardTab("recent")
     setForwardSelectedTargets(new Set())
@@ -1596,6 +1630,141 @@ export default function ChatWindow() {
     [removeMessageLocally, selectedConversationId],
   )
 
+  const handleCopySelectedMessages = useCallback(async () => {
+    if (selectedMessages.length === 0) {
+      return
+    }
+
+    const copiedContent = selectedMessages
+      .map((message) => messagePlainTextForCopy(message))
+      .filter((content) => content.trim().length > 0)
+      .join("\n")
+
+    if (!copiedContent) {
+      toast.error("Không có nội dung để sao chép")
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(copiedContent)
+      toast.success(
+        selectedMessages.length === 1
+          ? "Đã sao chép tin nhắn"
+          : `Đã sao chép ${selectedMessages.length} tin nhắn`,
+      )
+    } catch {
+      toast.error("Không sao chép được")
+    }
+  }, [selectedMessages])
+
+  const handleForwardSelectedMessages = useCallback(() => {
+    if (selectedMessages.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 tin nhắn để chia sẻ")
+      return
+    }
+
+    if (!canForwardSelectedMessages) {
+      toast.error("Chỉ có thể chia sẻ các tin nhắn chưa thu hồi và không phải cuộc gọi")
+      return
+    }
+
+    setForwardTarget(selectedMessages[0])
+    setForwardSourceMessageIds(selectedMessages.map((message) => message.idMessage))
+    setForwardKeyword("")
+    setForwardTab("recent")
+    setForwardSelectedTargets(new Set())
+    setForwardNote("")
+    setIsSubmittingForward(false)
+  }, [canForwardSelectedMessages, selectedMessages])
+
+  const handleRecallSelectedMessages = useCallback(async () => {
+    if (!selectedConversationId || selectedMessages.length === 0 || !canRecallSelectedMessages) {
+      return
+    }
+
+    setIsRecallingSelectedMessages(true)
+    try {
+      const results = await Promise.allSettled(
+        selectedMessages.map((message) => chatService.recallMessage(selectedConversationId, message.idMessage)),
+      )
+
+      let successCount = 0
+      const failedMessageIds = new Set<string>()
+
+      results.forEach((result, index) => {
+        const message = selectedMessages[index]
+        if (result.status === "fulfilled") {
+          mergeIncomingOrUpdatedMessage(result.value.data)
+          successCount += 1
+          return
+        }
+        failedMessageIds.add(message.idMessage)
+      })
+
+      if (successCount > 0) {
+        toast.success(successCount === 1 ? "Đã thu hồi 1 tin nhắn" : `Đã thu hồi ${successCount} tin nhắn`)
+      }
+
+      if (failedMessageIds.size > 0) {
+        toast.error(
+          failedMessageIds.size === 1
+            ? "Không thu hồi được 1 tin nhắn"
+            : `Không thu hồi được ${failedMessageIds.size} tin nhắn`,
+        )
+        setSelectedMessageIds(failedMessageIds)
+      } else {
+        setMultiSelectActive(false)
+        setSelectedMessageIds(new Set())
+      }
+    } finally {
+      setIsRecallingSelectedMessages(false)
+    }
+  }, [canRecallSelectedMessages, mergeIncomingOrUpdatedMessage, selectedConversationId, selectedMessages])
+
+  const handleHideSelectedMessages = useCallback(async () => {
+    if (!selectedConversationId || selectedMessages.length === 0) {
+      return
+    }
+
+    setIsDeletingSelectedMessages(true)
+    try {
+      const results = await Promise.allSettled(
+        selectedMessages.map((message) => chatService.hideMessageForMe(selectedConversationId, message.idMessage)),
+      )
+
+      let successCount = 0
+      const failedMessageIds = new Set<string>()
+
+      results.forEach((result, index) => {
+        const message = selectedMessages[index]
+        if (result.status === "fulfilled") {
+          removeMessageLocally(message.idMessage)
+          successCount += 1
+          return
+        }
+        failedMessageIds.add(message.idMessage)
+      })
+
+      if (successCount > 0) {
+        toast.success(successCount === 1 ? "Đã xóa 1 tin nhắn ở phía bạn" : `Đã xóa ${successCount} tin nhắn ở phía bạn`)
+      }
+
+      if (failedMessageIds.size > 0) {
+        toast.error(
+          failedMessageIds.size === 1
+            ? "Không xóa được 1 tin nhắn"
+            : `Không xóa được ${failedMessageIds.size} tin nhắn`,
+        )
+        setSelectedMessageIds(failedMessageIds)
+      } else {
+        setMultiSelectActive(false)
+        setSelectedMessageIds(new Set())
+      }
+    } finally {
+      setIsDeletingSelectedMessages(false)
+    }
+  }, [removeMessageLocally, selectedConversationId, selectedMessages])
+
   const handleTogglePinMessage = useCallback(
     async (msg: ChatMessageResponse) => {
       if (!selectedConversationId) {
@@ -1622,6 +1791,7 @@ export default function ChatWindow() {
 
   const closeForwardDialog = useCallback(() => {
     setForwardTarget(null)
+    setForwardSourceMessageIds([])
     setForwardKeyword("")
     setForwardTab("recent")
     setForwardSelectedTargets(new Set())
@@ -1631,6 +1801,7 @@ export default function ChatWindow() {
 
   const openForwardDialog = useCallback((message: ChatMessageResponse) => {
     setForwardTarget(message)
+    setForwardSourceMessageIds([message.idMessage])
     setForwardKeyword("")
     setForwardTab("recent")
     setForwardSelectedTargets(new Set())
@@ -1651,7 +1822,18 @@ export default function ChatWindow() {
   }, [])
 
   const handleSubmitForward = useCallback(async () => {
-    if (!selectedConversationId || !forwardTarget) {
+    if (!selectedConversationId) {
+      return
+    }
+
+    const sourceMessageIds =
+      forwardSourceMessageIds.length > 0
+        ? forwardSourceMessageIds
+        : forwardTarget
+          ? [forwardTarget.idMessage]
+          : []
+
+    if (sourceMessageIds.length === 0) {
       return
     }
 
@@ -1686,19 +1868,43 @@ export default function ChatWindow() {
 
     setIsSubmittingForward(true)
     try {
-      const response = await chatService.forwardMessage(selectedConversationId, forwardTarget.idMessage, {
-        targetConversationIds,
-        targetUserIds,
-        note: forwardNote.trim() || undefined,
-      })
+      const trimmedNote = forwardNote.trim()
+      let successCount = 0
+      let forwardedConversationCount = 0
 
-      const forwardedCount = response.data.forwardedConversationCount ?? 0
-      toast.success(
-        forwardedCount > 0
-          ? `Đã chia sẻ tới ${forwardedCount} cuộc trò chuyện`
-          : "Đã chia sẻ tin nhắn",
-      )
+      for (let index = 0; index < sourceMessageIds.length; index += 1) {
+        const sourceMessageId = sourceMessageIds[index]
+        const response = await chatService.forwardMessage(selectedConversationId, sourceMessageId, {
+          targetConversationIds,
+          targetUserIds,
+          note: index === 0 && trimmedNote ? trimmedNote : undefined,
+        })
+
+        successCount += 1
+        if (forwardedConversationCount === 0) {
+          forwardedConversationCount = response.data.forwardedConversationCount ?? 0
+        }
+      }
+
+      if (sourceMessageIds.length === 1) {
+        toast.success(
+          forwardedConversationCount > 0
+            ? `Đã chia sẻ tới ${forwardedConversationCount} cuộc trò chuyện`
+            : "Đã chia sẻ tin nhắn",
+        )
+      } else {
+        toast.success(
+          forwardedConversationCount > 0
+            ? `Đã chia sẻ ${successCount} tin nhắn tới ${forwardedConversationCount} cuộc trò chuyện`
+            : `Đã chia sẻ ${successCount} tin nhắn`,
+        )
+      }
+
       closeForwardDialog()
+      if (multiSelectActive) {
+        setMultiSelectActive(false)
+        setSelectedMessageIds(new Set())
+      }
       void refetchConversations()
     } catch {
       toast.error("Chia sẻ tin nhắn thất bại")
@@ -1708,9 +1914,11 @@ export default function ChatWindow() {
   }, [
     allForwardTargetsByKey,
     closeForwardDialog,
+    forwardSourceMessageIds,
     forwardNote,
     forwardSelectedTargets,
     forwardTarget,
+    multiSelectActive,
     refetchConversations,
     selectedConversationId,
   ])
@@ -2585,19 +2793,75 @@ export default function ChatWindow() {
       {multiSelectActive ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">
-            Đã chọn <strong className="text-foreground">{selectedMessageIds.size}</strong> tin nhắn
+            <strong className="text-foreground">{selectedMessageIds.size}</strong> Đã chọn
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setMultiSelectActive(false)
-              setSelectedMessageIds(new Set())
-            }}
-          >
-            Xong
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={selectedMessages.length === 0}
+              onClick={() => void handleCopySelectedMessages()}
+            >
+              <Copy className="mr-1.5 size-3.5" />
+              Sao chép
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={!canForwardSelectedMessages || isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={handleForwardSelectedMessages}
+            >
+              <Forward className="mr-1.5 size-3.5" />
+              Chia sẻ
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title={
+                canRecallSelectedMessages
+                  ? "Thu hồi các tin nhắn đã chọn"
+                  : "Chỉ thu hồi được khi tất cả tin đã chọn là tin nhắn của bạn"
+              }
+              className={cn(
+                "h-8 rounded-full",
+                canRecallSelectedMessages && "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700",
+              )}
+              disabled={!canRecallSelectedMessages || isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={() => void handleRecallSelectedMessages()}
+            >
+              <Undo2 className="mr-1.5 size-3.5" />
+              {isRecallingSelectedMessages ? "Đang thu hồi..." : "Thu hồi"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full text-red-600 hover:text-red-700"
+              disabled={selectedMessages.length === 0 || isDeletingSelectedMessages || isRecallingSelectedMessages}
+              onClick={() => void handleHideSelectedMessages()}
+            >
+              <Trash2 className="mr-1.5 size-3.5" />
+              {isDeletingSelectedMessages ? "Đang xóa..." : "Xóa"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={() => {
+                setMultiSelectActive(false)
+                setSelectedMessageIds(new Set())
+              }}
+            >
+              Hủy
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -2750,7 +3014,10 @@ export default function ChatWindow() {
         </div>
       </div>
 
-      <Dialog open={forwardTarget != null} onOpenChange={(open) => !open && closeForwardDialog()}>
+      <Dialog
+        open={forwardTarget != null || forwardSourceMessageIds.length > 0}
+        onOpenChange={(open) => !open && closeForwardDialog()}
+      >
         <DialogContent className="p-0 sm:max-w-xl" showCloseButton>
           <DialogHeader className="border-b px-4 py-3">
             <DialogTitle>Chia sẻ</DialogTitle>
@@ -2829,7 +3096,11 @@ export default function ChatWindow() {
             <div className="rounded-md border bg-background px-3 py-2">
               <p className="text-xs font-medium text-muted-foreground">Chia sẻ tin nhắn</p>
               <p className="mt-1 line-clamp-2 text-sm text-foreground">
-                {forwardTarget ? messagePlainTextForCopy(forwardTarget) : ""}
+                {forwardSourceMessageIds.length > 1
+                  ? `Đã chọn ${forwardSourceMessageIds.length} tin nhắn để chia sẻ`
+                  : forwardTarget
+                    ? messagePlainTextForCopy(forwardTarget)
+                    : ""}
               </p>
             </div>
 
