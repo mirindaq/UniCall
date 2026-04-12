@@ -113,15 +113,16 @@ function buildCallMessageCard(
   const info = msg.callInfo
   if (!info || !currentUserId) {
     return {
-      title: "Cuộc gọi thoại",
+      title: "Cuộc gọi",
       subtitle: "Gọi lại",
       tone: "neutral",
     }
   }
+  const callKind = info.audioOnly ? "thoại" : "video"
   const isCaller = info.callerUserId === currentUserId
   if (info.outcome === "COMPLETED") {
     return {
-      title: isCaller ? "Cuộc gọi thoại đi" : "Cuộc gọi thoại đến",
+      title: isCaller ? `Cuộc gọi ${callKind} đi` : `Cuộc gọi ${callKind} đến`,
       subtitle: formatCallDuration(info.durationSeconds),
       tone: "success",
     }
@@ -129,20 +130,20 @@ function buildCallMessageCard(
   if (info.outcome === "NO_ANSWER") {
     return {
       title: isCaller ? "Bạn đã hủy" : "Bạn bị nhỡ",
-      subtitle: "Cuộc gọi thoại",
+      subtitle: `Cuộc gọi ${callKind}`,
       tone: "danger",
     }
   }
   if (info.outcome === "REJECTED") {
     return {
       title: isCaller ? "Cuộc gọi bị từ chối" : "Bạn đã từ chối",
-      subtitle: "Cuộc gọi thoại",
+      subtitle: `Cuộc gọi ${callKind}`,
       tone: "danger",
     }
   }
   return {
     title: "Cuộc gọi đã kết thúc",
-    subtitle: "Cuộc gọi thoại",
+    subtitle: `Cuộc gọi ${callKind}`,
     tone: "neutral",
   }
 }
@@ -714,15 +715,18 @@ export default function ChatWindow() {
           phase={conversationCall.phase === "idle" ? "outgoing" : conversationCall.phase}
           callerName={callModalName}
           callerAvatar={callModalAvatar}
+          audioOnly={conversationCall.activeCall?.audioOnly ?? true}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
           statusMessage={conversationCall.statusMessage}
+          remoteAudioRef={conversationCall.remoteAudioRef}
+          remoteVideoRef={conversationCall.remoteVideoRef}
+          localVideoRef={conversationCall.localVideoRef}
           onAccept={conversationCall.acceptIncomingCall}
           onReject={conversationCall.rejectIncomingCall}
           onEnd={conversationCall.endCurrentCall}
         />
-        <audio ref={conversationCall.remoteAudioRef} autoPlay playsInline className="hidden" />
       </div>
     )
   }
@@ -768,7 +772,8 @@ export default function ChatWindow() {
             variant="ghost"
             size="icon-sm"
             title="Cuộc gọi video"
-            onClick={() => toast.info("Tạm thời chỉ hỗ trợ gọi thoại 1-1")}
+            disabled={!conversationCall.canStartVideoCall}
+            onClick={() => conversationCall.startVideoCall()}
           >
             <Video className="h-5 w-5" />
           </Button>
@@ -788,15 +793,18 @@ export default function ChatWindow() {
         phase={conversationCall.phase === "idle" ? "outgoing" : conversationCall.phase}
         callerName={callModalName}
         callerAvatar={callModalAvatar}
+        audioOnly={conversationCall.activeCall?.audioOnly ?? true}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
         statusMessage={conversationCall.statusMessage}
+        remoteAudioRef={conversationCall.remoteAudioRef}
+        remoteVideoRef={conversationCall.remoteVideoRef}
+        localVideoRef={conversationCall.localVideoRef}
         onAccept={conversationCall.acceptIncomingCall}
         onReject={conversationCall.rejectIncomingCall}
         onEnd={conversationCall.endCurrentCall}
       />
-      <audio ref={conversationCall.remoteAudioRef} autoPlay playsInline className="hidden" />
 
       <div ref={scrollAreaRef} className="min-h-0 flex-1">
         <ScrollArea className="h-full min-h-0">
@@ -943,6 +951,10 @@ export default function ChatWindow() {
                                   className="mt-2 text-sm font-semibold text-blue-600 hover:underline"
                                   disabled={!conversationCall.canStartAudioCall}
                                   onClick={() => {
+                                    if (msg.callInfo?.audioOnly === false) {
+                                      void conversationCall.startVideoCall()
+                                      return
+                                    }
                                     void conversationCall.startAudioCall()
                                   }}
                                 >

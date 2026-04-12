@@ -27,7 +27,7 @@ Tài liệu mô tả luồng realtime Chat và Call đang chạy trong UniCall, 
 ### Event type trong queue
 
 - `MESSAGE_UPSERT`: tin nhắn mới/chỉnh sửa/thu hồi
-- `CALL_SIGNAL`: tín hiệu gọi (`OFFER`, `ACCEPT`, `ICE_CANDIDATE`, `REJECT`, `END`)
+- `CALL_SIGNAL`: tín hiệu gọi (`OFFER`, `ACCEPT`, `ICE_CANDIDATE`, `REJECT`, `END`) cho cả thoại và video
 
 ## 3. Luồng Chat realtime
 
@@ -62,6 +62,9 @@ Tài liệu mô tả luồng realtime Chat và Call đang chạy trong UniCall, 
 - `offer SDP`: phía gọi tạo ra, gửi cho phía nhận.
 - `answer SDP`: phía nhận tạo ra sau khi set remote offer.
 - `ICE candidate`: địa chỉ mạng khả dụng để 2 peer tìm đường kết nối thực tế.
+- `audioOnly`:
+  - `true`: gọi thoại
+  - `false`: gọi video (audio + video)
 
 ## 4.2 Contract payload Call (input/output)
 
@@ -72,7 +75,7 @@ Tài liệu mô tả luồng realtime Chat và Call đang chạy trong UniCall, 
 | `conversationId` | `string` | Có | Tất cả | ID hội thoại 1-1 đang gọi. |
 | `callId` | `string` | Có (thực tế FE luôn gửi) | Tất cả | ID phiên gọi để gom `OFFER/ACCEPT/ICE/END` vào cùng một call. |
 | `type` | enum | Có | Tất cả | Loại signal: `OFFER`, `ACCEPT`, `ICE_CANDIDATE`, `REJECT`, `END`. |
-| `audioOnly` | `boolean` | Không | Tất cả | `true` nghĩa là cuộc gọi thoại. |
+| `audioOnly` | `boolean` | Không | Tất cả | `true` là thoại, `false` là video. |
 | `sdp` | `string` | Có với `OFFER`,`ACCEPT` | `OFFER`,`ACCEPT` | SDP raw do WebRTC sinh ra (`pc.localDescription.sdp`). |
 | `candidate` | `string` | Có với `ICE_CANDIDATE` | `ICE_CANDIDATE` | Chuỗi candidate raw do `onicecandidate` trả về. |
 | `sdpMid` | `string` | Không | `ICE_CANDIDATE` | Media stream id của candidate (thường `"0"` cho audio). |
@@ -93,7 +96,9 @@ Giải thích nhanh từng tham số:
   - `ICE_CANDIDATE`: gửi thêm địa chỉ mạng để đàm phán đường truyền.
   - `REJECT`: từ chối cuộc gọi.
   - `END`: kết thúc/hủy cuộc gọi.
-- `audioOnly`: cờ định nghĩa media call; hiện hệ thống đang dùng `true` cho gọi thoại.
+- `audioOnly`: cờ định nghĩa media call.
+  - `true`: FE lấy media `audio: true, video: false`
+  - `false`: FE lấy media `audio: true, video: { facingMode: "user" }`
 - `sdp`: bản mô tả media/session do WebRTC tạo ra.
   - Với caller: đây là offer SDP.
   - Với callee: đây là answer SDP.
@@ -178,6 +183,30 @@ Giải thích thêm các tham số BE trả về:
 - Xác nhận nhận cuộc gọi và trả answer SDP cho caller.
 - Caller nhận rồi `setRemoteDescription(answer)`.
 
+Ví dụ OFFER cho video call:
+
+```json
+{
+  "conversationId": "5bed058a-f5c4-4b48-a0c6-9702300478fd",
+  "callId": "9c8f9dfd-6d02-4341-9cc6-e3e51d843118",
+  "type": "OFFER",
+  "audioOnly": false,
+  "sdp": "v=0\r\no=- 3119016509920432468 2 IN IP4 127.0.0.1\r\ns=-\r\n..."
+}
+```
+
+Ví dụ ACCEPT cho video call:
+
+```json
+{
+  "conversationId": "5bed058a-f5c4-4b48-a0c6-9702300478fd",
+  "callId": "9c8f9dfd-6d02-4341-9cc6-e3e51d843118",
+  "type": "ACCEPT",
+  "audioOnly": false,
+  "sdp": "v=0\r\no=- 749151388588431215 2 IN IP4 127.0.0.1\r\ns=-\r\n..."
+}
+```
+
 ### 4.3.3 ICE_CANDIDATE (2 chiều)
 
 ```json
@@ -232,21 +261,27 @@ Giải thích thêm các tham số BE trả về:
 ### Caller
 
 1. `createPeerConnection()`.
-2. `getUserMedia(audio)` và `addTrack(localAudioTrack)`.
-3. `createOffer()` -> `setLocalDescription(offer)`.
-4. Gửi `OFFER` với `sdp = pc.localDescription.sdp`.
-5. Nhận `ACCEPT` -> `setRemoteDescription(answer)`.
-6. Nhận/gửi `ICE_CANDIDATE` đến khi `connectionState = connected`.
+2. `getUserMedia(...)`:
+   - thoại: `audio=true`, `video=false`
+   - video: `audio=true`, `video=true`
+3. `addTrack(...)`:
+   - thoại: add audio track
+   - video: add audio + video track
+4. `createOffer()` -> `setLocalDescription(offer)`.
+5. Gửi `OFFER` với `sdp = pc.localDescription.sdp` + `audioOnly`.
+6. Nhận `ACCEPT` -> `setRemoteDescription(answer)`.
+7. Nhận/gửi `ICE_CANDIDATE` đến khi `connectionState = connected`.
 
 ### Callee
 
 1. Nhận `OFFER` từ `/user/queue/events`.
 2. `createPeerConnection()`.
-3. `getUserMedia(audio)` và `addTrack(localAudioTrack)`.
-4. `setRemoteDescription(offer)`.
-5. `createAnswer()` -> `setLocalDescription(answer)`.
-6. Gửi `ACCEPT` với `sdp = pc.localDescription.sdp`.
-7. Nhận/gửi `ICE_CANDIDATE` đến khi `connectionState = connected`.
+3. Đọc `signal.audioOnly` để quyết định gọi thoại hay video.
+4. `getUserMedia(...)` và `addTrack(...)` theo loại cuộc gọi.
+5. `setRemoteDescription(offer)`.
+6. `createAnswer()` -> `setLocalDescription(answer)`.
+7. Gửi `ACCEPT` với `sdp = pc.localDescription.sdp` + `audioOnly`.
+8. Nhận/gửi `ICE_CANDIDATE` đến khi `connectionState = connected`.
 
 ## 4.5 Xử lý ICE queue và điều kiện add candidate
 
@@ -277,6 +312,14 @@ Lưu ý quan trọng hiện tại:
 - Khi một bên gửi `END` hoặc `REJECT`, FE cleanup peer connection/local stream và reset state.
 - BE cập nhật `CallSession` outcome (`COMPLETED`, `NO_ANSWER`, `REJECTED`, `CANCELED`).
 - Nếu call kết thúc hợp lệ, BE tạo message type `CALL` để hiển thị vào lịch sử chat.
+
+Lưu ý mới (audio + video):
+
+- FE có `startAudioCall()` và `startVideoCall()`, cùng dùng một signaling flow.
+- UI call video dùng `remoteVideoRef` (video bên kia) + `localVideoRef` (preview local).
+- BE dùng `audioOnly` để phân biệt text lịch sử:
+  - thoại: `Cuộc gọi thoại`, `Cuộc gọi nhỡ`, `Cuộc gọi bị từ chối`
+  - video: `Cuộc gọi video`, `Cuộc gọi video nhỡ`, `Cuộc gọi video bị từ chối`
 
 ## 5. Auth + phân quyền subscribe
 

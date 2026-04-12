@@ -223,7 +223,7 @@ public class ConversationCallServiceImpl implements ConversationCallService {
         message.setIdConversation(session.getConversationId());
         message.setIdAccountSent(session.getCallerUserId());
         message.setStatus(MessageEnum.SENT);
-        message.setContent("Cuộc gọi thoại");
+        message.setContent(session.isAudioOnly() ? "Cuộc gọi thoại" : "Cuộc gọi video");
         message.setType(MessageType.CALL);
         message.setTimeSent(now);
         message.setTimeUpdate(now);
@@ -262,14 +262,15 @@ public class ConversationCallServiceImpl implements ConversationCallService {
     }
 
     private static String buildCallPreview(CallSession session) {
+        String callKind = session.isAudioOnly() ? "thoại" : "video";
         if (session.getOutcome() == CallOutcome.COMPLETED) {
-            return "Cuộc gọi thoại";
+            return "Cuộc gọi " + callKind;
         }
         if (session.getOutcome() == CallOutcome.NO_ANSWER) {
-            return "Cuộc gọi nhỡ";
+            return session.isAudioOnly() ? "Cuộc gọi nhỡ" : "Cuộc gọi video nhỡ";
         }
         if (session.getOutcome() == CallOutcome.REJECTED) {
-            return "Cuộc gọi bị từ chối";
+            return session.isAudioOnly() ? "Cuộc gọi bị từ chối" : "Cuộc gọi video bị từ chối";
         }
         return "Cuộc gọi kết thúc";
     }

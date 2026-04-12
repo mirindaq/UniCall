@@ -298,15 +298,18 @@ export function UserLayout() {
             phase={globalCall.phase === "idle" ? "outgoing" : globalCall.phase}
             callerName={globalCallPeer?.name ?? "Người dùng"}
             callerAvatar={globalCallPeer?.avatar}
+            audioOnly={globalCall.activeCall?.audioOnly ?? true}
             startedAt={globalCall.activeCall?.startedAt}
             ringDeadlineAt={globalCall.ringDeadlineAt}
             ringDurationMs={globalCall.ringDurationMs}
             statusMessage={globalCall.statusMessage}
+            remoteAudioRef={globalCall.remoteAudioRef}
+            remoteVideoRef={globalCall.remoteVideoRef}
+            localVideoRef={globalCall.localVideoRef}
             onAccept={globalCall.acceptIncomingCall}
             onReject={globalCall.rejectIncomingCall}
             onEnd={globalCall.endCurrentCall}
           />
-          <audio ref={globalCall.remoteAudioRef} autoPlay playsInline className="hidden" />
         </>
       ) : null}
     </div>

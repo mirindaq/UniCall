@@ -11,6 +11,7 @@ import type {
 } from "@/types/chat"
 
 type CallPhase = "idle" | "outgoing" | "incoming" | "connecting" | "in-call"
+type MediaMode = "audio" | "video"
 
 type ActiveCall = {
   conversationId: string
@@ -36,28 +37,36 @@ type UseConversationCallOptions = {
   peerUserId?: string | null
 }
 
-const getMicrophoneErrorMessage = (error: unknown): string => {
+const getMediaErrorMessage = (audioOnly: boolean, error: unknown): string => {
   if (!(error instanceof DOMException)) {
-    return "Không thể mở microphone. Vui lòng thử lại."
+    return audioOnly
+      ? "Không thể mở microphone. Vui lòng thử lại."
+      : "Không thể mở camera/microphone. Vui lòng thử lại."
   }
 
   if (
     error.name === "NotAllowedError" ||
     error.name === "PermissionDeniedError"
   ) {
-    return "Microphone đang bị chặn quyền. Hãy bấm biểu tượng ổ khóa cạnh URL và cho phép Microphone."
+    return audioOnly
+      ? "Microphone đang bị chặn quyền. Hãy bấm biểu tượng ổ khóa cạnh URL và cho phép Microphone."
+      : "Camera hoặc microphone đang bị chặn quyền. Hãy bấm biểu tượng ổ khóa cạnh URL và cho phép Camera + Microphone."
   }
   if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-    return "Không tìm thấy thiết bị microphone trên máy."
+    return audioOnly
+      ? "Không tìm thấy thiết bị microphone trên máy."
+      : "Không tìm thấy thiết bị camera/microphone trên máy."
   }
   if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-    return "Microphone đang được ứng dụng khác sử dụng (Zoom/Meet/Teams...). Hãy đóng app đó rồi thử lại."
+    return audioOnly
+      ? "Microphone đang được ứng dụng khác sử dụng (Zoom/Meet/Teams...). Hãy đóng app đó rồi thử lại."
+      : "Camera hoặc microphone đang được ứng dụng khác sử dụng. Hãy đóng app đó rồi thử lại."
   }
   if (error.name === "SecurityError") {
-    return "Trình duyệt không cho truy cập microphone trong ngữ cảnh hiện tại."
+    return "Trình duyệt không cho truy cập camera/microphone trong ngữ cảnh hiện tại."
   }
 
-  return `Không thể mở microphone (${error.name}). Vui lòng thử lại.`
+  return `Không thể mở thiết bị media (${error.name}). Vui lòng thử lại.`
 }
 
 const buildCallId = () =>
@@ -80,8 +89,11 @@ export function useConversationCall({
   const phaseRef = useRef<CallPhase>("idle")
   const activeCallRef = useRef<ActiveCall | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
+  const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
+  const localStreamModeRef = useRef<MediaMode | null>(null)
   const pendingIncomingOfferRef = useRef<PendingIncomingOffer | null>(null)
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const ringTimeoutRef = useRef<number | null>(null)
@@ -96,6 +108,7 @@ export function useConversationCall({
     peerUserId &&
     conversationType === "DOUBLE"
   )
+  const canStartVideoCall = canStartAudioCall
 
   const clearRingTimeout = useCallback(() => {
     if (ringTimeoutRef.current != null) {
@@ -135,7 +148,6 @@ export function useConversationCall({
       osc.stop(startAt + duration)
     }
 
-    // Pattern kiểu ringtone điện thoại: ring-ring, nghỉ, ring-ring
     beep(now, 1318, 0.16)
     beep(now + 0.2, 1046, 0.16)
     beep(now + 0.8, 1318, 0.16)
@@ -172,6 +184,7 @@ export function useConversationCall({
       signalConversationId: string,
       callId: string,
       extras?: {
+        audioOnly?: boolean
         sdp?: string
         candidate?: string
         sdpMid?: string
@@ -182,8 +195,11 @@ export function useConversationCall({
         return
       }
       chatSocketService.sendCallSignal(signalConversationId, callId, type, {
-        audioOnly: true,
-        ...extras,
+        audioOnly: extras?.audioOnly ?? activeCallRef.current?.audioOnly ?? true,
+        sdp: extras?.sdp,
+        candidate: extras?.candidate,
+        sdpMid: extras?.sdpMid,
+        sdpMLineIndex: extras?.sdpMLineIndex,
       })
     },
     []
@@ -204,7 +220,18 @@ export function useConversationCall({
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop())
       localStreamRef.current = null
+      localStreamModeRef.current = null
     }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null
+    }
+
     pendingIceCandidatesRef.current = []
     pendingIncomingOfferRef.current = null
     setRemoteStream(null)
@@ -237,7 +264,7 @@ export function useConversationCall({
   }, [activeCall])
 
   const createPeerConnection = useCallback(
-    (signalConversationId: string, callId: string) => {
+    (signalConversationId: string, callId: string, audioOnly: boolean) => {
       cleanupPeerConnection()
       const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS })
       const inboundStream = new MediaStream()
@@ -253,16 +280,11 @@ export function useConversationCall({
           return
         }
         sendSignal("ICE_CANDIDATE", signalConversationId, callId, {
+          audioOnly,
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid ?? undefined,
           sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined,
         })
-      }
-      pc.onsignalingstatechange = () => {
-      }
-      pc.oniceconnectionstatechange = () => {
-      }
-      pc.onicegatheringstatechange = () => {
       }
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState
@@ -296,23 +318,47 @@ export function useConversationCall({
     [cleanupPeerConnection, clearRingTimeout, resetCall, sendSignal]
   )
 
-  const ensureLocalAudioStream = useCallback(async () => {
-    if (localStreamRef.current) {
+  const ensureLocalStream = useCallback(async (audioOnly: boolean) => {
+    const expectedMode: MediaMode = audioOnly ? "audio" : "video"
+    if (
+      localStreamRef.current &&
+      localStreamModeRef.current === expectedMode
+    ) {
       return localStreamRef.current
     }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop())
+      localStreamRef.current = null
+      localStreamModeRef.current = null
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: false,
+        video: audioOnly ? false : { facingMode: "user" },
       })
       localStreamRef.current = stream
+      localStreamModeRef.current = expectedMode
       return stream
     } catch (error) {
       console.error("[call] getUserMedia failed", error)
-      toast.error(getMicrophoneErrorMessage(error))
+      toast.error(getMediaErrorMessage(audioOnly, error))
       throw error
     }
   }, [])
+
+  const attachLocalTracks = useCallback(
+    (pc: RTCPeerConnection, stream: MediaStream, audioOnly: boolean) => {
+      stream
+        .getTracks()
+        .filter((track) => (audioOnly ? track.kind === "audio" : true))
+        .forEach((track) => {
+          pc.addTrack(track, stream)
+        })
+    },
+    []
+  )
 
   const flushPendingIceCandidates = useCallback(
     async (pc: RTCPeerConnection) => {
@@ -332,58 +378,69 @@ export function useConversationCall({
     []
   )
 
-  const startAudioCall = useCallback(async () => {
-    if (!canStartAudioCall || !peerUserId || !conversationId) {
-      toast.info("Hiện chỉ hỗ trợ gọi thoại cho hội thoại 1-1")
-      return
-    }
-    if (phaseRef.current !== "idle") {
-      return
-    }
-    const callId = buildCallId()
-    try {
-      const pc = createPeerConnection(conversationId, callId)
-      const localStream = await ensureLocalAudioStream()
-      localStream
-        .getTracks()
-        .forEach((track) => {
-          pc.addTrack(track, localStream)
-        })
-
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-      })
-      await pc.setLocalDescription(offer)
-      const localOfferSdp = pc.localDescription?.sdp ?? offer.sdp ?? ""
-      if (!localOfferSdp) {
-        throw new Error("Không tạo được SDP offer hợp lệ")
+  const startCall = useCallback(
+    async (audioOnly: boolean) => {
+      if (!canStartAudioCall || !peerUserId || !conversationId) {
+        toast.info("Hiện chỉ hỗ trợ gọi cho hội thoại 1-1")
+        return
       }
+      if (phaseRef.current !== "idle") {
+        return
+      }
+      const callId = buildCallId()
+      try {
+        const pc = createPeerConnection(conversationId, callId, audioOnly)
+        const localStream = await ensureLocalStream(audioOnly)
+        attachLocalTracks(pc, localStream, audioOnly)
 
-      setPhase("outgoing")
-      setActiveCall({
-        conversationId,
-        callId,
-        peerUserId,
-        audioOnly: true,
-        ringingStartedAt: Date.now(),
-      })
-      sendSignal("OFFER", conversationId, callId, {
-        sdp: localOfferSdp,
-      })
-    } catch (error) {
-      console.error("[call] startAudioCall failed", error)
-      toast.error("Không thể bắt đầu cuộc gọi thoại")
-      resetCall()
-    }
-  }, [
-    canStartAudioCall,
-    conversationId,
-    createPeerConnection,
-    ensureLocalAudioStream,
-    peerUserId,
-    resetCall,
-    sendSignal,
-  ])
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: !audioOnly,
+        })
+        await pc.setLocalDescription(offer)
+        const localOfferSdp = pc.localDescription?.sdp ?? offer.sdp ?? ""
+        if (!localOfferSdp) {
+          throw new Error("Không tạo được SDP offer hợp lệ")
+        }
+
+        setStatusMessage(null)
+        setPhase("outgoing")
+        setActiveCall({
+          conversationId,
+          callId,
+          peerUserId,
+          audioOnly,
+          ringingStartedAt: Date.now(),
+        })
+        sendSignal("OFFER", conversationId, callId, {
+          audioOnly,
+          sdp: localOfferSdp,
+        })
+      } catch (error) {
+        console.error("[call] startCall failed", error)
+        toast.error(audioOnly ? "Không thể bắt đầu cuộc gọi thoại" : "Không thể bắt đầu cuộc gọi video")
+        resetCall()
+      }
+    },
+    [
+      attachLocalTracks,
+      canStartAudioCall,
+      conversationId,
+      createPeerConnection,
+      ensureLocalStream,
+      peerUserId,
+      resetCall,
+      sendSignal,
+    ]
+  )
+
+  const startAudioCall = useCallback(async () => {
+    await startCall(true)
+  }, [startCall])
+
+  const startVideoCall = useCallback(async () => {
+    await startCall(false)
+  }, [startCall])
 
   const acceptIncomingCall = useCallback(async () => {
     const offer = pendingIncomingOfferRef.current
@@ -391,13 +448,9 @@ export function useConversationCall({
       return
     }
     try {
-      const pc = createPeerConnection(offer.conversationId, offer.callId)
-      const localStream = await ensureLocalAudioStream()
-      localStream
-        .getTracks()
-        .forEach((track) => {
-          pc.addTrack(track, localStream)
-        })
+      const pc = createPeerConnection(offer.conversationId, offer.callId, offer.audioOnly)
+      const localStream = await ensureLocalStream(offer.audioOnly)
+      attachLocalTracks(pc, localStream, offer.audioOnly)
 
       await pc.setRemoteDescription(
         new RTCSessionDescription({
@@ -414,15 +467,17 @@ export function useConversationCall({
       }
 
       sendSignal("ACCEPT", offer.conversationId, offer.callId, {
+        audioOnly: offer.audioOnly,
         sdp: localAnswerSdp,
       })
+      setStatusMessage(null)
       setPhase("connecting")
       setActiveCall({
         conversationId: offer.conversationId,
         callId: offer.callId,
         peerUserId: offer.fromUserId,
-        audioOnly: true,
-        ringingStartedAt: offer ? Date.now() : undefined,
+        audioOnly: offer.audioOnly,
+        ringingStartedAt: Date.now(),
       })
       pendingIncomingOfferRef.current = null
     } catch (error) {
@@ -438,14 +493,15 @@ export function useConversationCall({
             conversationId: offer.conversationId,
             callId: offer.callId,
             peerUserId: offer.fromUserId,
-            audioOnly: true,
+            audioOnly: offer.audioOnly,
           }
       )
       pendingIncomingOfferRef.current = offer
     }
   }, [
+    attachLocalTracks,
     createPeerConnection,
-    ensureLocalAudioStream,
+    ensureLocalStream,
     flushPendingIceCandidates,
     sendSignal,
   ])
@@ -455,7 +511,9 @@ export function useConversationCall({
     if (phaseRef.current !== "incoming" || !call) {
       return
     }
-    sendSignal("REJECT", call.conversationId, call.callId)
+    sendSignal("REJECT", call.conversationId, call.callId, {
+      audioOnly: call.audioOnly,
+    })
     resetCall()
   }, [resetCall, sendSignal])
 
@@ -464,7 +522,9 @@ export function useConversationCall({
     if (!call || phaseRef.current === "idle") {
       return
     }
-    sendSignal("END", call.conversationId, call.callId)
+    sendSignal("END", call.conversationId, call.callId, {
+      audioOnly: call.audioOnly,
+    })
     resetCall()
   }, [resetCall, sendSignal])
 
@@ -483,7 +543,9 @@ export function useConversationCall({
           phaseRef.current === "outgoing" &&
           latest?.callId === currentCallId
         ) {
-          sendSignal("END", latest.conversationId, currentCallId)
+          sendSignal("END", latest.conversationId, currentCallId, {
+            audioOnly: latest.audioOnly,
+          })
           closeCallWithMessage("Người dùng không bắt máy")
         }
       }, CALL_RING_TIMEOUT_MS)
@@ -572,7 +634,9 @@ export function useConversationCall({
           return
         }
         if (phaseRef.current !== "idle") {
-          sendSignal("REJECT", signal.conversationId, signal.callId)
+          sendSignal("REJECT", signal.conversationId, signal.callId, {
+            audioOnly: signal.audioOnly,
+          })
           return
         }
         pendingIncomingOfferRef.current = {
@@ -582,6 +646,7 @@ export function useConversationCall({
           sdp: signal.sdp,
           audioOnly: signal.audioOnly,
         }
+        setStatusMessage(null)
         setPhase("incoming")
         setActiveCall({
           conversationId: signal.conversationId,
@@ -651,7 +716,7 @@ export function useConversationCall({
 
       if (signal.type === "REJECT") {
         if (phaseRef.current === "outgoing") {
-          closeCallWithMessage("Người dùng không bắt máy")
+          closeCallWithMessage("Người dùng đã từ chối cuộc gọi")
           return
         }
         resetCall()
@@ -686,15 +751,46 @@ export function useConversationCall({
   ])
 
   useEffect(() => {
+    const isAudioOnly = activeCall?.audioOnly ?? true
     const audio = remoteAudioRef.current
-    if (!audio) {
+    const video = remoteVideoRef.current
+
+    if (isAudioOnly) {
+      if (video) {
+        video.srcObject = null
+      }
+      if (audio) {
+        audio.srcObject = remoteStream
+        if (remoteStream) {
+          void audio.play().catch(() => undefined)
+        }
+      }
       return
     }
-    audio.srcObject = remoteStream
-    if (remoteStream) {
-      void audio.play().catch(() => undefined)
+
+    if (audio) {
+      audio.srcObject = null
     }
-  }, [remoteStream])
+    if (video) {
+      video.srcObject = remoteStream
+      if (remoteStream) {
+        void video.play().catch(() => undefined)
+      }
+    }
+  }, [activeCall?.audioOnly, remoteStream])
+
+  useEffect(() => {
+    const localVideo = localVideoRef.current
+    if (!localVideo) {
+      return
+    }
+    if ((activeCall?.audioOnly ?? true) || !localStreamRef.current) {
+      localVideo.srcObject = null
+      return
+    }
+    localVideo.srcObject = localStreamRef.current
+    void localVideo.play().catch(() => undefined)
+  }, [activeCall?.audioOnly, phase])
 
   useEffect(
     () => () => {
@@ -711,6 +807,7 @@ export function useConversationCall({
 
   return {
     canStartAudioCall,
+    canStartVideoCall,
     phase,
     activeCall,
     statusMessage,
@@ -720,7 +817,10 @@ export function useConversationCall({
         : undefined,
     ringDurationMs: CALL_RING_TIMEOUT_MS,
     remoteAudioRef,
+    remoteVideoRef,
+    localVideoRef,
     startAudioCall,
+    startVideoCall,
     acceptIncomingCall,
     rejectIncomingCall,
     endCurrentCall,
