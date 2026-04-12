@@ -16,7 +16,7 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Value("${app.websocket.allowed-origin-patterns:http://localhost:5173,http://127.0.0.1:5173}")
+    @Value("${app.websocket.allowed-origin-patterns:*}")
     private String allowedOriginPatterns;
 
     private final UserIdHandshakeInterceptor userIdHandshakeInterceptor;
@@ -24,8 +24,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic");
+        registry.enableSimpleBroker("/topic", "/queue");
         registry.setApplicationDestinationPrefixes("/app");
+        registry.setUserDestinationPrefix("/user");
     }
 
     @Override

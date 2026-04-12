@@ -35,4 +35,5 @@ public class Message {
     private List<String> editHistory;
     private boolean recalled;
     private List<String> hiddenForAccountIds;
+    private CallMessageInfo callInfo;
 }

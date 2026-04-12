@@ -2,6 +2,8 @@ package iuh.fit.user_service.controllers;
 
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
+import iuh.fit.user_service.dtos.request.RequestAccountDeletionRequest;
+import iuh.fit.user_service.dtos.response.AccountDeletionStatusResponse;
 import iuh.fit.user_service.dtos.request.UpdateMyProfileRequest;
 import iuh.fit.user_service.dtos.response.UserProfileResponse;
 import iuh.fit.user_service.dtos.response.UserSearchResponse;
@@ -15,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -39,6 +42,42 @@ public class UserController {
         User user = userProfileService.getAuthenticatedUserProfile(identityUserId);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Get my profile success", UserProfileResponse.from(user))
+        );
+    }
+
+    @PostMapping("/me/deletion-request")
+    public ResponseEntity<ResponseSuccess<AccountDeletionStatusResponse>> requestMyAccountDeletion(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @Valid @RequestBody RequestAccountDeletionRequest request
+    ) {
+        AccountDeletionStatusResponse data = userProfileService.requestAccountDeletion(
+                identityUserId,
+                request.getPhoneNumber(),
+                request.getReason(),
+                request.getPassword()
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Request account deletion success", data)
+        );
+    }
+
+    @GetMapping("/me/deletion-request/status")
+    public ResponseEntity<ResponseSuccess<AccountDeletionStatusResponse>> myAccountDeletionStatus(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId
+    ) {
+        AccountDeletionStatusResponse data = userProfileService.getAccountDeletionStatus(identityUserId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Get account deletion status success", data)
+        );
+    }
+
+    @PostMapping("/me/deletion-request/cancel")
+    public ResponseEntity<ResponseSuccess<AccountDeletionStatusResponse>> cancelMyAccountDeletionRequest(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId
+    ) {
+        AccountDeletionStatusResponse data = userProfileService.cancelAccountDeletionRequest(identityUserId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Cancel account deletion request success", data)
         );
     }
 

@@ -11,6 +11,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.security.Principal;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,6 +21,9 @@ import java.util.regex.Pattern;
 public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private static final Pattern CONVERSATION_TOPIC =
             Pattern.compile("^/topic/conversations\\.([^.]+)\\.messages$");
+    private static final Pattern CONVERSATION_CALL_TOPIC =
+            Pattern.compile("^/topic/conversations\\.([^.]+)\\.calls$");
+    private static final String USER_EVENT_QUEUE = "/user/queue/events";
 
     private final ChatConversationService chatConversationService;
 
@@ -31,7 +35,10 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-            requireUserId(accessor);
+            String userId = requireUserId(accessor);
+            if (accessor.getUser() == null) {
+                accessor.setUser(() -> userId);
+            }
             return message;
         }
 
@@ -41,11 +48,17 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             if (dest == null) {
                 throw new InvalidParamException("Thiếu destination STOMP");
             }
-            Matcher matcher = CONVERSATION_TOPIC.matcher(dest);
-            if (!matcher.matches()) {
+            Matcher messageMatcher = CONVERSATION_TOPIC.matcher(dest);
+            Matcher callMatcher = CONVERSATION_CALL_TOPIC.matcher(dest);
+            if (USER_EVENT_QUEUE.equals(dest)) {
+                return message;
+            }
+            boolean isMessageTopic = messageMatcher.matches();
+            boolean isCallTopic = callMatcher.matches();
+            if (!isMessageTopic && !isCallTopic) {
                 throw new InvalidParamException("Destination subscribe không hợp lệ");
             }
-            String conversationId = matcher.group(1);
+            String conversationId = isMessageTopic ? messageMatcher.group(1) : callMatcher.group(1);
             chatConversationService.requireParticipant(conversationId, userId);
             return message;
         }
@@ -59,6 +72,11 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     }
 
     private static String requireUserId(StompHeaderAccessor accessor) {
+        Principal principal = accessor.getUser();
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return principal.getName();
+        }
+
         Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
         if (sessionAttrs == null) {
             throw new InvalidParamException("Thiếu session WebSocket");

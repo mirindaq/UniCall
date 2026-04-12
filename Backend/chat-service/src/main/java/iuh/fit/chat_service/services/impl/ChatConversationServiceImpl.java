@@ -1,38 +1,54 @@
 package iuh.fit.chat_service.services.impl;
 
+import iuh.fit.chat_service.clients.GrpcUserServiceClient;
 import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.entities.Conversation;
+import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.entities.ParticipantInfo;
+import iuh.fit.chat_service.enums.AttachmentType;
 import iuh.fit.chat_service.enums.ConversationType;
+import iuh.fit.chat_service.enums.MessageType;
 import iuh.fit.chat_service.enums.ParicipantRole;
 import iuh.fit.chat_service.repositories.ConversationRepository;
+import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
 public class ChatConversationServiceImpl implements ChatConversationService {
 
+    private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+", Pattern.CASE_INSENSITIVE);
+
     private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Override
     public List<ConversationResponse> listMyConversations(String identityUserId) {
         if (identityUserId == null || identityUserId.isBlank()) {
             throw new InvalidParamException("Thiếu người dùng đã xác thực");
         }
+        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
         return conversationRepository.findByParticipantAccount(identityUserId).stream()
-                .map(ConversationResponse::from)
+                .map(conversation -> toConversationResponse(conversation, identityUserId, userDisplayCache))
                 .toList();
     }
 
@@ -51,9 +67,14 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         List<String> pair = Stream.of(identityUserId, other)
                 .sorted(Comparator.naturalOrder())
                 .toList();
+        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
         return conversationRepository.findDirectConversationBetweenPair(pair)
-                .map(ConversationResponse::from)
-                .orElseGet(() -> ConversationResponse.from(conversationRepository.save(newDirectConversation(identityUserId, other))));
+                .map(conversation -> toConversationResponse(conversation, identityUserId, userDisplayCache))
+                .orElseGet(() -> toConversationResponse(
+                        conversationRepository.save(newDirectConversation(identityUserId, other)),
+                        identityUserId,
+                        userDisplayCache
+                ));
     }
 
     @Override
@@ -90,5 +111,114 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         conversation.setNumberMember(2);
         conversation.setParticipantInfos(participantInfos);
         return conversation;
+    }
+
+    private ConversationResponse toConversationResponse(
+            Conversation conversation,
+            String currentIdentityUserId,
+            Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache
+    ) {
+        ConversationResponse response = ConversationResponse.from(conversation);
+        if (response == null) {
+            return null;
+        }
+        enrichLastMessageMeta(response, conversation.getIdConversation(), currentIdentityUserId);
+        if (conversation.getType() != ConversationType.DOUBLE) {
+            return response;
+        }
+        if (response.getName() != null && !response.getName().isBlank()) {
+            return response;
+        }
+
+        String peerIdentityUserId = conversation.getParticipantInfos() == null
+                ? null
+                : conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(id -> id != null && !id.isBlank() && !id.equals(currentIdentityUserId))
+                .findFirst()
+                .orElse(null);
+        if (peerIdentityUserId == null || peerIdentityUserId.isBlank()) {
+            return response;
+        }
+
+        GrpcUserServiceClient.UserDisplayInfo displayInfo = userDisplayCache.computeIfAbsent(
+                peerIdentityUserId,
+                key -> grpcUserServiceClient.getUserDisplayInfo(key)
+                        .orElse(new GrpcUserServiceClient.UserDisplayInfo(key, null))
+        );
+
+        response.setName(displayInfo.displayName());
+        if (response.getAvatar() == null || response.getAvatar().isBlank()) {
+            response.setAvatar(displayInfo.avatar());
+        }
+        return response;
+    }
+
+    private void enrichLastMessageMeta(
+            ConversationResponse response,
+            String conversationId,
+            String identityUserId
+    ) {
+        Message latest = messageRepository.findVisibleForParticipant(
+                conversationId,
+                identityUserId,
+                PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "timeSent"))
+        ).stream().findFirst().orElse(null);
+
+        if (latest == null) {
+            return;
+        }
+
+        response.setLastMessageContent(buildPreviewFromMessage(latest));
+        response.setLastMessageSenderId(latest.getIdAccountSent());
+    }
+
+    private static String buildPreviewFromMessage(Message message) {
+        if (message == null) {
+            return "";
+        }
+
+        if (message.isRecalled()) {
+            return StringUtils.hasText(message.getContent()) ? message.getContent() : "Tin nhắn đã thu hồi";
+        }
+
+        if (message.getType() == MessageType.CALL) {
+            return "Cuộc gọi thoại";
+        }
+
+        if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
+            AttachmentType type = message.getAttachments().get(0).getType();
+            if (type == AttachmentType.GIF) {
+                return "Đã gửi GIF";
+            }
+            if (type == AttachmentType.STICKER) {
+                return "Đã gửi sticker";
+            }
+            if (type == AttachmentType.IMAGE) {
+                return "Đã gửi hình ảnh";
+            }
+            if (type == AttachmentType.VIDEO) {
+                return "Đã gửi video";
+            }
+            if (type == AttachmentType.AUDIO) {
+                return "Đã gửi file âm thanh";
+            }
+            if (type == AttachmentType.LINK) {
+                return "Đã gửi link";
+            }
+            if (type == AttachmentType.FILE) {
+                if (StringUtils.hasText(message.getContent())) {
+                    return message.getContent();
+                }
+                return "Đã gửi file";
+            }
+            return "Đã gửi tệp đính kèm";
+        }
+
+        if (StringUtils.hasText(message.getContent()) && URL_PATTERN.matcher(message.getContent()).find()) {
+            return "Đã gửi link";
+        }
+
+        return message.getContent();
     }
 }

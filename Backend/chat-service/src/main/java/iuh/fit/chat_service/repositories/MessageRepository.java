@@ -12,4 +12,10 @@ public interface MessageRepository extends MongoRepository<Message, String> {
 
     @Query("{ 'idConversation': ?0, $or: [ { 'hiddenForAccountIds': { $exists: false } }, { 'hiddenForAccountIds': null }, { 'hiddenForAccountIds': { $nin: [?1] } } ] }")
     Page<Message> findVisibleForParticipant(String idConversation, String identityUserId, Pageable pageable);
+
+    @Query("{ 'idConversation': ?0, 'attachments': { $exists: true, $ne: [] } }")
+    Page<Message> findByIdConversationWithAttachments(String idConversation, Pageable pageable);
+
+    @Query("{ 'idConversation': ?0, $and: [ { $or: [ { 'hiddenForAccountIds': { $exists: false } }, { 'hiddenForAccountIds': null }, { 'hiddenForAccountIds': { $nin: [?1] } } ] }, { $or: [ { 'content': { $regex: ?2, $options: 'i' } }, { 'attachments.url': { $regex: ?2, $options: 'i' } }, { 'attachments.size': { $regex: ?2, $options: 'i' } } ] } ] }")
+    Page<Message> searchVisibleForParticipant(String idConversation, String identityUserId, String keyword, Pageable pageable);
 }

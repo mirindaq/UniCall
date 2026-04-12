@@ -1,6 +1,8 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.identity_service.clients.GrpcUserServiceClient;
+import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
@@ -24,6 +26,7 @@ public class AuthServiceImpl implements AuthService {
     private static final String REFRESH_COOKIE_NAME = "unicall_rt";
 
     private final KeycloakAuthService keycloakAuthService;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Value("${app.security.cookie.secure:true}")
     private boolean cookieSecure;
@@ -47,6 +50,30 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public void changePassword(ChangePasswordRequest request) {
+        keycloakAuthService.changePassword(
+                request.getPhoneNumber(),
+                request.getCurrentPassword(),
+                request.getNewPassword()
+        );
+    }
+
+    @Override
+    public void verifyPassword(String identityUserId, String phoneNumber, String password) {
+        String normalizedIdentityUserId = identityUserId == null ? "" : identityUserId.trim();
+        String normalizedPhoneNumber = phoneNumber == null ? "" : phoneNumber.trim();
+        if (normalizedIdentityUserId.isBlank() || normalizedPhoneNumber.isBlank() || password == null || password.isBlank()) {
+            throw new UnauthenticatedException("Invalid verification request");
+        }
+
+        String resolvedIdentityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(normalizedPhoneNumber);
+        if (!normalizedIdentityUserId.equals(resolvedIdentityUserId)) {
+            throw new UnauthenticatedException("Password verification failed");
+        }
+        keycloakAuthService.verifyPassword(normalizedPhoneNumber, password.trim());
+    }
+
+    @Override
     public LoginResult login(LoginRequest request) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
@@ -55,12 +82,15 @@ public class AuthServiceImpl implements AuthService {
         if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isBlank()) {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
+        String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
+        grpcUserServiceClient.cancelDeletionRequest(identityUserId);
 
         return new LoginResult(
                 List.of(
                         createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
                         createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
-                )
+                ),
+                tokens
         );
     }
 
@@ -82,7 +112,15 @@ public class AuthServiceImpl implements AuthService {
                 List.of(
                         createAccessCookie(tokenResponse.getAccessToken(), tokenResponse.getExpiresIn()),
                         createRefreshCookie(rotatedRefreshToken, tokenResponse.getRefreshExpiresIn())
-                )
+                ),
+                AuthTokenResponse.builder()
+                        .accessToken(tokenResponse.getAccessToken())
+                        .refreshToken(rotatedRefreshToken)
+                        .tokenType(tokenResponse.getTokenType())
+                        .expiresIn(tokenResponse.getExpiresIn())
+                        .refreshExpiresIn(tokenResponse.getRefreshExpiresIn())
+                        .scope(tokenResponse.getScope())
+                        .build()
         );
     }
 

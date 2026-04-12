@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { userService } from "@/services/user/user.service"
 
 type AuthContextValue = {
   isAuthenticated: boolean
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     externalAuthStateUpdater = (authenticated, nextIdentityUserId) => {
       setIsAuthenticated(authenticated)
       if (!authenticated) {
+        userService.clearMyProfileCache()
         setIdentityUserId(null)
         return
       }
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       setIdentityUserId,
       clearAuthenticated: () => {
+        userService.clearMyProfileCache()
         setIsAuthenticated(false)
         setIdentityUserId(null)
       },

@@ -1,6 +1,7 @@
 package iuh.fit.chat_service.dtos.response;
 
 import iuh.fit.chat_service.entities.Attachment;
+import iuh.fit.chat_service.entities.CallMessageInfo;
 import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.enums.MessageEnum;
 import iuh.fit.chat_service.enums.MessageType;
@@ -27,6 +28,7 @@ public class MessageResponse {
     private String replyToMessageId;
     private boolean edited;
     private boolean recalled;
+    private CallMessageInfo callInfo;
 
     public static MessageResponse from(Message entity) {
         if (entity == null) {
@@ -46,6 +48,7 @@ public class MessageResponse {
                 .replyToMessageId(entity.getReplyToMessageId())
                 .edited(entity.isEdited())
                 .recalled(entity.isRecalled())
+                .callInfo(entity.getCallInfo())
                 .build();
     }
 }

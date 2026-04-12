@@ -2,6 +2,11 @@ spring:
   application:
     name: chat-service
 
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
   data:
     mongodb:
       # host: localhost
@@ -12,15 +17,31 @@ spring:
 
 server:
   port: 8083
-  servlet:
-    context-path: /chat-service
 
 api:
   prefix: /api/v1
 
 app:
   websocket:
-    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
+
+grpc:
+  client:
+    user-service:
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
+      negotiationType: plaintext
+    friend-service:
+      address: ${FRIEND_SERVICE_GRPC_ADDRESS:static://localhost:9098}
+      negotiationType: plaintext
+    file-service:
+      address: ${FILE_SERVICE_GRPC_ADDRESS:static://localhost:9097}
+      negotiationType: plaintext
+  user-service:
+    deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:5000}
+  friend-service:
+    deadline-ms: ${FRIEND_SERVICE_GRPC_DEADLINE_MS:5000}
+  file-service:
+    deadline-ms: ${FILE_SERVICE_GRPC_DEADLINE_MS:10000}
 
 eureka:
   client:

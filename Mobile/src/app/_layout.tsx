@@ -5,12 +5,18 @@ import React from 'react';
 import { useColorScheme } from 'react-native';
 import Toast from 'react-native-toast-message';
 
+import { GlobalCallOverlay } from '@/components/call/GlobalCallOverlay';
+import { CallProvider } from '@/contexts/call-context';
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <CallProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+        <GlobalCallOverlay />
+      </CallProvider>
       <Toast />
     </ThemeProvider>
   );

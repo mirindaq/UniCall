@@ -1,4 +1,5 @@
 import axiosClient from "@/configurations/axios.config"
+import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
   AddGroupMembersRequest,
@@ -13,8 +14,8 @@ import type {
   UpdateGroupMemberRoleRequest,
 } from "@/types/chat"
 
-const CHAT_API_PREFIX = "/chat-service/api/v1/conversations"
-const CHAT_PREFIX = "/chat-service/api/v1/chat"
+const CHAT_API_PREFIX = API_PREFIXES.conversations
+const CHAT_PREFIX = API_PREFIXES.chat
 
 export const chatService = {
   listConversations: async () => {
@@ -34,6 +35,19 @@ export const chatService = {
     const { data } = await axiosClient.get<ResponseSuccess<PageResponse<ChatMessageResponse>>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages`,
       { params: { page, limit } }
+    )
+    return data
+  },
+  searchMessages: async (conversationId: string, keyword: string, page = 1, limit = 50) => {
+    const { data } = await axiosClient.get<ResponseSuccess<PageResponse<ChatMessageResponse>>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/search`,
+      { params: { keyword, page, limit } }
+    )
+    return data
+  },
+  getMessageById: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.get<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`
     )
     return data
   },

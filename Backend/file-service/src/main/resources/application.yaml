@@ -13,8 +13,6 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
 
 server:
-  servlet:
-    context-path: /file-service
   port: 8087
 
 grpc:
@@ -30,7 +28,7 @@ eureka:
 
 aws:
   s3:
-    region: ${AWS_REGION:us-east-1}
+    region: ${AWS_REGION:}
     bucket: ${AWS_S3_BUCKET:}
     access-key: ${AWS_ACCESS_KEY_ID:}
     secret-key: ${AWS_SECRET_ACCESS_KEY:}

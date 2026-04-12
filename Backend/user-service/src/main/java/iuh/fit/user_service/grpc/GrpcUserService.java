@@ -4,13 +4,18 @@ import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
+import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
+import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityResponse;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.DeleteUserProfileResponse;
+import iuh.fit.unicall.grpc.user.v1.GetFriendInvitePrivacyByIdentityRequest;
+import iuh.fit.unicall.grpc.user.v1.GetFriendInvitePrivacyByIdentityResponse;
 import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityResponse;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import iuh.fit.user_service.entities.User;
 import iuh.fit.user_service.services.UserProfileService;
+import iuh.fit.user_service.services.UserPrivacyService;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +28,7 @@ import java.time.format.DateTimeParseException;
 @RequiredArgsConstructor
 public class GrpcUserService extends UserServiceGrpc.UserServiceImplBase {
     private final UserProfileService userProfileService;
+    private final UserPrivacyService userPrivacyService;
 
     @Override
     public void createUserProfile(
@@ -99,6 +105,57 @@ public class GrpcUserService extends UserServiceGrpc.UserServiceImplBase {
             responseObserver.onError(Status.NOT_FOUND.withDescription(ex.getMessage()).asRuntimeException());
         } catch (Exception ex) {
             responseObserver.onError(Status.INTERNAL.withDescription("Unable to get user profile").asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getFriendInvitePrivacyByIdentity(
+            GetFriendInvitePrivacyByIdentityRequest request,
+            StreamObserver<GetFriendInvitePrivacyByIdentityResponse> responseObserver
+    ) {
+        try {
+            String identityUserId = request.getIdentityUserId();
+            if (identityUserId == null || identityUserId.isBlank()) {
+                responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("identityUserId is required").asRuntimeException());
+                return;
+            }
+
+            boolean allowFriendInvites = Boolean.TRUE.equals(
+                    userPrivacyService.getFriendInvitePrivacyByIdentityUserId(identityUserId).getAllowFriendInvites()
+            );
+
+            responseObserver.onNext(GetFriendInvitePrivacyByIdentityResponse.newBuilder()
+                    .setAllowFriendInvites(allowFriendInvites)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (ResourceNotFoundException ex) {
+            responseObserver.onError(Status.NOT_FOUND.withDescription(ex.getMessage()).asRuntimeException());
+        } catch (Exception ex) {
+            responseObserver.onError(Status.INTERNAL.withDescription("Unable to get friend invite privacy").asRuntimeException());
+        }
+    }
+
+    @Override
+    public void cancelAccountDeletionRequest(
+            CancelAccountDeletionByIdentityRequest request,
+            StreamObserver<CancelAccountDeletionByIdentityResponse> responseObserver
+    ) {
+        try {
+            String identityUserId = request.getIdentityUserId();
+            if (identityUserId == null || identityUserId.isBlank()) {
+                responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("identityUserId is required").asRuntimeException());
+                return;
+            }
+
+            userProfileService.cancelAccountDeletionRequest(identityUserId);
+            responseObserver.onNext(CancelAccountDeletionByIdentityResponse.newBuilder()
+                    .setSuccess(true)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (ResourceNotFoundException ex) {
+            responseObserver.onError(Status.NOT_FOUND.withDescription(ex.getMessage()).asRuntimeException());
+        } catch (Exception ex) {
+            responseObserver.onError(Status.INTERNAL.withDescription("Unable to cancel account deletion request").asRuntimeException());
         }
     }
 }

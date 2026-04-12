@@ -3,6 +3,7 @@
   BellOff,
   ChevronDown,
   Clock,
+  Download,
   Edit2,
   EyeOff,
   HelpCircle,
@@ -12,7 +13,8 @@
   Trash2,
   Users,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 
 import {
   AlertDialog,
@@ -27,11 +29,14 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
-import {
-  messageInfoPreviewFiles,
-  messageInfoPreviewLinks,
-} from "@/mock/message-data"
+import { useChatPage } from "@/contexts/ChatPageContext"
+import { chatService } from "@/services/chat/chat.service"
+import { fileService, type AttachmentResponse } from "@/services/file/file.service"
+import { formatChatSidebarTime } from "@/utils/chat-display.util"
+import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
+import { extractUrlsFromText, getDomainFromUrl } from "@/utils/link-display.util"
 
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
@@ -51,6 +56,17 @@ interface SectionProps {
   children: React.ReactNode
   noBorder?: boolean
 }
+
+type LinkPreviewItem = {
+  id: string
+  url: string
+  domain: string
+  timeSent: string
+}
+
+const PREVIEW_LIMIT = 3
+const LINK_PAGE_LIMIT = 100
+const LINK_MAX_PAGES = 8
 
 function CollapsibleSection({
   title,
@@ -101,6 +117,118 @@ export default function ChatInfoMain({
   const [isDissolveDialogOpen, setIsDissolveDialogOpen] = useState(false)
   const [isLeavingGroup, setIsLeavingGroup] = useState(false)
   const [isDissolvingGroup, setIsDissolvingGroup] = useState(false)
+  const [imagesPreview, setImagesPreview] = useState<AttachmentResponse[]>([])
+  const [filesPreview, setFilesPreview] = useState<AttachmentResponse[]>([])
+  const [linksPreview, setLinksPreview] = useState<LinkPreviewItem[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  const { selectedConversationId } = useChatPage()
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setImagesPreview([])
+      setFilesPreview([])
+      setLinksPreview([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadPreviews = async () => {
+      setPreviewLoading(true)
+      try {
+        const [imagesRes, filesRes, linksRes] = await Promise.all([
+          fileService.getAttachments(selectedConversationId, "images"),
+          fileService.getAttachments(selectedConversationId, "files"),
+          fileService.getAttachments(selectedConversationId, "links"),
+        ])
+
+        let linksCollected: LinkPreviewItem[] = (linksRes.data ?? [])
+          .filter((attachment) => attachment.type === "LINK" && !!attachment.url)
+          .map((attachment) => ({
+            id: attachment.idAttachment,
+            url: attachment.url,
+            domain: getDomainFromUrl(attachment.url),
+            timeSent: attachment.timeUpload,
+          }))
+
+        if (linksCollected.length === 0) {
+          linksCollected = []
+          let page = 1
+          let totalPage = 1
+
+          do {
+            const messagesRes = await chatService.listMessages(selectedConversationId, page, LINK_PAGE_LIMIT)
+            const paged = messagesRes.data
+            const items = paged.items ?? []
+            totalPage = paged.totalPage ?? page
+
+            for (const message of items) {
+              if (message.recalled) {
+                continue
+              }
+              const urls = extractUrlsFromText(message.content)
+              urls.forEach((url, index) => {
+                linksCollected.push({
+                  id: `${message.idMessage}-${index}`,
+                  url,
+                  domain: getDomainFromUrl(url),
+                  timeSent: message.timeSent,
+                })
+              })
+            }
+
+            page += 1
+          } while (page <= totalPage && page <= LINK_MAX_PAGES)
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
+
+        setImagesPreview((imagesRes.data ?? []).slice(0, PREVIEW_LIMIT))
+        setFilesPreview((filesRes.data ?? []).slice(0, PREVIEW_LIMIT))
+        setLinksPreview(linksCollected.slice(0, PREVIEW_LIMIT))
+      } catch (error) {
+        console.error("Failed to load chat info previews", error)
+        if (!cancelled) {
+          toast.error("Không thể tải dữ liệu kho lưu trữ")
+        }
+      } finally {
+        if (!cancelled) {
+          setPreviewLoading(false)
+        }
+      }
+    }
+
+    void loadPreviews()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedConversationId])
+
+  const getFileExtension = useMemo(() => {
+    return (url: string): string => {
+      const parts = url.split(".")
+      const ext = parts[parts.length - 1]?.toLowerCase() || "file"
+      return ext.substring(0, 4).toUpperCase()
+    }
+  }, [])
+
+  const getExtensionColor = useMemo(() => {
+    return (ext: string): string => {
+      const lowerExt = ext.toLowerCase()
+      if (lowerExt.includes("pdf")) return "bg-red-500"
+      if (lowerExt.includes("doc")) return "bg-blue-500"
+      if (lowerExt.includes("xls")) return "bg-green-500"
+      if (lowerExt.includes("ppt")) return "bg-orange-500"
+      if (lowerExt.includes("zip") || lowerExt.includes("rar")) return "bg-yellow-600"
+      if (lowerExt.includes("mp3") || lowerExt.includes("wav")) return "bg-purple-500"
+      return "bg-gray-500"
+    }
+  }, [])
 
   const toggleSection = (key: keyof typeof openSections) => {
     setOpenSections((prev) => ({
@@ -197,22 +325,37 @@ export default function ChatInfoMain({
               onToggle={() => toggleSection("images")}
               noBorder
             >
-              <div className="mb-3 grid grid-cols-3 gap-1">
-                <img
-                  src="https://images.unsplash.com/photo-1542204165-65bf26472b9b?w=150&h=150&fit=crop"
-                  alt="Hình 1"
-                  className="aspect-square w-full rounded object-cover"
-                />
-                <img
-                  src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=150&h=150&fit=crop"
-                  alt="Hình 2"
-                  className="aspect-square w-full rounded object-cover"
-                />
-                <img
-                  src="https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=150&h=150&fit=crop"
-                  alt="Hình 3"
-                  className="aspect-square w-full rounded object-cover"
-                />
+              <div className="mb-3">
+                {previewLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner className="size-4 text-muted-foreground" />
+                  </div>
+                ) : imagesPreview.length === 0 ? (
+                  <div className="flex aspect-[3/1] w-full items-center justify-center rounded border bg-muted text-xs text-muted-foreground">
+                    Chưa có ảnh/video
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1">
+                    {imagesPreview.map((item) => (
+                      <div key={item.idAttachment} className="aspect-square w-full overflow-hidden rounded">
+                        {item.type === "VIDEO" ? (
+                          <video
+                            src={item.url}
+                            className="aspect-square h-full w-full object-cover bg-black"
+                            preload="metadata"
+                            muted
+                          />
+                        ) : (
+                          <img
+                            src={item.url}
+                            alt="attachment"
+                            className="aspect-square h-full w-full object-cover"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <Button
@@ -230,29 +373,41 @@ export default function ChatInfoMain({
               onToggle={() => toggleSection("files")}
             >
               <div className="mb-3">
-                {messageInfoPreviewFiles.map((file) => (
-                  <div key={file.name} className="flex items-center gap-3 py-2">
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded p-2 text-[10px] font-bold text-white ${file.color}`}
-                    >
-                      {file.icon}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground">
-                        {file.name}
-                      </p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span>{file.size}</span>
-                        <Clock className="h-3 w-3 text-blue-500" />
-                      </div>
-                    </div>
-
-                    <span className="ml-2 w-[62px] shrink-0 truncate text-right text-xs text-muted-foreground">
-                      {file.time}
-                    </span>
+                {previewLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner className="size-4 text-muted-foreground" />
                   </div>
-                ))}
+                ) : filesPreview.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground">Chưa có file</div>
+                ) : (
+                  filesPreview.map((file) => {
+                    const ext = getFileExtension(file.url)
+                    const color = getExtensionColor(ext)
+                    return (
+                      <div key={file.idAttachment} className="flex items-center gap-3 py-2">
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded p-2 text-[10px] font-bold text-white ${color}`}
+                        >
+                          {ext}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-foreground">
+                            {getOriginalFileNameFromUrl(file.url)}
+                          </p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>{file.size || "Unknown size"}</span>
+                            <Download className="h-3 w-3 text-blue-500" />
+                          </div>
+                        </div>
+
+                        <span className="ml-2 w-[62px] shrink-0 truncate text-right text-xs text-muted-foreground">
+                          {formatChatSidebarTime(file.timeUpload)}
+                        </span>
+                      </div>
+                    )
+                  })
+                )}
               </div>
 
               <Button
@@ -270,36 +425,36 @@ export default function ChatInfoMain({
               onToggle={() => toggleSection("links")}
             >
               <div className="mb-3">
-                {messageInfoPreviewLinks.map((link) => (
-                  <div
-                    key={link.title}
-                    className="flex min-w-0 items-center gap-3 py-2"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                      {link.icon === "link" ? (
-                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <div className="h-4 w-4 rounded-sm bg-green-500" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground">
-                        {link.title}
-                      </p>
-                      <a
-                        href="#"
-                        className="block truncate text-xs text-primary hover:underline"
-                      >
-                        {link.sub}
-                      </a>
-                    </div>
-
-                    <span className="ml-2 w-[48px] shrink-0 truncate text-right text-xs text-muted-foreground">
-                      {link.time}
-                    </span>
+                {previewLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner className="size-4 text-muted-foreground" />
                   </div>
-                ))}
+                ) : linksPreview.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground">Chưa có link</div>
+                ) : (
+                  linksPreview.map((link) => (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex min-w-0 items-center gap-3 rounded py-2 hover:bg-muted/40"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-foreground">{link.url}</p>
+                        <p className="truncate text-xs text-muted-foreground">{link.domain}</p>
+                      </div>
+
+                      <span className="ml-2 w-[56px] shrink-0 truncate text-right text-xs text-muted-foreground">
+                        {formatChatSidebarTime(link.timeSent)}
+                      </span>
+                    </a>
+                  ))
+                )}
               </div>
 
               <Button

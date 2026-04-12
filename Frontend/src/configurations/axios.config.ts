@@ -2,12 +2,13 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios"
 import { toast } from "sonner"
 
 import { API_BASE_URL, buildApiUrl } from "@/constants/api"
+import { API_PREFIXES } from "@/constants/api-prefixes"
 import { AUTH_PATH } from "@/constants/auth"
 import { updateAuthState } from "@/contexts/auth-context"
 import type { ResponseError, ResponseSuccess } from "@/types/api-response"
 
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? AUTH_PATH.LOGIN
-const AUTH_API_PREFIX = "/identity-service/api/v1/auth"
+const AUTH_API_PREFIX = API_PREFIXES.auth
 
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
@@ -43,6 +44,7 @@ const isAuthRequest = (url?: string) =>
       url?.includes(`${AUTH_API_PREFIX}/login`) ||
       url?.includes(`${AUTH_API_PREFIX}/register`) ||
       url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
+      url?.includes(`${AUTH_API_PREFIX}/change-password`) ||
       url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
       url?.includes(`${AUTH_API_PREFIX}/logout`)

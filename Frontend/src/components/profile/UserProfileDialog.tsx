@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
 import { Pencil, PencilLine, Save } from "lucide-react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -8,6 +8,8 @@ import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useMutation } from "@/hooks/useMutation"
+import { useQuery } from "@/hooks/useQuery"
 import { userService } from "@/services/user/user.service"
 import type { UpdateMyProfileRequest, UserProfile } from "@/types/user.type"
 import { formatDateVi } from "@/utils/date.util"
@@ -29,10 +31,7 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [formData, setFormData] = useState<UpdateMyProfileRequest>({
     firstName: "",
     lastName: "",
@@ -40,68 +39,76 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
     dateOfBirth: "",
   })
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    let mounted = true
-    const load = async () => {
-      setIsLoading(true)
-      try {
-        const response = await userService.getMyProfile()
-        if (!mounted) return
-        setProfile(response.data)
+  const { isLoading } = useQuery(
+    async () => {
+      const profileResponse = await userService.getMyProfile()
+      return profileResponse.data
+    },
+    {
+      enabled: open,
+      deps: [open],
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
         setFormData({
-          firstName: response.data.firstName ?? "",
-          lastName: response.data.lastName ?? "",
-          gender: response.data.gender ?? "MALE",
-          dateOfBirth: response.data.dateOfBirth ?? "",
+          firstName: nextProfile.firstName ?? "",
+          lastName: nextProfile.lastName ?? "",
+          gender: nextProfile.gender ?? "MALE",
+          dateOfBirth: nextProfile.dateOfBirth ?? "",
         })
-      } catch {
+      },
+      onError: () => {
         toast.error("Không tải được thông tin cá nhân.")
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
+      },
+    },
+  )
+
+  const { mutate: updateProfile, isLoading: isSaving } = useMutation(
+    async (payload: unknown) => {
+      const response = await userService.updateMyProfile(payload as UpdateMyProfileRequest)
+      return response.data
+    },
+    {
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
+        onProfileChanged?.(nextProfile)
+        setIsEditing(false)
+        toast.success("Cập nhật thông tin thành công.")
+      },
+      onError: () => {
+        toast.error("Cập nhật thông tin thất bại.")
+      },
+    },
+  )
+
+  const { mutate: uploadAvatar, isLoading: isUploadingAvatar } = useMutation(
+    async (file: unknown) => {
+      const response = await userService.updateMyAvatar(file as File)
+      return response.data
+    },
+    {
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
+        onProfileChanged?.(nextProfile)
+        toast.success("Cập nhật ảnh đại diện thành công.")
+      },
+      onError: () => {
+        toast.error("Cập nhật ảnh đại diện thất bại.")
+      },
+      onSettled: () => {
+        if (fileRef.current) {
+          fileRef.current.value = ""
         }
-      }
-    }
-    void load()
-    return () => {
-      mounted = false
-    }
-  }, [open])
+      },
+    },
+  )
 
   const handleSaveProfile = async () => {
-    setIsSaving(true)
-    try {
-      const response = await userService.updateMyProfile(formData)
-      setProfile(response.data)
-      onProfileChanged?.(response.data)
-      setIsEditing(false)
-      toast.success("Cập nhật thông tin thành công.")
-    } catch {
-      toast.error("Cập nhật thông tin thất bại.")
-    } finally {
-      setIsSaving(false)
-    }
+    await updateProfile(formData)
   }
 
   const handleUploadAvatar = async (file?: File) => {
     if (!file) return
-    setIsUploadingAvatar(true)
-    try {
-      const response = await userService.updateMyAvatar(file)
-      setProfile(response.data)
-      onProfileChanged?.(response.data)
-      toast.success("Cập nhật ảnh đại diện thành công.")
-    } catch {
-      toast.error("Cập nhật ảnh đại diện thất bại.")
-    } finally {
-      setIsUploadingAvatar(false)
-      if (fileRef.current) {
-        fileRef.current.value = ""
-      }
-    }
+    await uploadAvatar(file)
   }
 
   return (
@@ -115,7 +122,7 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
           <div className="py-6 text-center text-sm text-slate-500">Đang tải thông tin...</div>
         ) : (
           <div className="space-y-5">
-            <div className="flex justify-center mb-10">
+            <div className="flex justify-center">
               <input
                 ref={fileRef}
                 type="file"
@@ -144,6 +151,48 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
                   </span>
                 ) : null}
               </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              {isEditing ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setIsEditing(false)
+                      setFormData({
+                        firstName: profile.firstName ?? "",
+                        lastName: profile.lastName ?? "",
+                        gender: profile.gender ?? "MALE",
+                        dateOfBirth: profile.dateOfBirth ?? "",
+                      })
+                    }}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    disabled={isSaving}
+                    onClick={() => void handleSaveProfile()}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isLoading || !profile}
+                  onClick={() => setIsEditing(true)}
+                >
+                  <PencilLine className="mr-2 h-4 w-4" />
+                  Chỉnh sửa hồ sơ
+                </Button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -200,30 +249,6 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
                   <Input type="text" value={formatDateVi(profile.dateOfBirth)} disabled />
                 )}
               </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              {isEditing ? (
-                <Button
-                  type="button"
-                  className="bg-blue-600 text-white hover:bg-blue-700"
-                  disabled={isSaving}
-                  onClick={() => void handleSaveProfile()}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  {isSaving ? "Đang lưu..." : "Lưu"}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isLoading || !profile}
-                  onClick={() => setIsEditing(true)}
-                >
-                  <PencilLine className="mr-2 h-4 w-4" />
-                  Chỉnh sửa
-                </Button>
-              )}
             </div>
           </div>
         )}
