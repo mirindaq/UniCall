@@ -12,6 +12,7 @@ import { extractUrlsFromText } from "@/utils/link-display.util"
 type ChatPageContextValue = {
   currentUserId: string | null
   conversations: ConversationResponse[]
+  unreadCountByConversationId: Record<string, number>
   conversationsLoading: boolean
   conversationsError: unknown
   refetchConversations: () => Promise<unknown>
@@ -90,6 +91,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
   const [messageFocusRequestId, setMessageFocusRequestId] = useState<string | null>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
+  const [unreadCountByConversationId, setUnreadCountByConversationId] = useState<Record<string, number>>({})
 
   const { data: profileResponse } = useQuery(() => userService.getMyProfile(), {
     onError: () => undefined,
@@ -126,7 +128,57 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
           conversation.lastMessageSenderId ?? senderByConversationId.get(conversation.idConversation),
       }))
     })
+
+    setUnreadCountByConversationId((prev) => {
+      const next: Record<string, number> = {}
+      for (const conversation of incoming) {
+        const backendUnreadCount = conversation.unreadCount
+        const fallbackUnreadCount = prev[conversation.idConversation] ?? 0
+        next[conversation.idConversation] = Math.max(0, backendUnreadCount ?? fallbackUnreadCount)
+      }
+      return next
+    })
   }, [conversationsResponse?.data])
+
+  const markConversationAsReadLocal = useCallback((conversationId: string | null) => {
+    if (!conversationId) {
+      return
+    }
+    setUnreadCountByConversationId((prev) => {
+      const previousCount = prev[conversationId] ?? 0
+      if (previousCount === 0 && conversationId in prev) {
+        return prev
+      }
+      return {
+        ...prev,
+        [conversationId]: 0,
+      }
+    })
+  }, [])
+
+  const markConversationAsRead = useCallback(async (conversationId: string | null) => {
+    if (!conversationId) {
+      return
+    }
+
+    markConversationAsReadLocal(conversationId)
+    if (!currentUserId) {
+      return
+    }
+
+    try {
+      await chatService.markConversationAsRead(conversationId)
+    } catch {
+      // keep UI responsive even if sync call fails
+    }
+  }, [currentUserId, markConversationAsReadLocal])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return
+    }
+    void markConversationAsRead(selectedConversationId)
+  }, [markConversationAsRead, selectedConversationId])
 
   const conversationTitle = useCallback(
     (c: ConversationResponse) => {
@@ -189,7 +241,36 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     if (!found) {
       void refetchConversationsSafely()
     }
-  }, [refetchConversationsSafely])
+
+    if (!currentUserId) {
+      return
+    }
+
+    const isIncomingFromOther = message.idAccountSent !== currentUserId
+    if (!isIncomingFromOther) {
+      return
+    }
+
+    const isActiveConversation = selectedConversationId === message.idConversation
+    if (isActiveConversation) {
+      void markConversationAsRead(message.idConversation)
+      return
+    }
+
+    setUnreadCountByConversationId((prev) => {
+      const previousCount = prev[message.idConversation] ?? 0
+      const nextCount = previousCount + 1
+
+      if (nextCount === previousCount && message.idConversation in prev) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        [message.idConversation]: nextCount,
+      }
+    })
+  }, [currentUserId, markConversationAsRead, refetchConversationsSafely, selectedConversationId])
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
@@ -236,6 +317,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     () => ({
       currentUserId,
       conversations,
+      unreadCountByConversationId,
       conversationsLoading,
       conversationsError,
       refetchConversations,
@@ -264,6 +346,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       conversationsError,
       conversationsLoading,
       currentUserId,
+      unreadCountByConversationId,
       isStartingChat,
       refetchConversations,
       selectConversation,

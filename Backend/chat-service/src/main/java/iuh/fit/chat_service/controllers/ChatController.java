@@ -66,6 +66,18 @@ public class ChatController {
         );
     }
 
+    @PostMapping("/conversations/{conversationId}/read")
+    public ResponseEntity<ResponseSuccess<Void>> markConversationAsRead(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        chatConversationService.markConversationAsRead(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Đánh dấu đã đọc thành công", null)
+        );
+    }
+
     @GetMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<ResponseSuccess<PageResponse<MessageResponse>>> listMessages(
             @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,

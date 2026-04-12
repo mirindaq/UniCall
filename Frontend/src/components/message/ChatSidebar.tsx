@@ -40,9 +40,14 @@ const truncateWithEllipsis = (value: string, maxLength = 52): string => {
   return `${normalized.slice(0, maxLength).trimEnd()}...`
 }
 
+const formatUnreadBadge = (count: number): string => {
+  return count > 5 ? "5+" : `${count}`
+}
+
 export default function ChatSidebar() {
   const {
     conversations,
+    unreadCountByConversationId,
     conversationsLoading,
     refetchConversations,
     selectConversation,
@@ -130,8 +135,19 @@ export default function ChatSidebar() {
   const totalPage = searchUsersResponse?.data?.totalPage ?? 1
   const hasMoreSearchResult = shouldSearch && currentPage < totalPage
 
-  /** Tab "Chưa đọc": chờ API unread; hiện danh sách rỗng kèm empty state. */
-  const listForTab = tab === "unread" ? [] : conversations
+  const totalUnreadCount = useMemo(() => {
+    return conversations.reduce((total, conversation) => {
+      return total + (unreadCountByConversationId[conversation.idConversation] ?? 0)
+    }, 0)
+  }, [conversations, unreadCountByConversationId])
+
+  const unreadConversations = useMemo(() => {
+    return conversations.filter((conversation) => {
+      return (unreadCountByConversationId[conversation.idConversation] ?? 0) > 0
+    })
+  }, [conversations, unreadCountByConversationId])
+
+  const listForTab = tab === "unread" ? unreadConversations : conversations
 
   const isSearchMode = searchKeyword.trim().length > 0
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
@@ -169,6 +185,11 @@ export default function ChatSidebar() {
                 </TabsTrigger>
                 <TabsTrigger value="unread" className="px-2">
                   Chưa đọc
+                  {totalUnreadCount > 0 ? (
+                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold text-white">
+                      {formatUnreadBadge(totalUnreadCount)}
+                    </span>
+                  ) : null}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -222,7 +243,7 @@ export default function ChatSidebar() {
                 </EmptyTitle>
                 <EmptyDescription>
                   {tab === "unread"
-                    ? "Các tin mới sẽ hiển thị ở đây khi backend hỗ trợ trạng thái đã đọc."
+                    ? "Các cuộc trò chuyện có tin nhắn mới chưa đọc sẽ hiển thị ở đây."
                     : "Tìm người để nhắn, hoặc đợi tin nhắn mới."}
                 </EmptyDescription>
               </EmptyHeader>
@@ -242,6 +263,8 @@ export default function ChatSidebar() {
               const lastPreview = truncateWithEllipsis(last)
               const timeLabel = formatChatSidebarTime(chat.dateUpdateMessage)
               const isActive = chat.idConversation === selectedConversationId
+              const unreadCount = unreadCountByConversationId[chat.idConversation] ?? 0
+              const hasUnread = unreadCount > 0
 
               return (
                 <button
@@ -259,11 +282,37 @@ export default function ChatSidebar() {
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-baseline justify-between">
-                      <h3 className="truncate text-sm font-medium text-foreground">{title}</h3>
-                      <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">{timeLabel}</span>
+                      <h3
+                        className={cn(
+                          "truncate text-sm text-foreground",
+                          hasUnread && !isActive ? "font-semibold" : "font-medium",
+                        )}
+                      >
+                        {title}
+                      </h3>
+                      <span
+                        className={cn(
+                          "ml-2 whitespace-nowrap text-xs",
+                          hasUnread && !isActive ? "font-semibold text-blue-600" : "text-muted-foreground",
+                        )}
+                      >
+                        {timeLabel}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="truncate text-xs text-muted-foreground">{lastPreview || " "}</p>
+                      <p
+                        className={cn(
+                          "truncate text-xs",
+                          hasUnread && !isActive ? "font-medium text-slate-700" : "text-muted-foreground",
+                        )}
+                      >
+                        {lastPreview || " "}
+                      </p>
+                      {hasUnread ? (
+                        <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
+                          {formatUnreadBadge(unreadCount)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </button>

@@ -97,6 +97,7 @@ export interface ConversationResponse {
   dateUpdateMessage: string
   lastMessageContent?: string
   lastMessageSenderId?: string
+  unreadCount?: number
   numberMember: number
   participantInfos: ChatParticipantInfo[]
 }

@@ -33,6 +33,12 @@ export const chatService = {
     )
     return data
   },
+  markConversationAsRead: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<void>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/read`
+    )
+    return data
+  },
   listMessages: async (conversationId: string, page = 1, limit = 20) => {
     const { data } = await axiosClient.get<ResponseSuccess<PageResponse<ChatMessageResponse>>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages`,

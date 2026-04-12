@@ -5,6 +5,7 @@ import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.Message;
+import iuh.fit.chat_service.entities.MessageReadStatus;
 import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.AttachmentType;
 import iuh.fit.chat_service.enums.ConversationType;
@@ -12,6 +13,7 @@ import iuh.fit.chat_service.enums.MessageType;
 import iuh.fit.chat_service.enums.ParicipantRole;
 import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
+import iuh.fit.chat_service.repositories.MessageReadStatusRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
@@ -30,6 +32,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +42,7 @@ public class ChatConversationServiceImpl implements ChatConversationService {
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
+    private final MessageReadStatusRepository messageReadStatusRepository;
     private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Override
@@ -46,10 +50,36 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         if (identityUserId == null || identityUserId.isBlank()) {
             throw new InvalidParamException("Thiếu người dùng đã xác thực");
         }
-        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
-        return conversationRepository.findByParticipantAccount(identityUserId).stream()
-                .map(conversation -> toConversationResponse(conversation, identityUserId, userDisplayCache))
+
+        List<Conversation> myConversations = conversationRepository.findByParticipantAccount(identityUserId);
+        if (myConversations.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> conversationIds = myConversations.stream()
+                .map(Conversation::getIdConversation)
+                .filter(id -> id != null && !id.isBlank())
                 .toList();
+        Map<String, MessageReadStatus> readStatusByConversationId = messageReadStatusRepository
+                .findByIdConversationIn(conversationIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        MessageReadStatus::getIdConversation,
+                        status -> status,
+                        (left, right) -> left
+                ));
+
+        Map<String, GrpcUserServiceClient.UserDisplayInfo> userDisplayCache = new HashMap<>();
+        List<ConversationResponse> responses = new ArrayList<>();
+        for (Conversation conversation : myConversations) {
+            ConversationResponse response = toConversationResponse(conversation, identityUserId, userDisplayCache);
+            if (response == null) {
+                continue;
+            }
+            response.setUnreadCount(resolveUnreadCount(conversation.getIdConversation(), identityUserId, readStatusByConversationId));
+            responses.add(response);
+        }
+        return responses;
     }
 
     @Override
@@ -75,6 +105,58 @@ public class ChatConversationServiceImpl implements ChatConversationService {
                         identityUserId,
                         userDisplayCache
                 ));
+    }
+
+    @Override
+    public void markConversationAsRead(String identityUserId, String conversationId) {
+        if (identityUserId == null || identityUserId.isBlank()) {
+            throw new InvalidParamException("Thiếu người dùng đã xác thực");
+        }
+        if (!StringUtils.hasText(conversationId)) {
+            throw new InvalidParamException("conversationId không hợp lệ");
+        }
+
+        requireParticipant(conversationId, identityUserId);
+
+        Message latestVisible = messageRepository.findVisibleForParticipant(
+                conversationId,
+                identityUserId,
+                PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "timeSent"))
+        ).stream().findFirst().orElse(null);
+
+        LocalDateTime seenAt = latestVisible != null && latestVisible.getTimeSent() != null
+                ? latestVisible.getTimeSent()
+                : LocalDateTime.now();
+        String seenMessageId = latestVisible == null ? null : latestVisible.getIdMessage();
+
+        MessageReadStatus status = messageReadStatusRepository.findByIdConversation(conversationId)
+                .orElseGet(() -> {
+                    MessageReadStatus created = new MessageReadStatus();
+                    created.setIdConversation(conversationId);
+                    return created;
+                });
+
+        List<MessageReadStatus.SeenInfo> seenBy = status.getSeenBy();
+        if (seenBy == null) {
+            seenBy = new ArrayList<>();
+        }
+
+        boolean updated = false;
+        for (MessageReadStatus.SeenInfo seenInfo : seenBy) {
+            if (identityUserId.equals(seenInfo.getIdAccount())) {
+                seenInfo.setTimeSeen(seenAt);
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            seenBy.add(new MessageReadStatus.SeenInfo(identityUserId, seenAt));
+        }
+
+        status.setSeenBy(seenBy);
+        status.setIdLastMessageSeen(seenMessageId);
+        status.setTimeSeen(seenAt);
+        messageReadStatusRepository.save(status);
     }
 
     @Override
@@ -171,6 +253,69 @@ public class ChatConversationServiceImpl implements ChatConversationService {
 
         response.setLastMessageContent(buildPreviewFromMessage(latest));
         response.setLastMessageSenderId(latest.getIdAccountSent());
+    }
+
+    private int resolveUnreadCount(
+            String conversationId,
+            String identityUserId,
+            Map<String, MessageReadStatus> readStatusByConversationId
+    ) {
+        if (!StringUtils.hasText(conversationId)) {
+            return 0;
+        }
+
+        LocalDateTime seenAt = resolveSeenAt(conversationId, identityUserId, readStatusByConversationId);
+        long unreadCount = seenAt == null
+                ? messageRepository.countIncomingVisibleForParticipant(conversationId, identityUserId)
+                : messageRepository.countUnreadForParticipantSince(conversationId, identityUserId, seenAt);
+        if (unreadCount <= 0) {
+            return 0;
+        }
+        return unreadCount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) unreadCount;
+    }
+
+    private LocalDateTime resolveSeenAt(
+            String conversationId,
+            String identityUserId,
+            Map<String, MessageReadStatus> readStatusByConversationId
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+
+        MessageReadStatus status = readStatusByConversationId.get(conversationId);
+        if (status == null) {
+            MessageReadStatus created = new MessageReadStatus();
+            created.setIdConversation(conversationId);
+            created.setTimeSeen(now);
+            created.setSeenBy(new ArrayList<>(List.of(new MessageReadStatus.SeenInfo(identityUserId, now))));
+            MessageReadStatus saved = messageReadStatusRepository.save(created);
+            readStatusByConversationId.put(conversationId, saved);
+            return now;
+        }
+
+        List<MessageReadStatus.SeenInfo> seenBy = status.getSeenBy();
+        if (seenBy == null) {
+            seenBy = new ArrayList<>();
+        }
+
+        for (MessageReadStatus.SeenInfo seenInfo : seenBy) {
+            if (!identityUserId.equals(seenInfo.getIdAccount())) {
+                continue;
+            }
+            if (seenInfo.getTimeSeen() != null) {
+                return seenInfo.getTimeSeen();
+            }
+            seenInfo.setTimeSeen(now);
+            status.setSeenBy(seenBy);
+            status.setTimeSeen(now);
+            messageReadStatusRepository.save(status);
+            return now;
+        }
+
+        seenBy.add(new MessageReadStatus.SeenInfo(identityUserId, now));
+        status.setSeenBy(seenBy);
+        status.setTimeSeen(now);
+        messageReadStatusRepository.save(status);
+        return now;
     }
 
     private static String buildPreviewFromMessage(Message message) {
