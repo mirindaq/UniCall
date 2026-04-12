@@ -17,10 +17,10 @@ import iuh.fit.chat_service.repositories.CallSessionRepository;
 import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ConversationCallService;
+import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -37,7 +37,7 @@ public class ConversationCallServiceImpl implements ConversationCallService {
     private final CallSessionRepository callSessionRepository;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Override
     public void sendSignal(String identityUserId, ConversationCallSignalRequest request) {
@@ -55,6 +55,7 @@ public class ConversationCallServiceImpl implements ConversationCallService {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hội thoại"));
+
         if (conversation.getType() != ConversationType.DOUBLE) {
             throw new InvalidParamException("Hiện chỉ hỗ trợ gọi thoại cho hội thoại 1-1");
         }
@@ -98,14 +99,16 @@ public class ConversationCallServiceImpl implements ConversationCallService {
                 .fromUserId(identityUserId)
                 .toUserId(targetUserId)
                 .audioOnly(Boolean.TRUE.equals(request.getAudioOnly()))
-                .sdp(trimToNull(request.getSdp()))
-                .candidate(trimToNull(request.getCandidate()))
-                .sdpMid(trimToNull(request.getSdpMid()))
+                // Preserve SDP/candidate exactly as sent; trimming can corrupt SDP semantics.
+                .sdp(request.getSdp())
+                .candidate(request.getCandidate())
+                .sdpMid(request.getSdpMid())
                 .sdpMLineIndex(request.getSdpMLineIndex())
                 .sentAt(LocalDateTime.now())
                 .build();
 
-        messagingTemplate.convertAndSend(topicForConversation(conversationId), response);
+        realtimeEventPublisher.publishUserCallSignalEvent(identityUserId, conversationId, response);
+        realtimeEventPublisher.publishUserCallSignalEvent(targetUserId, conversationId, response);
         if (session.getEndedAt() != null && session.getOutcome() != null && session.getSummaryMessageId() == null) {
             persistCallSummaryMessage(session);
         }
@@ -118,37 +121,25 @@ public class ConversationCallServiceImpl implements ConversationCallService {
         return value.trim();
     }
 
-    private static String topicForConversation(String conversationId) {
-        return "/topic/conversations." + conversationId + ".calls";
-    }
-
-    private static String messageTopicForConversation(String conversationId) {
-        return "/topic/conversations." + conversationId + ".messages";
-    }
-
     private static void validateSignalPayload(ConversationCallSignalRequest request, CallSignalType type) {
-        String sdp = trimToNull(request.getSdp());
-        String candidate = trimToNull(request.getCandidate());
-        if ((type == CallSignalType.OFFER || type == CallSignalType.ACCEPT) && sdp == null) {
+        String sdp = request.getSdp();
+        String candidate = request.getCandidate();
+        if ((type == CallSignalType.OFFER || type == CallSignalType.ACCEPT) && isBlank(sdp)) {
             throw new InvalidParamException("Thiếu SDP cho tín hiệu cuộc gọi");
         }
-        if (type == CallSignalType.ICE_CANDIDATE && candidate == null) {
+        if (type == CallSignalType.ICE_CANDIDATE && isBlank(candidate)) {
             throw new InvalidParamException("Thiếu ICE candidate");
         }
-        if (sdp != null && sdp.length() > MAX_SDP_LENGTH) {
+        if (!isBlank(sdp) && sdp.length() > MAX_SDP_LENGTH) {
             throw new InvalidParamException("SDP vượt quá giới hạn cho phép");
         }
-        if (candidate != null && candidate.length() > MAX_ICE_CANDIDATE_LENGTH) {
+        if (!isBlank(candidate) && candidate.length() > MAX_ICE_CANDIDATE_LENGTH) {
             throw new InvalidParamException("ICE candidate vượt quá giới hạn cho phép");
         }
     }
 
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private CallSession syncCallSession(
@@ -255,7 +246,19 @@ public class ConversationCallServiceImpl implements ConversationCallService {
         conversation.setLastMessageContent(buildCallPreview(session));
         conversation.setDateUpdateMessage(now);
         conversationRepository.save(conversation);
-        messagingTemplate.convertAndSend(messageTopicForConversation(session.getConversationId()), MessageResponse.from(saved));
+        MessageResponse dto = MessageResponse.from(saved);
+        List<ParticipantInfo> participants = conversation.getParticipantInfos();
+        if (participants != null) {
+            participants.stream()
+                    .map(ParticipantInfo::getIdAccount)
+                    .filter(id -> id != null && !id.isBlank())
+                    .distinct()
+                    .forEach(id -> realtimeEventPublisher.publishUserMessageEvent(
+                            id,
+                            session.getConversationId(),
+                            dto
+                    ));
+        }
     }
 
     private static String buildCallPreview(CallSession session) {

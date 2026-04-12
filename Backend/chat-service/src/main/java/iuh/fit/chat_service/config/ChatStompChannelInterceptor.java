@@ -23,6 +23,7 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             Pattern.compile("^/topic/conversations\\.([^.]+)\\.messages$");
     private static final Pattern CONVERSATION_CALL_TOPIC =
             Pattern.compile("^/topic/conversations\\.([^.]+)\\.calls$");
+    private static final String USER_EVENT_QUEUE = "/user/queue/events";
 
     private final ChatConversationService chatConversationService;
 
@@ -49,6 +50,9 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             }
             Matcher messageMatcher = CONVERSATION_TOPIC.matcher(dest);
             Matcher callMatcher = CONVERSATION_CALL_TOPIC.matcher(dest);
+            if (USER_EVENT_QUEUE.equals(dest)) {
+                return message;
+            }
             boolean isMessageTopic = messageMatcher.matches();
             boolean isCallTopic = callMatcher.matches();
             if (!isMessageTopic && !isCallTopic) {

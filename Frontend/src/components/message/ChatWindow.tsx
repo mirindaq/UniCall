@@ -22,7 +22,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
-import ConversationCallBanner from "@/components/message/ConversationCallBanner"
 import IncomingCallPopup from "@/components/message/IncomingCallPopup"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -45,6 +44,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/contexts/auth-context"
 import { useChatPage } from "@/contexts/ChatPageContext"
 import { useConversationCall } from "@/hooks/useConversationCall"
 import { useChatSocket } from "@/hooks/useChatSocket"
@@ -52,7 +52,7 @@ import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import { userService } from "@/services/user/user.service"
-import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
+import type { ChatAttachment, ChatMessageResponse, UserRealtimeEvent } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
 
 const MESSAGE_PAGE_SIZE = 30
@@ -148,6 +148,7 @@ function buildCallMessageCard(
 }
 
 export default function ChatWindow() {
+  const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const draftCaretRef = useRef({ start: 0, end: 0 })
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -163,6 +164,7 @@ export default function ChatWindow() {
     currentUserId,
     conversationTitle,
     conversationAvatar,
+    onRealtimeMessage,
     selectedPeerProfile,
     setDetailsView,
     conversations,
@@ -188,7 +190,6 @@ export default function ChatWindow() {
     conversationType: selectedConversation?.type,
     currentUserId,
     peerUserId,
-    peerDisplayName: headerTitle,
   })
 
   const [apiMessages, setApiMessages] = useState<ChatMessageResponse[]>([])
@@ -199,6 +200,7 @@ export default function ChatWindow() {
 
   const [socketExtras, setSocketExtras] = useState<ChatMessageResponse[]>([])
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { displayName: string; avatar?: string }>>({})
+  const [callPeerProfile, setCallPeerProfile] = useState<{ displayName: string; avatar?: string } | null>(null)
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
@@ -300,6 +302,7 @@ export default function ChatWindow() {
   }, [loadMoreMessages])
 
   const mergeIncomingOrUpdatedMessage = useCallback((msg: ChatMessageResponse) => {
+    onRealtimeMessage(msg)
     if (msg.idConversation !== selectedIdRef.current) {
       return
     }
@@ -322,12 +325,15 @@ export default function ChatWindow() {
       next[i] = msg
       return next
     })
-  }, [])
+  }, [onRealtimeMessage])
 
   useChatSocket({
-    autoConnect: Boolean(selectedConversationId),
-    conversationId: selectedConversationId ?? undefined,
-    onMessage: mergeIncomingOrUpdatedMessage,
+    autoConnect: true,
+    onUserEvent: (event: UserRealtimeEvent) => {
+      if (event.eventType === "MESSAGE_UPSERT" && event.message) {
+        mergeIncomingOrUpdatedMessage(event.message)
+      }
+    },
   })
 
   const displayMessages = useMemo(() => {
@@ -402,6 +408,67 @@ export default function ChatWindow() {
       cancelled = true
     }
   }, [currentUserId, displayMessages, selectedConversation, senderProfiles])
+
+  useEffect(() => {
+    const peerId = conversationCall.activeCall?.peerUserId
+    if (!peerId || !isAuthenticated) {
+      setCallPeerProfile(null)
+      return
+    }
+
+    const fromKnownPeer =
+      peerUserId === peerId
+        ? {
+            displayName: headerTitle || peerId,
+            avatar: headerAvatar,
+          }
+        : null
+
+    if (fromKnownPeer?.displayName) {
+      setCallPeerProfile(fromKnownPeer)
+      return
+    }
+
+    let cancelled = false
+    void userService
+      .getProfileByIdentityUserId(peerId)
+      .then((response) => {
+        if (cancelled) {
+          return
+        }
+        const data = response.data
+        const displayName = `${data.lastName ?? ""} ${data.firstName ?? ""}`.trim() || peerId
+        setCallPeerProfile({
+          displayName,
+          avatar: data.avatar ?? undefined,
+        })
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+        setCallPeerProfile({
+          displayName: peerId,
+          avatar: undefined,
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [conversationCall.activeCall?.peerUserId, headerAvatar, headerTitle, isAuthenticated, peerUserId])
+
+  const isCallModalOpen = useMemo(
+    () => conversationCall.phase !== "idle",
+    [conversationCall.phase],
+  )
+  const callModalPeerId = conversationCall.activeCall?.peerUserId ?? null
+  const callModalAvatarFallback =
+    peerUserId && callModalPeerId && peerUserId === callModalPeerId ? headerAvatar : undefined
+  const callModalName =
+    callPeerProfile?.displayName
+      ?? (peerUserId && callModalPeerId && peerUserId === callModalPeerId ? headerTitle : callModalPeerId)
+      ?? "Người dùng"
+  const callModalAvatar = callPeerProfile?.avatar ?? callModalAvatarFallback
 
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds((prev) => {
@@ -638,10 +705,24 @@ export default function ChatWindow() {
 
   if (!selectedConversationId || !selectedConversation) {
     return (
-      <div className="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-muted/20 px-6 text-center">
+      <div className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-muted/20 px-6 text-center">
         <p className="text-sm text-muted-foreground">
           Chọn một cuộc trò chuyện ở cột bên trái để xem tin nhắn, hoặc tìm người để bắt đầu nhắn tin.
         </p>
+        <IncomingCallPopup
+          open={isCallModalOpen}
+          phase={conversationCall.phase === "idle" ? "outgoing" : conversationCall.phase}
+          callerName={callModalName}
+          callerAvatar={callModalAvatar}
+          startedAt={conversationCall.activeCall?.startedAt}
+          ringDeadlineAt={conversationCall.ringDeadlineAt}
+          ringDurationMs={conversationCall.ringDurationMs}
+          statusMessage={conversationCall.statusMessage}
+          onAccept={conversationCall.acceptIncomingCall}
+          onReject={conversationCall.rejectIncomingCall}
+          onEnd={conversationCall.endCurrentCall}
+        />
+        <audio ref={conversationCall.remoteAudioRef} autoPlay playsInline className="hidden" />
       </div>
     )
   }
@@ -702,20 +783,18 @@ export default function ChatWindow() {
           </Button>
         </div>
       </div>
-      <ConversationCallBanner
-        phase={conversationCall.phase === "incoming" ? "idle" : conversationCall.phase}
-        statusText={conversationCall.statusText}
+      <IncomingCallPopup
+        open={isCallModalOpen}
+        phase={conversationCall.phase === "idle" ? "outgoing" : conversationCall.phase}
+        callerName={callModalName}
+        callerAvatar={callModalAvatar}
         startedAt={conversationCall.activeCall?.startedAt}
+        ringDeadlineAt={conversationCall.ringDeadlineAt}
+        ringDurationMs={conversationCall.ringDurationMs}
+        statusMessage={conversationCall.statusMessage}
         onAccept={conversationCall.acceptIncomingCall}
         onReject={conversationCall.rejectIncomingCall}
         onEnd={conversationCall.endCurrentCall}
-      />
-      <IncomingCallPopup
-        open={conversationCall.phase === "incoming"}
-        callerName={headerTitle}
-        callerAvatar={headerAvatar}
-        onAccept={conversationCall.acceptIncomingCall}
-        onReject={conversationCall.rejectIncomingCall}
       />
       <audio ref={conversationCall.remoteAudioRef} autoPlay playsInline className="hidden" />
 

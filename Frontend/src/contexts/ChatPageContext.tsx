@@ -1,10 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
 import { chatService } from "@/services/chat/chat.service"
 import { userService } from "@/services/user/user.service"
-import type { ConversationResponse } from "@/types/chat"
+import type { ChatMessageResponse, ConversationResponse } from "@/types/chat"
 import type { UserProfile, UserSearchItem } from "@/types/user.type"
 
 type ChatPageContextValue = {
@@ -23,6 +23,27 @@ type ChatPageContextValue = {
   selectedPeerProfile: UserProfile | null
   detailsView: "main" | "storage" | "group-members"
   setDetailsView: (view: "main" | "storage" | "group-members") => void
+  onRealtimeMessage: (message: ChatMessageResponse) => void
+}
+
+const buildConversationPreview = (message: ChatMessageResponse): string => {
+  if (message.type === "CALL") {
+    return "Cuộc gọi thoại"
+  }
+  if (message.recalled) {
+    return message.content || "Tin nhắn đã thu hồi"
+  }
+  const attachmentType = message.attachments?.[0]?.type
+  if (attachmentType === "GIF") {
+    return "Đã gửi GIF"
+  }
+  if (attachmentType === "STICKER") {
+    return "Đã gửi sticker"
+  }
+  if (attachmentType) {
+    return "Đã gửi tệp đính kèm"
+  }
+  return message.content || ""
 }
 
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
@@ -50,10 +71,12 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     },
   })
 
-  const conversations = useMemo(
-    () => conversationsResponse?.data ?? [],
-    [conversationsResponse?.data],
-  )
+  const [conversations, setConversations] = useState<ConversationResponse[]>([])
+  const refetchInFlightRef = useRef(false)
+
+  useEffect(() => {
+    setConversations(conversationsResponse?.data ?? [])
+  }, [conversationsResponse?.data])
 
   const conversationTitle = useCallback(
     (c: ConversationResponse) => {
@@ -73,6 +96,49 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   )
 
   const selectedPeerProfile = useMemo(() => null, [])
+
+  const refetchConversationsSafely = useCallback(async () => {
+    if (refetchInFlightRef.current) {
+      return
+    }
+    refetchInFlightRef.current = true
+    try {
+      await refetchConversations()
+    } finally {
+      refetchInFlightRef.current = false
+    }
+  }, [refetchConversations])
+
+  const onRealtimeMessage = useCallback((message: ChatMessageResponse) => {
+    if (!message?.idConversation) {
+      return
+    }
+
+    const preview = buildConversationPreview(message)
+    const updateAt = message.timeSent ?? new Date().toISOString()
+    let found = false
+
+    setConversations((prev) => {
+      const index = prev.findIndex((conversation) => conversation.idConversation === message.idConversation)
+      if (index < 0) {
+        return prev
+      }
+      found = true
+      const next = [...prev]
+      const updated: ConversationResponse = {
+        ...next[index],
+        lastMessageContent: preview,
+        dateUpdateMessage: updateAt,
+      }
+      next.splice(index, 1)
+      next.unshift(updated)
+      return next
+    })
+
+    if (!found) {
+      void refetchConversationsSafely()
+    }
+  }, [refetchConversationsSafely])
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
@@ -115,6 +181,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectedPeerProfile,
       detailsView,
       setDetailsView,
+      onRealtimeMessage,
     }),
     [
       conversationAvatar,
@@ -129,6 +196,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectedConversation,
       selectedPeerProfile,
       detailsView,
+      onRealtimeMessage,
       selectedConversationId,
       startChatWithUser,
     ],
