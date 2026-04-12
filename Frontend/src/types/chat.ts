@@ -1,4 +1,4 @@
-export type MessageType = "TEXT" | "NONTEXT" | "MIX"
+export type MessageType = "TEXT" | "NONTEXT" | "MIX" | "CALL"
 export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI"
 
 export type MessageEnum = "SENT" | "RECEIVED" | "DELETED" | "FAILED"
@@ -16,6 +16,44 @@ export interface ChatMessageResponse {
   edited: boolean
   recalled?: boolean
   attachments?: ChatAttachment[]
+  callInfo?: ChatCallInfo
+}
+
+export type CallSignalType = "OFFER" | "ACCEPT" | "ICE_CANDIDATE" | "REJECT" | "END"
+export type CallOutcome = "COMPLETED" | "NO_ANSWER" | "REJECTED" | "CANCELED"
+
+export interface ChatCallInfo {
+  callId: string
+  audioOnly: boolean
+  callerUserId: string
+  calleeUserId: string
+  endedByUserId?: string
+  durationSeconds?: number
+  outcome: CallOutcome
+}
+
+export interface ConversationCallSignal {
+  conversationId: string
+  callId: string
+  type: CallSignalType
+  fromUserId: string
+  toUserId: string
+  audioOnly: boolean
+  sdp?: string
+  candidate?: string
+  sdpMid?: string
+  sdpMLineIndex?: number
+  sentAt: string
+}
+
+export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL"
+
+export interface UserRealtimeEvent {
+  eventType: UserRealtimeEventType
+  conversationId: string
+  sentAt: string
+  message?: ChatMessageResponse
+  callSignal?: ConversationCallSignal
 }
 
 export interface ChatAttachment {

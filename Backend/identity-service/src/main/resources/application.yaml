@@ -3,8 +3,6 @@ spring:
     name: identity-service
 
 server:
-  servlet:
-    context-path: /identity-service
   port: 8082
 
 app:

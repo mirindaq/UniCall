@@ -7,6 +7,7 @@ import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.entities.Attachment;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.Message;
+import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.AttachmentType;
 import iuh.fit.chat_service.enums.MessageEnum;
 import iuh.fit.chat_service.enums.MessageType;
@@ -14,6 +15,7 @@ import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
+import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
@@ -21,13 +23,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +38,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final ChatConversationService chatConversationService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Override
     public PageResponse<MessageResponse> listMessages(
@@ -128,7 +130,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
 
         MessageResponse dto = MessageResponse.from(saved);
-        messagingTemplate.convertAndSend(topicForConversation(conversationId), dto);
+        broadcastToParticipants(conversation, dto);
         return dto;
     }
 
@@ -155,7 +157,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(now);
         Message saved = messageRepository.save(message);
         MessageResponse dto = MessageResponse.from(saved);
-        messagingTemplate.convertAndSend(topicForConversation(conversationId), dto);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        broadcastToParticipants(conversation, dto);
         return dto;
     }
 
@@ -194,8 +197,19 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         return ref.getIdMessage();
     }
 
-    private static String topicForConversation(String conversationId) {
-        return "/topic/conversations." + conversationId + ".messages";
+    private void broadcastToParticipants(Conversation conversation, MessageResponse message) {
+        if (conversation == null || conversation.getParticipantInfos() == null || message == null) {
+            return;
+        }
+        List<String> participantIds = conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (String participantId : participantIds) {
+            realtimeEventPublisher.publishUserMessageEvent(participantId, conversation.getIdConversation(), message);
+        }
     }
 
     private static List<Attachment> toAttachments(List<MessageAttachmentRequest> requests) {

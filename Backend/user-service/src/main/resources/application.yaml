@@ -17,8 +17,6 @@ spring:
 api:
   prefix: /api/v1
 server:
-  servlet:
-    context-path: /user-service
   port: 8081
 
 grpc:

@@ -33,7 +33,6 @@ type GroupMembersPanelProps = {
 export default function GroupMembersPanel({ conversationId, onBack }: GroupMembersPanelProps) {
   const { currentUserId, refetchConversations, selectConversation, setDetailsView } = useChatPage()
   const [participants, setParticipants] = useState<GroupParticipantInfo[]>([])
-  const [groupName, setGroupName] = useState("")
   const [memberCount, setMemberCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
@@ -47,7 +46,6 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
     try {
       const response = await chatService.getGroupConversationDetails(conversationId)
       setParticipants(response.data.participantInfos ?? [])
-      setGroupName(response.data.name ?? "")
       setMemberCount(response.data.numberMember ?? 0)
     } catch {
       toast.error("Không tải được thông tin thành viên nhóm.")
