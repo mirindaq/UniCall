@@ -4,8 +4,7 @@ import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.common_service.specification.SpecificationBuildQuery;
-import iuh.fit.common_service.utils.SortUtils;
-import iuh.fit.friend_service.clients.UserPrivacyClient;
+import iuh.fit.friend_service.clients.GrpcUserPrivacyClient;
 import iuh.fit.friend_service.dtos.request.FriendRequestCreateRequest;
 import iuh.fit.friend_service.dtos.request.FriendRequestUpdateStatusRequest;
 import iuh.fit.friend_service.dtos.response.FriendRequestResponse;
@@ -31,7 +30,7 @@ public class FriendRequestServiceImpl implements FriendRequestService {
     private final FriendRequestRepository friendRequestRepository;
     private final FriendRequestMapper friendRequestMapper;
     private final FriendService friendService;
-    private final UserPrivacyClient userPrivacyClient;
+    private final GrpcUserPrivacyClient userPrivacyClient;
 
     @Override
     public String createFriendRequest(FriendRequestCreateRequest friendRequestCreateRequest) {

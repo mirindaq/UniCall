@@ -40,6 +40,10 @@ export type FriendInvitePrivacy = {
   allowFriendInvites: boolean
 }
 
+export type PhoneSearchPrivacy = {
+  allowPhoneSearch: boolean
+}
+
 export type RequestAccountDeletionPayload = {
   phoneNumber: string
   reason: string

@@ -4,6 +4,7 @@ import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
   AccountDeletionStatus,
   FriendInvitePrivacy,
+  PhoneSearchPrivacy,
   RequestAccountDeletionPayload,
   UpdateMyProfileRequest,
   UserProfile,
@@ -138,6 +139,23 @@ export const userService = {
     const response = await axiosClient.put<ResponseSuccess<FriendInvitePrivacy>>(
       `${USER_API_PREFIX}/me/privacy/friend-invites`,
       { allowFriendInvites },
+    )
+    return response.data
+  },
+
+  getMyPhoneSearchPrivacy: async (): Promise<ResponseSuccess<PhoneSearchPrivacy>> => {
+    const response = await axiosClient.get<ResponseSuccess<PhoneSearchPrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/phone-search`,
+    )
+    return response.data
+  },
+
+  updateMyPhoneSearchPrivacy: async (
+    allowPhoneSearch: boolean,
+  ): Promise<ResponseSuccess<PhoneSearchPrivacy>> => {
+    const response = await axiosClient.put<ResponseSuccess<PhoneSearchPrivacy>>(
+      `${USER_API_PREFIX}/me/privacy/phone-search`,
+      { allowPhoneSearch },
     )
     return response.data
   },
