@@ -9,6 +9,10 @@ export type UserProfile = {
   dateOfBirth: string;
   avatar?: string | null;
   isActive: boolean;
+  deletionPending?: boolean;
+  deletionRequestedAt?: string | null;
+  allowFriendInvites?: boolean;
+  allowPhoneSearch?: boolean;
 };
 
 export type UpdateMyProfileRequest = {
@@ -33,4 +37,28 @@ export type UserSearchQuery = {
   limit?: number;
   sortBy?: string;
   search?: string;
+};
+
+export type RequestAccountDeletionRequest = {
+  phoneNumber: string;
+  reason: string;
+  password: string;
+};
+
+export type AccountDeletionStatus = {
+  deletionPending: boolean;
+  deletionRequestedAt?: string | null;
+  pendingDays: number;
+  remainingDays: number;
+  deletionReason?: string | null;
+};
+
+export type FriendInvitePrivacy = {
+  identityUserId: string;
+  allowFriendInvites: boolean;
+};
+
+export type PhoneSearchPrivacy = {
+  identityUserId: string;
+  allowPhoneSearch: boolean;
 };

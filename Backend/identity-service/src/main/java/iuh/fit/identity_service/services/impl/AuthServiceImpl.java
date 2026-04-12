@@ -1,6 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.identity_service.clients.GrpcUserServiceClient;
 import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
@@ -27,6 +28,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final KeycloakAuthService keycloakAuthService;
     private final FirebasePhoneVerificationService firebasePhoneVerificationService;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Value("${app.security.cookie.secure:true}")
     private boolean cookieSecure;
@@ -60,6 +62,21 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public void verifyPassword(String identityUserId, String phoneNumber, String password) {
+        String normalizedIdentityUserId = identityUserId == null ? "" : identityUserId.trim();
+        String normalizedPhoneNumber = phoneNumber == null ? "" : phoneNumber.trim();
+        if (normalizedIdentityUserId.isBlank() || normalizedPhoneNumber.isBlank() || password == null || password.isBlank()) {
+            throw new UnauthenticatedException("Invalid verification request");
+        }
+
+        String resolvedIdentityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(normalizedPhoneNumber);
+        if (!normalizedIdentityUserId.equals(resolvedIdentityUserId)) {
+            throw new UnauthenticatedException("Password verification failed");
+        }
+        keycloakAuthService.verifyPassword(normalizedPhoneNumber, password.trim());
+    }
+
+    @Override
     public LoginResult login(LoginRequest request) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
@@ -68,6 +85,8 @@ public class AuthServiceImpl implements AuthService {
         if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isBlank()) {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
+        String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
+        grpcUserServiceClient.cancelDeletionRequest(identityUserId);
 
         return new LoginResult(
                 List.of(

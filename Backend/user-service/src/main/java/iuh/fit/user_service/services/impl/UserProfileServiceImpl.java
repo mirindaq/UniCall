@@ -8,6 +8,8 @@ import iuh.fit.common_service.specification.SearchQueryParser;
 import iuh.fit.common_service.specification.SpecificationBuildQuery;
 import iuh.fit.common_service.utils.SortUtils;
 import iuh.fit.user_service.clients.GrpcFileServiceClient;
+import iuh.fit.user_service.clients.GrpcIdentityServiceClient;
+import iuh.fit.user_service.dtos.response.AccountDeletionStatusResponse;
 import iuh.fit.user_service.entities.User;
 import iuh.fit.user_service.repositories.UserRepository;
 import iuh.fit.user_service.services.UserProfileService;
@@ -21,12 +23,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class UserProfileServiceImpl implements UserProfileService {
+    private static final long ACCOUNT_DELETION_GRACE_DAYS = 30L;
+
     private final UserRepository userRepository;
     private final GrpcFileServiceClient grpcFileServiceClient;
+    private final GrpcIdentityServiceClient grpcIdentityServiceClient;
 
     @Override
     @Transactional
@@ -93,6 +100,67 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     @Override
     @Transactional
+    public AccountDeletionStatusResponse requestAccountDeletion(
+            String identityUserId,
+            String phoneNumber,
+            String reason,
+            String password
+    ) {
+        User user = getAuthenticatedUserProfile(identityUserId);
+
+        if (!user.getPhoneNumber().equals(phoneNumber.trim())) {
+            throw new InvalidParamException("Phone number does not match authenticated account");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new InvalidParamException("reason is required");
+        }
+        if (password == null || password.isBlank()) {
+            throw new InvalidParamException("password is required");
+        }
+        grpcIdentityServiceClient.verifyPassword(identityUserId, user.getPhoneNumber(), password.trim());
+
+        user.setDeletionPending(true);
+        user.setDeletionRequestedAt(LocalDateTime.now());
+        user.setDeletionReason(reason.trim());
+        user.setIsActive(false);
+        User updatedUser = userRepository.save(user);
+
+        return AccountDeletionStatusResponse.from(updatedUser, ACCOUNT_DELETION_GRACE_DAYS);
+    }
+
+    @Override
+    public AccountDeletionStatusResponse getAccountDeletionStatus(String identityUserId) {
+        User user = getAuthenticatedUserProfile(identityUserId);
+        return AccountDeletionStatusResponse.from(user, ACCOUNT_DELETION_GRACE_DAYS);
+    }
+
+    @Override
+    @Transactional
+    public AccountDeletionStatusResponse cancelAccountDeletionRequest(String identityUserId) {
+        User user = getAuthenticatedUserProfile(identityUserId);
+        user.setDeletionPending(false);
+        user.setDeletionRequestedAt(null);
+        user.setDeletionReason(null);
+        user.setIsActive(true);
+        User updatedUser = userRepository.save(user);
+        return AccountDeletionStatusResponse.from(updatedUser, ACCOUNT_DELETION_GRACE_DAYS);
+    }
+
+    @Override
+    @Transactional
+    public long purgeExpiredDeletionRequests(long graceDays) {
+        long safeGraceDays = Math.max(graceDays, 1L);
+        LocalDateTime deadline = LocalDateTime.now().minusDays(safeGraceDays);
+        List<User> expiredUsers = userRepository.findAllByDeletionPendingIsTrueAndDeletionRequestedAtLessThanEqual(deadline);
+        if (expiredUsers.isEmpty()) {
+            return 0;
+        }
+        userRepository.deleteAllInBatch(expiredUsers);
+        return expiredUsers.size();
+    }
+
+    @Override
+    @Transactional
     public User updateAuthenticatedUserProfile(
             String identityUserId,
             String firstName,
@@ -132,6 +200,16 @@ public class UserProfileServiceImpl implements UserProfileService {
         String mergedSearch = mergeSearchWithKeyword(search, keyword);
         SpecificationBuildQuery<User> buildQuery = SearchQueryParser.parse(mergedSearch);
         buildQuery.withCustom((root, query, cb) -> cb.isTrue(root.get("isActive")));
+        if (keyword != null && !keyword.isBlank()) {
+            String normalizedKeyword = keyword.trim().toLowerCase();
+            String likePattern = "%" + normalizedKeyword + "%";
+            buildQuery.withCustom((root, query, cb) -> cb.or(
+                    cb.isTrue(root.get("allowPhoneSearch")),
+                    cb.like(cb.lower(root.get("firstName")), likePattern),
+                    cb.like(cb.lower(root.get("lastName")), likePattern),
+                    cb.like(cb.lower(root.get("email")), likePattern)
+            ));
+        }
 
         int safePage = Math.max(page, 1);
         int safeLimit = Math.max(1, Math.min(limit, 30));

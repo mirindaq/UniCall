@@ -197,6 +197,37 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
+    public void verifyPassword(String phoneNumber, String password) {
+        if (phoneNumber == null || phoneNumber.isBlank() || password == null || password.isBlank()) {
+            throw new InvalidParamException("Phone number and password are required");
+        }
+        try {
+            Map<String, Object> tokenMap = requestPasswordToken(phoneNumber, password);
+            String refreshToken = tokenMap == null ? null : (String) tokenMap.get("refresh_token");
+            if (refreshToken != null && !refreshToken.isBlank()) {
+                revokeRefreshToken(refreshToken);
+            }
+        } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized ex) {
+            throw new UnauthenticatedException("Password is incorrect");
+        }
+    }
+
+    public String findIdentityUserIdByPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new InvalidParamException("Phone number is required");
+        }
+        String token = getAdminToken();
+        Map<String, Object> user = findUserByUsername(phoneNumber, token);
+        if (user == null) {
+            throw new InvalidParamException("User account is invalid");
+        }
+        String userId = asString(user.get("id"));
+        if (userId == null || userId.isBlank()) {
+            throw new InvalidParamException("User account is invalid");
+        }
+        return userId;
+    }
+
     public void deleteUser(String userId) {
         if (userId == null || userId.isBlank()) {
             return;

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package unicall.friend.v1;
+
+option java_multiple_files = true;
+option java_package = "iuh.fit.unicall.grpc.friend.v1";
+option java_outer_classname = "FriendServiceProto";
+
+service FriendService {
+  rpc CheckRelationship(CheckRelationshipRequest) returns (CheckRelationshipResponse);
+}
+
+message CheckRelationshipRequest {
+  string idAccountOrigin = 1;
+  string idAccountTarget = 2;
+}
+
+message CheckRelationshipResponse {
+  string idRequest = 1;
+  bool areFriends = 2;
+  bool isYourself = 3;
+  string note = 4;
+  bool isMeSent = 5;
+}

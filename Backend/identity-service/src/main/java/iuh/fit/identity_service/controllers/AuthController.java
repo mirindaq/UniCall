@@ -7,6 +7,7 @@ import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RefreshTokenRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
+import iuh.fit.identity_service.dtos.request.auth.VerifyPasswordRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
@@ -63,6 +64,14 @@ public class AuthController {
     ) {
         authService.changePassword(request);
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password changed successfully"));
+    }
+
+    @PostMapping("/verify-password")
+    public ResponseEntity<ResponseSuccess<Void>> verifyPassword(
+            @Valid @RequestBody VerifyPasswordRequest request
+    ) {
+        authService.verifyPassword(request.getIdentityUserId(), request.getPhoneNumber(), request.getPassword());
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password verified"));
     }
 
     @PostMapping("/login")

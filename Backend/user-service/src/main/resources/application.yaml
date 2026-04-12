@@ -22,6 +22,10 @@ server:
 grpc:
   server:
     port: ${USER_SERVICE_GRPC_PORT:9091}
+  identity-service:
+    host: ${IDENTITY_SERVICE_GRPC_HOST:localhost}
+    port: ${IDENTITY_SERVICE_GRPC_PORT:9092}
+    deadline-ms: ${IDENTITY_SERVICE_GRPC_DEADLINE_MS:5000}
   file-service:
     host: ${FILE_SERVICE_GRPC_HOST:localhost}
     port: ${FILE_SERVICE_GRPC_PORT:9097}

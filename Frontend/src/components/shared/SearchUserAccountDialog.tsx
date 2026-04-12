@@ -1,9 +1,12 @@
+import type { AxiosError } from "axios"
 import { useMemo, useEffect, useState } from "react"
+import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
 import { useMutation } from "@/hooks/useMutation"
 import { userService } from "@/services/user/user.service"
 import { friendService, friendRequestService, type RelationshipStatus } from "@/services/friend/friend.service"
+import type { ResponseError } from "@/types/api-response"
 import type { UserSearchItem } from "@/types/user.type"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -122,7 +125,10 @@ export function SearchUserAccountDialog({
         setRelationshipStatus("SENT")
       },
       onError: (error: unknown) => {
+        const axiosError = error as AxiosError<ResponseError>
         console.error("Error adding friend:", error)
+        setIsEditingMessage(false)
+        toast.error(axiosError.response?.data?.message || "Gửi lời mời kết bạn thất bại.")
       },
     },
   )
@@ -196,7 +202,7 @@ export function SearchUserAccountDialog({
         throw new Error("Friend request ID not found")
       }
       return friendRequestService.updateFriendRequestStatus(friendRequestId, {
-        status: "CANCELLED",
+        status: "CANCELED",
       })
     },
     {

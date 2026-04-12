@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react"
-import { KeyRound, Pencil, PencilLine, Save } from "lucide-react"
+import { Pencil, PencilLine, Save } from "lucide-react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 
-import { authService } from "@/services/auth/auth.service"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useMutation } from "@/hooks/useMutation"
+import { useQuery } from "@/hooks/useQuery"
 import { userService } from "@/services/user/user.service"
 import type { UpdateMyProfileRequest, UserProfile } from "@/types/user.type"
 import { formatDateVi } from "@/utils/date.util"
@@ -30,17 +31,7 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
-  const [showChangePassword, setShowChangePassword] = useState(false)
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  })
   const [formData, setFormData] = useState<UpdateMyProfileRequest>({
     firstName: "",
     lastName: "",
@@ -48,111 +39,76 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
     dateOfBirth: "",
   })
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    let mounted = true
-    const load = async () => {
-      setIsLoading(true)
-      try {
-        const response = await userService.getMyProfile()
-        if (!mounted) return
-        setProfile(response.data)
+  const { isLoading } = useQuery(
+    async () => {
+      const profileResponse = await userService.getMyProfile()
+      return profileResponse.data
+    },
+    {
+      enabled: open,
+      deps: [open],
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
         setFormData({
-          firstName: response.data.firstName ?? "",
-          lastName: response.data.lastName ?? "",
-          gender: response.data.gender ?? "MALE",
-          dateOfBirth: response.data.dateOfBirth ?? "",
+          firstName: nextProfile.firstName ?? "",
+          lastName: nextProfile.lastName ?? "",
+          gender: nextProfile.gender ?? "MALE",
+          dateOfBirth: nextProfile.dateOfBirth ?? "",
         })
-      } catch {
+      },
+      onError: () => {
         toast.error("Không tải được thông tin cá nhân.")
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
+      },
+    },
+  )
+
+  const { mutate: updateProfile, isLoading: isSaving } = useMutation(
+    async (payload: unknown) => {
+      const response = await userService.updateMyProfile(payload as UpdateMyProfileRequest)
+      return response.data
+    },
+    {
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
+        onProfileChanged?.(nextProfile)
+        setIsEditing(false)
+        toast.success("Cập nhật thông tin thành công.")
+      },
+      onError: () => {
+        toast.error("Cập nhật thông tin thất bại.")
+      },
+    },
+  )
+
+  const { mutate: uploadAvatar, isLoading: isUploadingAvatar } = useMutation(
+    async (file: unknown) => {
+      const response = await userService.updateMyAvatar(file as File)
+      return response.data
+    },
+    {
+      onSuccess: (nextProfile) => {
+        setProfile(nextProfile)
+        onProfileChanged?.(nextProfile)
+        toast.success("Cập nhật ảnh đại diện thành công.")
+      },
+      onError: () => {
+        toast.error("Cập nhật ảnh đại diện thất bại.")
+      },
+      onSettled: () => {
+        if (fileRef.current) {
+          fileRef.current.value = ""
         }
-      }
-    }
-    void load()
-    return () => {
-      mounted = false
-    }
-  }, [open])
+      },
+    },
+  )
 
   const handleSaveProfile = async () => {
-    setIsSaving(true)
-    try {
-      const response = await userService.updateMyProfile(formData)
-      setProfile(response.data)
-      onProfileChanged?.(response.data)
-      setIsEditing(false)
-      toast.success("Cập nhật thông tin thành công.")
-    } catch {
-      toast.error("Cập nhật thông tin thất bại.")
-    } finally {
-      setIsSaving(false)
-    }
+    await updateProfile(formData)
   }
 
   const handleUploadAvatar = async (file?: File) => {
     if (!file) return
-    setIsUploadingAvatar(true)
-    try {
-      const response = await userService.updateMyAvatar(file)
-      setProfile(response.data)
-      onProfileChanged?.(response.data)
-      toast.success("Cập nhật ảnh đại diện thành công.")
-    } catch {
-      toast.error("Cập nhật ảnh đại diện thất bại.")
-    } finally {
-      setIsUploadingAvatar(false)
-      if (fileRef.current) {
-        fileRef.current.value = ""
-      }
-    }
-  }
-
-  const handleChangePassword = async () => {
-    if (!profile?.phoneNumber) {
-      toast.error("Không xác định được tài khoản hiện tại.")
-      return
-    }
-    if (!passwordForm.currentPassword.trim()) {
-      toast.error("Vui lòng nhập mật khẩu hiện tại.")
-      return
-    }
-    if (passwordForm.newPassword.length < 6) {
-      toast.error("Mật khẩu mới phải có ít nhất 6 ký tự.")
-      return
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error("Xác nhận mật khẩu mới không khớp.")
-      return
-    }
-    if (passwordForm.currentPassword === passwordForm.newPassword) {
-      toast.error("Mật khẩu mới phải khác mật khẩu hiện tại.")
-      return
-    }
-
-    setIsChangingPassword(true)
-    try {
-      const response = await authService.changePassword({
-        phoneNumber: profile.phoneNumber,
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-      })
-      toast.success(response.message || "Đổi mật khẩu thành công.")
-      setShowChangePassword(false)
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      })
-    } catch {
-      toast.error("Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu hiện tại.")
-    } finally {
-      setIsChangingPassword(false)
-    }
+    await uploadAvatar(file)
   }
 
   return (
@@ -160,7 +116,6 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
       <DialogContent className="max-h-[92vh] min-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white">
         <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle className="text-lg text-slate-900">Thông tin cá nhân</DialogTitle>
-
         </DialogHeader>
 
         {isLoading || !profile ? (
@@ -198,17 +153,35 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
               </button>
             </div>
 
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-end gap-2 pt-1">
               {isEditing ? (
-                <Button
-                  type="button"
-                  className="bg-blue-600 text-white hover:bg-blue-700"
-                  disabled={isSaving}
-                  onClick={() => void handleSaveProfile()}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  {isSaving ? "Đang lưu..." : "Lưu"}
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setIsEditing(false)
+                      setFormData({
+                        firstName: profile.firstName ?? "",
+                        lastName: profile.lastName ?? "",
+                        gender: profile.gender ?? "MALE",
+                        dateOfBirth: profile.dateOfBirth ?? "",
+                      })
+                    }}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    disabled={isSaving}
+                    onClick={() => void handleSaveProfile()}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
+                  </Button>
+                </>
               ) : (
                 <Button
                   type="button"
@@ -217,10 +190,11 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
                   onClick={() => setIsEditing(true)}
                 >
                   <PencilLine className="mr-2 h-4 w-4" />
-                  Chỉnh sửa
+                  Chỉnh sửa hồ sơ
                 </Button>
               )}
             </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Số điện thoại</Label>
@@ -275,69 +249,6 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
                   <Input type="text" value={formatDateVi(profile.dateOfBirth)} disabled />
                 )}
               </div>
-            </div>
-
-
-
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-slate-800">
-                  <KeyRound className="h-4 w-4" />
-                  <span className="text-sm font-medium">Bảo mật tài khoản</span>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowChangePassword((prev) => !prev)}
-                >
-                  {showChangePassword ? "Đóng" : "Đổi mật khẩu"}
-                </Button>
-              </div>
-
-              {showChangePassword ? (
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>Mật khẩu hiện tại</Label>
-                    <Input
-                      type="password"
-                      value={passwordForm.currentPassword}
-                      onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Mật khẩu mới</Label>
-                    <Input
-                      type="password"
-                      value={passwordForm.newPassword}
-                      onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Xác nhận mật khẩu mới</Label>
-                    <Input
-                      type="password"
-                      value={passwordForm.confirmPassword}
-                      onChange={(event) =>
-                        setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="sm:col-span-2 flex justify-end">
-                    <Button
-                      type="button"
-                      className="bg-blue-600 text-white hover:bg-blue-700"
-                      disabled={isChangingPassword}
-                      onClick={() => void handleChangePassword()}
-                    >
-                      {isChangingPassword ? "Đang đổi..." : "Cập nhật mật khẩu"}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
         )}

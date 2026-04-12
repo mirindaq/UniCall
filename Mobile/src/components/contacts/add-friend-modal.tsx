@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ import { ConversationAvatar } from '@/components/messages/conversation-avatar';
 import type { RelationshipStatus } from '@/services/friend.service';
 import { friendRequestService, friendService } from '@/services/friend.service';
 import { userService } from '@/services/user.service';
+import type { ResponseError } from '@/types/api-response';
 import type { UserSearchItem } from '@/types/user';
 
 type AddFriendModalProps = {
@@ -64,6 +66,11 @@ export function AddFriendModal({
   const [isSendingToId, setIsSendingToId] = useState<string | null>(null);
 
   const canSearch = useMemo(() => keyword.trim().length > 0 && !isSearching, [keyword, isSearching]);
+
+  const getApiMessage = (error: unknown, fallback: string) => {
+    const axiosError = error as AxiosError<ResponseError>;
+    return axiosError?.response?.data?.message || fallback;
+  };
 
   const resolveRelationship = async (items: UserSearchItem[]) => {
     if (!myIdentityUserId || items.length === 0) {
@@ -146,8 +153,12 @@ export function AddFriendModal({
       });
       setRelationshipMap((prev) => ({ ...prev, [user.identityUserId]: 'SENT' }));
       Toast.show({ type: 'success', text1: 'Đã gửi lời mời kết bạn' });
-    } catch {
-      Toast.show({ type: 'error', text1: 'Gửi lời mời thất bại' });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Gửi lời mời thất bại',
+        text2: getApiMessage(error, 'Vui lòng thử lại.'),
+      });
     } finally {
       setIsSendingToId(null);
     }

@@ -27,6 +27,14 @@ api:
 server:
   port: 8084
 
+grpc:
+  server:
+    port: ${FRIEND_SERVICE_GRPC_PORT:9098}
+  user-service:
+    host: ${USER_SERVICE_GRPC_HOST:localhost}
+    port: ${USER_SERVICE_GRPC_PORT:9091}
+    deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:5000}
+
 eureka:
   client:
     service-url:

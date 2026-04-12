@@ -1,119 +1,82 @@
-import { Client, type IMessage, type StompSubscription } from "@stomp/stompjs"
+import type { IMessage, StompSubscription } from "@stomp/stompjs"
 
-import { buildChatStompBrokerUrl } from "@/constants/api"
+import { realtimeSocketService } from "@/services/realtime/realtime-socket.service"
 import type {
   CallSignalType,
   ChatAttachment,
   ChatMessageResponse,
-  ConversationCallSignal,
+  UserRealtimeEvent,
 } from "@/types/chat"
 
-let sharedClient: Client | null = null
-let sharedClientRefCount = 0
-const connectedListeners = new Set<() => void>()
-const disconnectedListeners = new Set<() => void>()
+const parseUserEvent = (raw: IMessage): UserRealtimeEvent =>
+  JSON.parse(raw.body) as UserRealtimeEvent
 
-const parseMessage = (raw: IMessage): ChatMessageResponse => JSON.parse(raw.body) as ChatMessageResponse
-const parseCallSignal = (raw: IMessage): ConversationCallSignal =>
-  JSON.parse(raw.body) as ConversationCallSignal
+const userEventListeners = new Set<(event: UserRealtimeEvent) => void>()
+let userEventSubscription: StompSubscription | undefined
+const connectedWrapperByOriginal = new WeakMap<() => void, () => void>()
+
+const ensureUserEventSubscription = () => {
+  if (userEventSubscription || userEventListeners.size === 0) {
+    return
+  }
+  userEventSubscription = realtimeSocketService.subscribe("/user/queue/events", (m) => {
+    const event = parseUserEvent(m)
+    userEventListeners.forEach((listener) => {
+      listener(event)
+    })
+  })
+}
+
+const teardownUserEventSubscriptionIfIdle = () => {
+  if (userEventListeners.size > 0) {
+    return
+  }
+  userEventSubscription?.unsubscribe()
+  userEventSubscription = undefined
+}
 
 export const chatSocketService = {
-  getClient: () => sharedClient,
+  getClient: () => realtimeSocketService.getClient(),
 
-  /**
-   * Kích hoạt STOMP qua WebSocket thuần (không SockJS) — xác thực dựa trên HttpOnly cookie.
-   */
-  connect(onConnected?: () => void, onDisconnected?: () => void): Client {
+  connect(onConnected?: () => void, onDisconnected?: () => void) {
+    let effectiveOnConnected = onConnected
     if (onConnected) {
-      connectedListeners.add(onConnected)
-    }
-    if (onDisconnected) {
-      disconnectedListeners.add(onDisconnected)
-    }
-    sharedClientRefCount += 1
-
-    if (sharedClient) {
-      if (sharedClient.connected && onConnected) {
-        queueMicrotask(() => onConnected())
+      const wrappedConnected = () => {
+        ensureUserEventSubscription()
+        onConnected()
       }
-      return sharedClient
+      connectedWrapperByOriginal.set(onConnected, wrappedConnected)
+      effectiveOnConnected = wrappedConnected
     }
-
-    const client = new Client({
-      brokerURL: buildChatStompBrokerUrl(),
-      reconnectDelay: 5000,
-      heartbeatIncoming: 10_000,
-      heartbeatOutgoing: 10_000,
-      onConnect: () => {
-        connectedListeners.forEach((listener) => {
-          listener()
-        })
-      },
-      onDisconnect: () => {
-        disconnectedListeners.forEach((listener) => {
-          listener()
-        })
-      },
-      onStompError: (frame) => {
-        console.error("[chat stomp]", frame.headers.message, frame.body)
-      },
-      onWebSocketError: (event) => {
-        console.error("[chat ws]", event)
-      },
-    })
-
-    client.activate()
-    sharedClient = client
-    return client
+    return realtimeSocketService.connect(effectiveOnConnected, onDisconnected)
   },
 
   disconnect(options?: { onConnected?: () => void; onDisconnected?: () => void; force?: boolean }) {
+    const mappedOnConnected = options?.onConnected
+      ? connectedWrapperByOriginal.get(options.onConnected)
+      : undefined
+    realtimeSocketService.disconnect({
+      ...options,
+      onConnected: mappedOnConnected,
+    })
     if (options?.onConnected) {
-      connectedListeners.delete(options.onConnected)
+      connectedWrapperByOriginal.delete(options.onConnected)
     }
-    if (options?.onDisconnected) {
-      disconnectedListeners.delete(options.onDisconnected)
+    if (!realtimeSocketService.getClient()) {
+      userEventSubscription = undefined
     }
-
-    if (!options?.force) {
-      sharedClientRefCount = Math.max(0, sharedClientRefCount - 1)
-    }
-
-    if (!options?.force && sharedClientRefCount > 0) {
-      return
-    }
-
-    sharedClientRefCount = 0
-    connectedListeners.clear()
-    disconnectedListeners.clear()
-    void sharedClient?.deactivate()
-    sharedClient = null
   },
 
-  subscribeConversation(
-    conversationId: string,
-    handler: (message: ChatMessageResponse) => void
-  ): StompSubscription | undefined {
-    const client = sharedClient
-    if (!client?.connected) {
-      return undefined
-    }
-    return client.subscribe(`/topic/conversations.${conversationId}.messages`, (m) => {
-      handler(parseMessage(m))
-    })
-  },
-
-  subscribeConversationCalls(
-    conversationId: string,
-    handler: (signal: ConversationCallSignal) => void
-  ): StompSubscription | undefined {
-    const client = sharedClient
-    if (!client?.connected) {
-      return undefined
-    }
-    return client.subscribe(`/topic/conversations.${conversationId}.calls`, (m) => {
-      handler(parseCallSignal(m))
-    })
+  subscribeUserEvents(handler: (event: UserRealtimeEvent) => void): StompSubscription | undefined {
+    userEventListeners.add(handler)
+    ensureUserEventSubscription()
+    return {
+      id: `user-events-${Math.random().toString(36).slice(2, 10)}`,
+      unsubscribe: () => {
+        userEventListeners.delete(handler)
+        teardownUserEventSubscriptionIfIdle()
+      },
+    } as StompSubscription
   },
 
   sendMessage(
@@ -123,16 +86,12 @@ export const chatSocketService = {
     attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
     replyToMessageId?: string | null
   ) {
-    sharedClient?.publish({
-      destination: "/app/chat.send",
-      body: JSON.stringify({
-        conversationId,
-        content,
-        type,
-        attachments,
-        replyToMessageId: replyToMessageId ?? undefined,
-      }),
-      headers: { "content-type": "application/json" },
+    realtimeSocketService.publish("/app/chat.send", {
+      conversationId,
+      content,
+      type,
+      attachments,
+      replyToMessageId: replyToMessageId ?? undefined,
     })
   },
 
@@ -148,19 +107,15 @@ export const chatSocketService = {
       sdpMLineIndex?: number
     }
   ) {
-    sharedClient?.publish({
-      destination: "/app/call.signal",
-      body: JSON.stringify({
-        conversationId,
-        callId,
-        type,
-        audioOnly: extras?.audioOnly ?? true,
-        sdp: extras?.sdp,
-        candidate: extras?.candidate,
-        sdpMid: extras?.sdpMid,
-        sdpMLineIndex: extras?.sdpMLineIndex,
-      }),
-      headers: { "content-type": "application/json" },
+    realtimeSocketService.publish("/app/call.signal", {
+      conversationId,
+      callId,
+      type,
+      audioOnly: extras?.audioOnly ?? true,
+      sdp: extras?.sdp,
+      candidate: extras?.candidate,
+      sdpMid: extras?.sdpMid,
+      sdpMLineIndex: extras?.sdpMLineIndex,
     })
   },
 }

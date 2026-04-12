@@ -177,6 +177,11 @@ const isAuthRequest = (url?: string) =>
       url?.includes(`${AUTH_API_PREFIX}/logout`)
   );
 
+const isAccountDeletionRequest = (url?: string) =>
+  Boolean(
+    url?.includes('/user-service/api/v1/users/me/deletion-request')
+  );
+
 const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
@@ -216,6 +221,11 @@ axiosClient.interceptors.response.use(
     }
 
     if (status === 401) {
+      // Wrong password on account deletion should stay on current screen.
+      if (isAccountDeletionRequest(originalRequest.url)) {
+        return Promise.reject(error);
+      }
+
       if (isAuthRequest(originalRequest.url) || originalRequest._retry) {
         await clearAuthData();
         navigateToLogin();
