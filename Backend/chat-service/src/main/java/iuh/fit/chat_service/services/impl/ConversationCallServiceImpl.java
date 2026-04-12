@@ -99,7 +99,6 @@ public class ConversationCallServiceImpl implements ConversationCallService {
                 .fromUserId(identityUserId)
                 .toUserId(targetUserId)
                 .audioOnly(Boolean.TRUE.equals(request.getAudioOnly()))
-                // Preserve SDP/candidate exactly as sent; trimming can corrupt SDP semantics.
                 .sdp(request.getSdp())
                 .candidate(request.getCandidate())
                 .sdpMid(request.getSdpMid())

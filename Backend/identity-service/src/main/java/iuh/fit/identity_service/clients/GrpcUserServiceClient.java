@@ -2,8 +2,10 @@ package iuh.fit.identity_service.clients;
 
 import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
+import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
@@ -61,6 +63,19 @@ public class GrpcUserServiceClient {
         }
     }
 
+    public void cancelDeletionRequest(String identityUserId) {
+        CancelAccountDeletionByIdentityRequest grpcRequest = CancelAccountDeletionByIdentityRequest.newBuilder()
+                .setIdentityUserId(identityUserId)
+                .build();
+        try {
+            userStub
+                    .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                    .cancelAccountDeletionRequest(grpcRequest);
+        } catch (StatusRuntimeException ex) {
+            throw mapException(ex);
+        }
+    }
+
     private RuntimeException mapException(StatusRuntimeException ex) {
         Status.Code code = ex.getStatus().getCode();
         String description = ex.getStatus().getDescription();
@@ -74,6 +89,10 @@ public class GrpcUserServiceClient {
 
         if (code == Status.Code.INVALID_ARGUMENT) {
             return new InvalidParamException(message);
+        }
+
+        if (code == Status.Code.NOT_FOUND) {
+            return new ResourceNotFoundException(message);
         }
 
         return new RuntimeException(message, ex);
