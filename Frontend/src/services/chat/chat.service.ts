@@ -70,6 +70,18 @@ export const chatService = {
     )
     return data
   },
+  pinMessage: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`
+    )
+    return data
+  },
+  unpinMessage: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`
+    )
+    return data
+  },
   hideMessageForMe: async (conversationId: string, messageId: string) => {
     const { data } = await axiosClient.delete<ResponseSuccess<void>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/self`

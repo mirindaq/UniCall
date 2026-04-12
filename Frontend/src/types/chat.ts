@@ -15,6 +15,9 @@ export interface ChatMessageResponse {
   replyToMessageId?: string
   edited: boolean
   recalled?: boolean
+  pinned?: boolean
+  pinnedByAccountId?: string
+  pinnedAt?: string
   attachments?: ChatAttachment[]
   callInfo?: ChatCallInfo
 }

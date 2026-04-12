@@ -28,6 +28,9 @@ public class MessageResponse {
     private String replyToMessageId;
     private boolean edited;
     private boolean recalled;
+    private boolean pinned;
+    private String pinnedByAccountId;
+    private LocalDateTime pinnedAt;
     private CallMessageInfo callInfo;
 
     public static MessageResponse from(Message entity) {
@@ -48,6 +51,9 @@ public class MessageResponse {
                 .replyToMessageId(entity.getReplyToMessageId())
                 .edited(entity.isEdited())
                 .recalled(entity.isRecalled())
+                .pinned(entity.isPinned())
+                .pinnedByAccountId(entity.getPinnedByAccountId())
+                .pinnedAt(entity.getPinnedAt())
                 .callInfo(entity.getCallInfo())
                 .build();
     }

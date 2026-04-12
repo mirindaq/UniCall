@@ -22,6 +22,10 @@ public interface ChatMessageService {
 
     MessageResponse recallMessage(String identityUserId, String conversationId, String messageId);
 
+    MessageResponse pinMessage(String identityUserId, String conversationId, String messageId);
+
+    MessageResponse unpinMessage(String identityUserId, String conversationId, String messageId);
+
     void hideMessageForMe(String identityUserId, String conversationId, String messageId);
 
     List<AttachmentResponse> getAttachments(

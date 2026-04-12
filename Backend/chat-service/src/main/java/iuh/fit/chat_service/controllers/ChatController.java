@@ -132,6 +132,32 @@ public class ChatController {
         );
     }
 
+    @PostMapping("/conversations/{conversationId}/messages/{messageId}/pin")
+    public ResponseEntity<ResponseSuccess<MessageResponse>> pinMessage(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String messageId
+    ) {
+        requireUser(identityUserId);
+        MessageResponse data = chatMessageService.pinMessage(identityUserId, conversationId, messageId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Ghim tin nhắn thành công", data)
+        );
+    }
+
+    @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/pin")
+    public ResponseEntity<ResponseSuccess<MessageResponse>> unpinMessage(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String messageId
+    ) {
+        requireUser(identityUserId);
+        MessageResponse data = chatMessageService.unpinMessage(identityUserId, conversationId, messageId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Bỏ ghim tin nhắn thành công", data)
+        );
+    }
+
     @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/self")
     public ResponseEntity<ResponseSuccess<Void>> hideMessageForMe(
             @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,

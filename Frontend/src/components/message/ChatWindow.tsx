@@ -235,6 +235,7 @@ export default function ChatWindow() {
   const loadingMissingMessageIdsRef = useRef<Set<string>>(new Set())
   const failedMissingMessageIdsRef = useRef<Set<string>>(new Set())
   const pendingFocusMessageIdRef = useRef<string | null>(null)
+  const suppressAutoLoadMoreUntilRef = useRef(0)
 
   const {
     selectedConversationId,
@@ -297,6 +298,8 @@ export default function ChatWindow() {
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set())
+  const [selectedPinnedMessageId, setSelectedPinnedMessageId] = useState<string | null>(null)
+  const [selectedReplyTargetMessageId, setSelectedReplyTargetMessageId] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{ url: string; alt: string } | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false)
@@ -395,6 +398,9 @@ export default function ChatWindow() {
     }
 
     const onScroll = () => {
+      if (Date.now() < suppressAutoLoadMoreUntilRef.current) {
+        return
+      }
       if (viewport.scrollTop <= LOAD_MORE_THRESHOLD_PX) {
         void loadMoreMessages()
       }
@@ -462,6 +468,38 @@ export default function ChatWindow() {
     }
     return m
   }, [displayMessages])
+
+  const pinnedMessagesSorted = useMemo(() => {
+    return displayMessages
+      .filter((message) => !!message.pinned)
+      .sort((left, right) => {
+        const rightTime = new Date(right.pinnedAt ?? right.timeSent).getTime()
+        const leftTime = new Date(left.pinnedAt ?? left.timeSent).getTime()
+        return rightTime - leftTime
+      })
+  }, [displayMessages])
+
+  useEffect(() => {
+    if (!selectedPinnedMessageId) {
+      return
+    }
+
+    const stillPinned = pinnedMessagesSorted.some((message) => message.idMessage === selectedPinnedMessageId)
+    if (!stillPinned) {
+      setSelectedPinnedMessageId(null)
+    }
+  }, [pinnedMessagesSorted, selectedPinnedMessageId])
+
+  useEffect(() => {
+    if (!selectedReplyTargetMessageId) {
+      return
+    }
+
+    const stillExistsInView = displayMessages.some((message) => message.idMessage === selectedReplyTargetMessageId)
+    if (!stillExistsInView && pendingFocusMessageIdRef.current !== selectedReplyTargetMessageId) {
+      setSelectedReplyTargetMessageId(null)
+    }
+  }, [displayMessages, selectedReplyTargetMessageId])
 
   const searchMatchIds = useMemo(() => {
     return searchMatchMessages.map((message) => message.idMessage)
@@ -639,6 +677,9 @@ export default function ChatWindow() {
     }
 
     target.scrollIntoView({ behavior: "smooth", block: "center" })
+
+    // Avoid triggering top-load immediately when the focus jump lands near the top.
+    suppressAutoLoadMoreUntilRef.current = Date.now() + 1000
     setHighlightedMessageId(messageId)
 
     if (highlightTimeoutRef.current != null) {
@@ -650,6 +691,44 @@ export default function ChatWindow() {
     }, 1600)
     return true
   }, [loadMissingMessageById, replyTargetCache, selectedConversationId])
+
+  const focusPinnedMessage = useCallback((messageId: string) => {
+    if (selectedPinnedMessageId === messageId) {
+      setSelectedPinnedMessageId(null)
+      if (pendingFocusMessageIdRef.current === messageId) {
+        pendingFocusMessageIdRef.current = null
+      }
+      return
+    }
+
+    setSelectedReplyTargetMessageId(null)
+    setSelectedPinnedMessageId(messageId)
+    focusReplyTargetMessage(messageId, {
+      silentIfMissing: false,
+      forceRetryWhenMissing: true,
+    })
+  }, [focusReplyTargetMessage, selectedPinnedMessageId])
+
+  const focusReplyMessageFromSnippet = useCallback((messageId?: string) => {
+    if (!messageId) {
+      return
+    }
+
+    if (selectedReplyTargetMessageId === messageId) {
+      setSelectedReplyTargetMessageId(null)
+      if (pendingFocusMessageIdRef.current === messageId) {
+        pendingFocusMessageIdRef.current = null
+      }
+      return
+    }
+
+    setSelectedPinnedMessageId(null)
+    setSelectedReplyTargetMessageId(messageId)
+    focusReplyTargetMessage(messageId, {
+      silentIfMissing: false,
+      forceRetryWhenMissing: true,
+    })
+  }, [focusReplyTargetMessage, selectedReplyTargetMessageId])
 
   useEffect(() => {
     if (!messageFocusRequestId) {
@@ -878,10 +957,13 @@ export default function ChatWindow() {
   useEffect(() => {
     setMultiSelectActive(false)
     setSelectedMessageIds(new Set())
+    setSelectedPinnedMessageId(null)
+    setSelectedReplyTargetMessageId(null)
     setReplyingTo(null)
     loadingMissingMessageIdsRef.current.clear()
     failedMissingMessageIdsRef.current.clear()
     pendingFocusMessageIdRef.current = null
+    suppressAutoLoadMoreUntilRef.current = 0
     setReplyTargetCache({})
     setIsMessageSearchOpen(false)
     setMessageSearchKeyword("")
@@ -1297,6 +1379,30 @@ export default function ChatWindow() {
     [removeMessageLocally, selectedConversationId],
   )
 
+  const handleTogglePinMessage = useCallback(
+    async (msg: ChatMessageResponse) => {
+      if (!selectedConversationId) {
+        return
+      }
+      try {
+        const response = msg.pinned
+          ? await chatService.unpinMessage(selectedConversationId, msg.idMessage)
+          : await chatService.pinMessage(selectedConversationId, msg.idMessage)
+        mergeIncomingOrUpdatedMessage(response.data)
+        if (msg.pinned && selectedPinnedMessageId === msg.idMessage) {
+          setSelectedPinnedMessageId(null)
+        }
+        if (msg.pinned && selectedReplyTargetMessageId === msg.idMessage) {
+          setSelectedReplyTargetMessageId(null)
+        }
+        toast.success(msg.pinned ? "Đã bỏ ghim tin nhắn" : "Đã ghim tin nhắn")
+      } catch {
+        toast.error(msg.pinned ? "Không bỏ ghim được tin nhắn" : "Không ghim được tin nhắn")
+      }
+    },
+    [mergeIncomingOrUpdatedMessage, selectedConversationId, selectedPinnedMessageId, selectedReplyTargetMessageId],
+  )
+
   const handleForwardTo = useCallback(
     async (targetConversationId: string) => {
       if (!forwardTarget) {
@@ -1444,6 +1550,46 @@ export default function ChatWindow() {
           </Button>
         </div>
       </div>
+
+      {pinnedMessagesSorted.length > 0 ? (
+        <div className="flex shrink-0 items-center gap-2 border-b bg-amber-50/70 px-3 py-1.5 text-xs">
+          <div className="flex shrink-0 items-center gap-1 text-amber-800">
+            <Pin className="size-3.5" />
+            <span className="font-medium">{pinnedMessagesSorted.length} tin ghim</span>
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
+            {pinnedMessagesSorted.map((pinnedMessage) => (
+              <div
+                key={pinnedMessage.idMessage}
+                className={cn(
+                  "flex min-w-0 max-w-xs shrink-0 items-center gap-1 rounded-md border px-2 py-1",
+                  selectedPinnedMessageId === pinnedMessage.idMessage
+                    ? "border-amber-400 bg-amber-200/80 ring-1 ring-amber-300"
+                    : "border-amber-200 bg-amber-100/70",
+                )}
+              >
+                <button
+                  type="button"
+                  className="truncate text-left text-amber-900 hover:text-amber-950"
+                  onClick={() => focusPinnedMessage(pinnedMessage.idMessage)}
+                  title={messagePlainTextForCopy(pinnedMessage)}
+                >
+                  {messagePlainTextForCopy(pinnedMessage)}
+                </button>
+                <button
+                  type="button"
+                  className="rounded p-0.5 text-amber-700 hover:bg-amber-200 hover:text-amber-900"
+                  title="Bỏ ghim"
+                  onClick={() => void handleTogglePinMessage(pinnedMessage)}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {isMessageSearchOpen ? (
         <div className="absolute bottom-0 right-0 top-16 z-30 w-[380px] border-l bg-slate-100 shadow-[-8px_0_24px_rgba(15,23,42,0.08)]">
@@ -1796,6 +1942,8 @@ export default function ChatWindow() {
                       className={cn(
                         "flex gap-2 rounded-md px-1 py-0.5 transition-colors",
                         searchMatchIdSet.has(msg.idMessage) && "bg-amber-50/70 ring-1 ring-amber-200",
+                        selectedPinnedMessageId === msg.idMessage && "bg-amber-100/50 ring-1 ring-amber-300",
+                        selectedReplyTargetMessageId === msg.idMessage && "bg-primary/10 ring-1 ring-primary/40",
                         highlightedMessageId === msg.idMessage && "bg-primary/10",
                         isMe ? "justify-end" : "justify-start",
                       )}
@@ -1846,15 +1994,16 @@ export default function ChatWindow() {
                               <div
                                 role="button"
                                 tabIndex={0}
-                                onClick={() => focusReplyTargetMessage(msg.replyToMessageId, { forceRetryWhenMissing: true })}
+                                onClick={() => focusReplyMessageFromSnippet(msg.replyToMessageId)}
                                 onKeyDown={(event) => {
                                   if (event.key === "Enter" || event.key === " ") {
                                     event.preventDefault()
-                                    focusReplyTargetMessage(msg.replyToMessageId, { forceRetryWhenMissing: true })
+                                    focusReplyMessageFromSnippet(msg.replyToMessageId)
                                   }
                                 }}
                                 className={cn(
                                   "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-black/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 dark:bg-white/5 dark:hover:bg-white/10",
+                                  selectedReplyTargetMessageId === msg.replyToMessageId && "ring-1 ring-primary/30 bg-primary/5",
                                   isMe ? "mr-0" : "ml-0",
                                 )}
                               >
@@ -2032,6 +2181,12 @@ export default function ChatWindow() {
                                 {renderMessageRichText(normalizedMessageContent)}
                               </div>
                             )}
+                            {msg.pinned ? (
+                              <span className="mt-1 flex items-center gap-1 text-[11px] text-amber-600">
+                                <Pin className="size-3" />
+                                Đã ghim
+                              </span>
+                            ) : null}
                             <span className="mt-1 text-[11px] text-muted-foreground">
                               {formatChatMessageTime(msg.timeSent)}
                             </span>
@@ -2094,10 +2249,10 @@ export default function ChatWindow() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="gap-2"
-                                    onSelect={() => toast.info("Tính năng ghim tin đang được phát triển")}
+                                    onSelect={() => void handleTogglePinMessage(msg)}
                                   >
                                     <Pin className="size-4" />
-                                    Ghim tin nhắn
+                                    {msg.pinned ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="gap-2"

@@ -34,6 +34,9 @@ public class Message {
     private boolean isEdited;
     private List<String> editHistory;
     private boolean recalled;
+    private boolean pinned;
+    private String pinnedByAccountId;
+    private LocalDateTime pinnedAt;
     private List<String> hiddenForAccountIds;
     private CallMessageInfo callInfo;
 }

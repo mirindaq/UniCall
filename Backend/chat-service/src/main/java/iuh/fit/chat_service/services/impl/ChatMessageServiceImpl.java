@@ -207,6 +207,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(now);
         message.setAttachments(attachments);
         message.setEdited(false);
+        message.setPinned(false);
+        message.setPinnedByAccountId(null);
+        message.setPinnedAt(null);
         message.setReplyToMessageId(resolveReplyToMessageId(conversationId, replyToMessageId));
 
         Message saved = messageRepository.save(message);
@@ -226,12 +229,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public MessageResponse recallMessage(String identityUserId, String conversationId, String messageId) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
-        Message message = messageRepository
-                .findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tin nhắn"));
-        if (!conversationId.equals(message.getIdConversation())) {
-            throw new InvalidParamException("Tin nhắn không thuộc hội thoại này");
-        }
+        Message message = requireMessageInConversation(conversationId, messageId);
         if (!identityUserId.equals(message.getIdAccountSent())) {
             throw new InvalidParamException("Chỉ người gửi mới thu hồi được tin nhắn");
         }
@@ -243,7 +241,55 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setContent("Tin nhắn đã thu hồi");
         message.setAttachments(List.of());
         message.setType(MessageType.TEXT);
+        message.setPinned(false);
+        message.setPinnedByAccountId(null);
+        message.setPinnedAt(null);
         message.setTimeUpdate(now);
+        Message saved = messageRepository.save(message);
+        MessageResponse dto = MessageResponse.from(saved);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        broadcastToParticipants(conversation, dto);
+        return dto;
+    }
+
+    @Override
+    public MessageResponse pinMessage(String identityUserId, String conversationId, String messageId) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = requireMessageInConversation(conversationId, messageId);
+        if (message.isRecalled()) {
+            throw new InvalidParamException("Không thể ghim tin nhắn đã thu hồi");
+        }
+        if (message.isPinned()) {
+            return MessageResponse.from(message);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        message.setPinned(true);
+        message.setPinnedByAccountId(identityUserId);
+        message.setPinnedAt(now);
+        message.setTimeUpdate(now);
+
+        Message saved = messageRepository.save(message);
+        MessageResponse dto = MessageResponse.from(saved);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        broadcastToParticipants(conversation, dto);
+        return dto;
+    }
+
+    @Override
+    public MessageResponse unpinMessage(String identityUserId, String conversationId, String messageId) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = requireMessageInConversation(conversationId, messageId);
+        if (!message.isPinned()) {
+            return MessageResponse.from(message);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        message.setPinned(false);
+        message.setPinnedByAccountId(null);
+        message.setPinnedAt(null);
+        message.setTimeUpdate(now);
+
         Message saved = messageRepository.save(message);
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
@@ -254,12 +300,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public void hideMessageForMe(String identityUserId, String conversationId, String messageId) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
-        Message message = messageRepository
-                .findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tin nhắn"));
-        if (!conversationId.equals(message.getIdConversation())) {
-            throw new InvalidParamException("Tin nhắn không thuộc hội thoại này");
-        }
+        Message message = requireMessageInConversation(conversationId, messageId);
         List<String> hidden = message.getHiddenForAccountIds();
         if (hidden == null) {
             hidden = new ArrayList<>();
@@ -270,6 +311,22 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         hidden.add(identityUserId);
         message.setHiddenForAccountIds(hidden);
         messageRepository.save(message);
+    }
+
+    private Message requireMessageInConversation(String conversationId, String messageId) {
+        if (!StringUtils.hasText(messageId)) {
+            throw new InvalidParamException("messageId không được để trống");
+        }
+
+        Message message = messageRepository
+                .findById(messageId.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tin nhắn"));
+
+        if (!conversationId.equals(message.getIdConversation())) {
+            throw new InvalidParamException("Tin nhắn không thuộc hội thoại này");
+        }
+
+        return message;
     }
 
     private String resolveReplyToMessageId(String conversationId, String replyToMessageId) {
