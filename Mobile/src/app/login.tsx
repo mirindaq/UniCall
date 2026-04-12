@@ -37,6 +37,7 @@ const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
 
     const message = (error.response.data as ResponseError | undefined)?.message;
     if (error.response.status === 401 && !message) {
+      console.log(error.response)
       return 'Số điện thoại hoặc mật khẩu chưa đúng.';
     }
     return message || fallbackMessage;

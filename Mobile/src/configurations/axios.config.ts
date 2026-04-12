@@ -3,15 +3,16 @@ import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import { API_PREFIXES } from '@/constants/api-prefixes';
 
 const DEFAULT_GATEWAY_PORT = process.env.EXPO_PUBLIC_API_PORT ?? '8088';
-const DEFAULT_GATEWAY_PATH = process.env.EXPO_PUBLIC_API_GATEWAY_PATH ?? '/api-gateway';
 const LOGIN_PATH = process.env.EXPO_PUBLIC_LOGIN_PATH ?? '/login';
-const AUTH_API_PREFIX = '/identity-service/api/v1/auth';
+const AUTH_API_PREFIX = API_PREFIXES.auth;
 const MOBILE_CLIENT_TYPE = 'mobile';
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
-const ensureLeadingSlash = (value: string) => (value.startsWith('/') ? value : `/${value}`);
+const stripLegacyGatewayPath = (value: string) =>
+  stripTrailingSlash(value).replace(/\/api-gateway$/i, '');
 
 const extractHost = (value?: string | null) => {
   if (!value) return null;
@@ -41,22 +42,21 @@ const getExpoDevHost = () => {
 const resolveApiBaseUrl = () => {
   const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (envBaseUrl) {
-    return stripTrailingSlash(envBaseUrl);
+    return stripLegacyGatewayPath(envBaseUrl);
   }
 
-  const gatewayPath = ensureLeadingSlash(DEFAULT_GATEWAY_PATH);
   const expoHost = getExpoDevHost();
 
   if (expoHost) {
-    return `http://${expoHost}:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+    return `http://${expoHost}:${DEFAULT_GATEWAY_PORT}`;
   }
 
   if (Platform.OS === 'android') {
     // Android emulator cannot reach host machine via localhost.
-    return `http://10.0.2.2:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+    return `http://10.0.2.2:${DEFAULT_GATEWAY_PORT}`;
   }
 
-  return `http://localhost:${DEFAULT_GATEWAY_PORT}${gatewayPath}`;
+  return `http://localhost:${DEFAULT_GATEWAY_PORT}`;
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
@@ -170,16 +170,17 @@ let failedQueue: {
 const isAuthRequest = (url?: string) =>
   Boolean(
     url?.includes(`${AUTH_API_PREFIX}/login`) ||
-      url?.includes(`${AUTH_API_PREFIX}/register`) ||
-      url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
-      url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
-      url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
-      url?.includes(`${AUTH_API_PREFIX}/logout`)
+    url?.includes(`${AUTH_API_PREFIX}/register`) ||
+    url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
+    url?.includes(`${AUTH_API_PREFIX}/forgot-password`) ||
+    url?.includes(`${AUTH_API_PREFIX}/change-password`) ||
+    url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
+    url?.includes(`${AUTH_API_PREFIX}/logout`)
   );
 
 const isAccountDeletionRequest = (url?: string) =>
   Boolean(
-    url?.includes('/user-service/api/v1/users/me/deletion-request')
+    url?.includes(`${API_PREFIXES.users}/me/deletion-request`)
   );
 
 const processQueue = (error: unknown, token: string | null = null) => {

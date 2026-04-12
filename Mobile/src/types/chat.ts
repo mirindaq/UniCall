@@ -26,6 +26,31 @@ export interface ChatAttachment {
   order?: number;
 }
 
+export type CallSignalType = 'OFFER' | 'ACCEPT' | 'REJECT' | 'END' | 'ICE_CANDIDATE';
+
+export interface ConversationCallSignalResponse {
+  conversationId: string;
+  callId: string;
+  type: CallSignalType;
+  fromUserId: string;
+  toUserId: string;
+  audioOnly: boolean;
+  sdp?: string;
+  candidate?: string;
+  sdpMid?: string;
+  sdpMLineIndex?: number;
+  sentAt?: string;
+}
+
+export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL';
+
+export interface UserRealtimeEvent {
+  eventType: UserRealtimeEventType;
+  conversationId: string;
+  message?: ChatMessageResponse;
+  callSignal?: ConversationCallSignalResponse;
+}
+
 export type ConversationType = 'DOUBLE' | 'GROUP';
 export type GroupParticipantRole = 'ADMIN' | 'DEPUTY' | 'USER';
 

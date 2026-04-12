@@ -9,6 +9,7 @@ import { MessagesBottomTabs } from '@/components/messages/messages-bottom-tabs';
 import { MessagesHeader } from '@/components/messages/messages-header';
 import { AppStatusBarBlue } from '@/components/ui/app-status-bar-blue';
 import type { MockConversation } from '@/mock/chat-conversations';
+import { chatSocketService } from '@/services/chat-socket.service';
 import { chatService } from '@/services/chat.service';
 import type { ConversationResponse } from '@/types/chat';
 
@@ -16,29 +17,75 @@ export default function MessagesScreen() {
   const router = useRouter();
   const [conversations, setConversations] = useState<ConversationResponse[]>([]);
 
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const conversationResponse = await chatService.listConversations();
-        if (!mounted) {
-          return;
-        }
-        setConversations(conversationResponse.data ?? []);
-      } catch {
-        if (!mounted) {
-          return;
-        }
-        Toast.show({
-          type: 'error',
-          text1: 'Không tải được danh sách chat',
-        });
+  const loadConversations = React.useCallback(async (showError = true) => {
+    try {
+      const conversationResponse = await chatService.listConversations();
+      setConversations(conversationResponse.data ?? []);
+    } catch {
+      if (!showError) {
+        return;
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+      Toast.show({
+        type: 'error',
+        text1: 'Không tải được danh sách chat',
+      });
+    }
   }, []);
+
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let subscription: { unsubscribe: () => void } | undefined;
+
+    const bindRealtime = async () => {
+      await chatSocketService.connect();
+      if (cancelled) {
+        return;
+      }
+      subscription = chatSocketService.subscribeUserEvents((event) => {
+        if (event.eventType !== 'MESSAGE_UPSERT' || !event.message) {
+          return;
+        }
+
+        const incoming = event.message;
+        const preview = incoming.content?.trim() || 'Tin nhắn mới';
+        const updatedAt = incoming.timeSent || new Date().toISOString();
+
+        setConversations((prev) => {
+          const found = prev.find((item) => item.idConversation === incoming.idConversation);
+          if (!found) {
+            void loadConversations(false);
+            return prev;
+          }
+          const next = prev
+            .map((item) =>
+              item.idConversation === incoming.idConversation
+                ? {
+                    ...item,
+                    lastMessageContent: preview,
+                    dateUpdateMessage: updatedAt,
+                  }
+                : item
+            )
+            .sort(
+              (a, b) =>
+                new Date(b.dateUpdateMessage).getTime() - new Date(a.dateUpdateMessage).getTime()
+            );
+          return next;
+        });
+      });
+    };
+
+    void bindRealtime().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      subscription?.unsubscribe();
+    };
+  }, [loadConversations]);
 
   const uiConversations = useMemo(
     () =>

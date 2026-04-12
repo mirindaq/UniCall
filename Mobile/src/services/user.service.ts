@@ -1,4 +1,5 @@
 import axiosClient from '@/configurations/axios.config';
+import { API_PREFIXES } from '@/constants/api-prefixes';
 import type { PageResponse, ResponseSuccess } from '@/types/api-response';
 import type {
   AccountDeletionStatus,
@@ -11,7 +12,7 @@ import type {
   UserSearchQuery,
 } from '@/types/user';
 
-const USER_API_PREFIX = '/user-service/api/v1/users';
+const USER_API_PREFIX = API_PREFIXES.users;
 
 export const userService = {
   getMyProfile: async (): Promise<ResponseSuccess<UserProfile>> => {

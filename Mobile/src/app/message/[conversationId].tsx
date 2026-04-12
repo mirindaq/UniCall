@@ -7,6 +7,7 @@ import Toast from 'react-native-toast-message';
 import { ChatDetailContent } from '@/components/chat-detail/chat-detail-content';
 import { ChatDetailHeader } from '@/components/chat-detail/chat-detail-header';
 import { AppStatusBarBlue } from '@/components/ui/app-status-bar-blue';
+import { useCall } from '@/contexts/call-context';
 import { chatSocketService } from '@/services/chat-socket.service';
 import { chatService } from '@/services/chat.service';
 import { userService } from '@/services/user.service';
@@ -47,10 +48,24 @@ const waitForSocketConnected = async (timeoutMs = 5000) => {
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { startAudioCall, startVideoCall } = useCall();
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [conversation, setConversation] = useState<ConversationResponse | null>(null);
   const [headerTitle, setHeaderTitle] = useState('Cuộc trò chuyện');
   const [myIdentityId, setMyIdentityId] = useState<string | null>(null);
+
+  const peerInfo = useMemo(() => {
+    const participants = conversation?.participantInfos ?? [];
+    if (participants.length === 0) {
+      return null;
+    }
+    if (myIdentityId) {
+      return participants.find((item) => item.idAccount !== myIdentityId) ?? participants[0];
+    }
+    return participants[0];
+  }, [conversation, myIdentityId]);
+
+  const peerUserId = peerInfo?.idAccount ?? null;
 
   useEffect(() => {
     if (!conversationId) {
@@ -138,7 +153,6 @@ export default function ConversationDetailScreen() {
     return () => {
       cancelled = true;
       subscription?.unsubscribe();
-      chatSocketService.disconnect();
     };
   }, [conversationId, myIdentityId]);
 
@@ -233,6 +247,36 @@ export default function ConversationDetailScreen() {
         title={headerTitle}
         onBack={() => {
           router.back();
+        }}
+        onStartAudioCall={() => {
+          if (!conversationId || !peerUserId) {
+            Toast.show({
+              type: 'error',
+              text1: 'Không thể bắt đầu cuộc gọi',
+            });
+            return;
+          }
+          void startAudioCall({
+            conversationId,
+            peerUserId,
+            peerName: headerTitle,
+            peerAvatar: conversation?.avatar ?? null,
+          });
+        }}
+        onStartVideoCall={() => {
+          if (!conversationId || !peerUserId) {
+            Toast.show({
+              type: 'error',
+              text1: 'Không thể bắt đầu cuộc gọi',
+            });
+            return;
+          }
+          void startVideoCall({
+            conversationId,
+            peerUserId,
+            peerName: headerTitle,
+            peerAvatar: conversation?.avatar ?? null,
+          });
         }}
         onOpenOptions={() => {
           if (conversationId) {
