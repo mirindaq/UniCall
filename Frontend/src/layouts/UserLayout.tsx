@@ -303,12 +303,18 @@ export function UserLayout() {
             ringDeadlineAt={globalCall.ringDeadlineAt}
             ringDurationMs={globalCall.ringDurationMs}
             statusMessage={globalCall.statusMessage}
+            micEnabled={globalCall.micEnabled}
+            cameraEnabled={globalCall.cameraEnabled}
+            canToggleCamera={globalCall.canToggleCamera}
             remoteAudioRef={globalCall.remoteAudioRef}
             remoteVideoRef={globalCall.remoteVideoRef}
             localVideoRef={globalCall.localVideoRef}
             onAccept={globalCall.acceptIncomingCall}
+            onAcceptWithoutCamera={globalCall.acceptIncomingCallWithoutCamera}
             onReject={globalCall.rejectIncomingCall}
             onEnd={globalCall.endCurrentCall}
+            onToggleMic={globalCall.toggleMicrophone}
+            onToggleCamera={globalCall.toggleCamera}
           />
         </>
       ) : null}

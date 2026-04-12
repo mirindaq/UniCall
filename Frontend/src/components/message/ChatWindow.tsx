@@ -720,12 +720,18 @@ export default function ChatWindow() {
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
           statusMessage={conversationCall.statusMessage}
+          micEnabled={conversationCall.micEnabled}
+          cameraEnabled={conversationCall.cameraEnabled}
+          canToggleCamera={conversationCall.canToggleCamera}
           remoteAudioRef={conversationCall.remoteAudioRef}
           remoteVideoRef={conversationCall.remoteVideoRef}
           localVideoRef={conversationCall.localVideoRef}
           onAccept={conversationCall.acceptIncomingCall}
+          onAcceptWithoutCamera={conversationCall.acceptIncomingCallWithoutCamera}
           onReject={conversationCall.rejectIncomingCall}
           onEnd={conversationCall.endCurrentCall}
+          onToggleMic={conversationCall.toggleMicrophone}
+          onToggleCamera={conversationCall.toggleCamera}
         />
       </div>
     )
@@ -798,12 +804,18 @@ export default function ChatWindow() {
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
         statusMessage={conversationCall.statusMessage}
+        micEnabled={conversationCall.micEnabled}
+        cameraEnabled={conversationCall.cameraEnabled}
+        canToggleCamera={conversationCall.canToggleCamera}
         remoteAudioRef={conversationCall.remoteAudioRef}
         remoteVideoRef={conversationCall.remoteVideoRef}
         localVideoRef={conversationCall.localVideoRef}
         onAccept={conversationCall.acceptIncomingCall}
+        onAcceptWithoutCamera={conversationCall.acceptIncomingCallWithoutCamera}
         onReject={conversationCall.rejectIncomingCall}
         onEnd={conversationCall.endCurrentCall}
+        onToggleMic={conversationCall.toggleMicrophone}
+        onToggleCamera={conversationCall.toggleCamera}
       />
 
       <div ref={scrollAreaRef} className="min-h-0 flex-1">

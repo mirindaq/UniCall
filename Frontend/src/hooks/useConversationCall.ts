@@ -85,6 +85,8 @@ export function useConversationCall({
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [micEnabled, setMicEnabled] = useState(true)
+  const [cameraEnabled, setCameraEnabled] = useState(true)
 
   const phaseRef = useRef<CallPhase>("idle")
   const activeCallRef = useRef<ActiveCall | null>(null)
@@ -240,6 +242,8 @@ export function useConversationCall({
   const resetCall = useCallback(() => {
     cleanupPeerConnection()
     setStatusMessage(null)
+    setMicEnabled(true)
+    setCameraEnabled(true)
     setPhase("idle")
     setActiveCall(null)
   }, [cleanupPeerConnection])
@@ -340,6 +344,10 @@ export function useConversationCall({
       })
       localStreamRef.current = stream
       localStreamModeRef.current = expectedMode
+      const audioTrack = stream.getAudioTracks()[0]
+      const videoTrack = stream.getVideoTracks()[0]
+      setMicEnabled(audioTrack ? audioTrack.enabled : true)
+      setCameraEnabled(videoTrack ? videoTrack.enabled : false)
       return stream
     } catch (error) {
       console.error("[call] getUserMedia failed", error)
@@ -442,7 +450,7 @@ export function useConversationCall({
     await startCall(false)
   }, [startCall])
 
-  const acceptIncomingCall = useCallback(async () => {
+  const acceptIncomingCallInternal = useCallback(async (startWithCameraOff: boolean) => {
     const offer = pendingIncomingOfferRef.current
     if (phaseRef.current !== "incoming" || !offer) {
       return
@@ -450,6 +458,16 @@ export function useConversationCall({
     try {
       const pc = createPeerConnection(offer.conversationId, offer.callId, offer.audioOnly)
       const localStream = await ensureLocalStream(offer.audioOnly)
+      if (!offer.audioOnly) {
+        const videoTracks = localStream.getVideoTracks()
+        if (videoTracks.length > 0) {
+          const enabled = !startWithCameraOff
+          videoTracks.forEach((track) => {
+            track.enabled = enabled
+          })
+          setCameraEnabled(enabled)
+        }
+      }
       attachLocalTracks(pc, localStream, offer.audioOnly)
 
       await pc.setRemoteDescription(
@@ -506,6 +524,14 @@ export function useConversationCall({
     sendSignal,
   ])
 
+  const acceptIncomingCall = useCallback(async () => {
+    await acceptIncomingCallInternal(false)
+  }, [acceptIncomingCallInternal])
+
+  const acceptIncomingCallWithoutCamera = useCallback(async () => {
+    await acceptIncomingCallInternal(true)
+  }, [acceptIncomingCallInternal])
+
   const rejectIncomingCall = useCallback(() => {
     const call = activeCallRef.current
     if (phaseRef.current !== "incoming" || !call) {
@@ -527,6 +553,42 @@ export function useConversationCall({
     })
     resetCall()
   }, [resetCall, sendSignal])
+
+  const toggleMicrophone = useCallback(() => {
+    const stream = localStreamRef.current
+    if (!stream) {
+      return
+    }
+    const audioTracks = stream.getAudioTracks()
+    if (audioTracks.length === 0) {
+      return
+    }
+    const nextEnabled = !audioTracks[0].enabled
+    audioTracks.forEach((track) => {
+      track.enabled = nextEnabled
+    })
+    setMicEnabled(nextEnabled)
+  }, [])
+
+  const toggleCamera = useCallback(() => {
+    const current = activeCallRef.current
+    if (!current || current.audioOnly) {
+      return
+    }
+    const stream = localStreamRef.current
+    if (!stream) {
+      return
+    }
+    const videoTracks = stream.getVideoTracks()
+    if (videoTracks.length === 0) {
+      return
+    }
+    const nextEnabled = !videoTracks[0].enabled
+    videoTracks.forEach((track) => {
+      track.enabled = nextEnabled
+    })
+    setCameraEnabled(nextEnabled)
+  }, [])
 
   useEffect(() => {
     clearRingTimeout()
@@ -811,6 +873,9 @@ export function useConversationCall({
     phase,
     activeCall,
     statusMessage,
+    micEnabled,
+    cameraEnabled,
+    canToggleCamera: Boolean(activeCall && !activeCall.audioOnly),
     ringDeadlineAt:
       activeCall?.ringingStartedAt != null
         ? activeCall.ringingStartedAt + CALL_RING_TIMEOUT_MS
@@ -822,7 +887,10 @@ export function useConversationCall({
     startAudioCall,
     startVideoCall,
     acceptIncomingCall,
+    acceptIncomingCallWithoutCamera,
     rejectIncomingCall,
     endCurrentCall,
+    toggleMicrophone,
+    toggleCamera,
   }
 }
