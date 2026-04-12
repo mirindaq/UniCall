@@ -1,3 +1,4 @@
+import type { AxiosError } from "axios"
 import { useEffect, useMemo, useState } from "react"
 import { Clock3, UsersRound, X } from "lucide-react"
 import { toast } from "sonner"
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { friendRequestService, friendService, type RelationshipStatus } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
+import type { ResponseError } from "@/types/api-response"
 import type { UserSearchItem } from "@/types/user.type"
 
 const RECENT_MAX = 8
@@ -108,17 +110,20 @@ export function AddFriendDialog({
         try {
           const response = await friendService.checkRelationship(currentIdentityUserId, user.identityUserId)
           const payload = response.data as
-            | { areFriends?: boolean; note?: string; meSent?: boolean }
+            | { areFriends?: boolean; note?: string; isMeSent?: boolean; isYourself?: boolean }
             | RelationshipStatus
 
           if (typeof payload === "string") {
             return [user.identityUserId, payload] as const
           }
+          if (payload?.isYourself) {
+            return [user.identityUserId, "NONE"] as const
+          }
           if (payload?.areFriends) {
             return [user.identityUserId, "FRIEND"] as const
           }
           if (payload?.note) {
-            return [user.identityUserId, payload.meSent ? "SENT" : "RECEIVED"] as const
+            return [user.identityUserId, payload.isMeSent ? "SENT" : "RECEIVED"] as const
           }
           return [user.identityUserId, "NONE"] as const
         } catch {
@@ -269,8 +274,10 @@ export function AddFriendDialog({
       })
       setRelationshipMap((prev) => ({ ...prev, [user.identityUserId]: "SENT" }))
       toast.success("Đã gửi lời mời kết bạn.")
-    } catch {
-      toast.error("Gửi lời mời kết bạn thất bại.")
+    } catch (error) {
+      const axiosError = error as AxiosError<ResponseError>
+      const apiMessage = axiosError.response?.data?.message
+      toast.error(apiMessage || "Gửi lời mời kết bạn thất bại.")
     } finally {
       setIsSendingToId(null)
     }

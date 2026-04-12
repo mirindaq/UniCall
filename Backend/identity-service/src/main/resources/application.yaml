@@ -3,8 +3,6 @@ spring:
     name: identity-service
 
 server:
-  servlet:
-    context-path: /identity-service
   port: 8082
 
 app:
@@ -23,6 +21,8 @@ app:
       activation-email-lifespan-seconds: ${KEYCLOAK_ACTIVATION_EMAIL_LIFESPAN_SECONDS:86400}
 
 grpc:
+  server:
+    port: ${IDENTITY_SERVICE_GRPC_PORT:9092}
   client:
     user-service:
       address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
@@ -36,7 +36,3 @@ eureka:
       defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
-
-external-services:
-  user-service:
-    base-url: ${USER_SERVICE_BASE_URL:http://localhost:8081/user-service}

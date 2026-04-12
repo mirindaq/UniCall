@@ -1,10 +1,13 @@
+import type { AxiosError } from "axios"
 import { useMemo, useEffect, useState } from "react"
+import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
 import { useMutation } from "@/hooks/useMutation"
 import { userService } from "@/services/user/user.service"
 import { friendService, friendRequestService, type RelationshipStatus } from "@/services/friend/friend.service"
-import type { UserSearchItem, UserProfile } from "@/types/user.type"
+import type { ResponseError } from "@/types/api-response"
+import type { UserSearchItem } from "@/types/user.type"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -35,7 +38,6 @@ export function SearchUserAccountDialog({
   const [isCheckingRelationship, setIsCheckingRelationship] = useState(false)
   const [isEditingMessage, setIsEditingMessage] = useState(false)
   const [friendRequestMessage, setFriendRequestMessage] = useState("")
-  const [meSent, setMeSent] = useState(false)
   const [friendRequestId, setFriendRequestId] = useState<string | null>(null)
   const [friendRequestNote, setFriendRequestNote] = useState<string>("")
   const identityUserId = selectedUser?.identityUserId ?? ""
@@ -59,36 +61,31 @@ export function SearchUserAccountDialog({
             currentIdentityUserId,
             selectedUser.identityUserId
           )
-          const responseData = response.data as any
+          const responseData = response.data
 
           if (responseData?.areFriends) {
             setRelationshipStatus("FRIEND")
-            setMeSent(false)
             setFriendRequestId(null)
             setFriendRequestNote("")
           } else if (responseData?.note) {
             // If there's a note and meSent is true, I sent the request
             // If there's a note and meSent is false, they sent me a request
-            if (responseData?.meSent) {
+            if (responseData?.isMeSent) {
               setRelationshipStatus("SENT")
-              setMeSent(true)
             } else {
               setRelationshipStatus("RECEIVED")
-              setMeSent(false)
             }
             // Store request ID and note
             setFriendRequestId(responseData?.idRequest ?? null)
             setFriendRequestNote(responseData?.note ?? "")
           } else {
             setRelationshipStatus("NONE")
-            setMeSent(false)
             setFriendRequestId(null)
             setFriendRequestNote("")
           }
         } catch (error) {
           console.error("Error checking relationship:", error)
           setRelationshipStatus("NONE")
-          setMeSent(false)
           setFriendRequestId(null)
           setFriendRequestNote("")
         } finally {
@@ -128,7 +125,10 @@ export function SearchUserAccountDialog({
         setRelationshipStatus("SENT")
       },
       onError: (error: unknown) => {
+        const axiosError = error as AxiosError<ResponseError>
         console.error("Error adding friend:", error)
+        setIsEditingMessage(false)
+        toast.error(axiosError.response?.data?.message || "Gửi lời mời kết bạn thất bại.")
       },
     },
   )
@@ -202,7 +202,7 @@ export function SearchUserAccountDialog({
         throw new Error("Friend request ID not found")
       }
       return friendRequestService.updateFriendRequestStatus(friendRequestId, {
-        status: "CANCELLED",
+        status: "CANCELED",
       })
     },
     {

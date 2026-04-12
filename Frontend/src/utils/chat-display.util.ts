@@ -45,6 +45,7 @@ export function searchItemToProfile(user: UserSearchItem): UserProfile {
     id: 0,
     identityUserId: user.identityUserId,
     phoneNumber: user.phoneNumber,
+    email: "",
     firstName: user.firstName,
     lastName: user.lastName,
     gender: "",

@@ -8,7 +8,7 @@ import iuh.fit.common_service.specification.SearchQueryParser;
 import iuh.fit.common_service.specification.SpecificationBuildQuery;
 import iuh.fit.common_service.utils.SortUtils;
 import iuh.fit.user_service.clients.GrpcFileServiceClient;
-import iuh.fit.user_service.clients.IdentityAuthClient;
+import iuh.fit.user_service.clients.GrpcIdentityServiceClient;
 import iuh.fit.user_service.dtos.response.AccountDeletionStatusResponse;
 import iuh.fit.user_service.entities.User;
 import iuh.fit.user_service.repositories.UserRepository;
@@ -33,7 +33,7 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     private final UserRepository userRepository;
     private final GrpcFileServiceClient grpcFileServiceClient;
-    private final IdentityAuthClient identityAuthClient;
+    private final GrpcIdentityServiceClient grpcIdentityServiceClient;
 
     @Override
     @Transactional
@@ -117,7 +117,7 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (password == null || password.isBlank()) {
             throw new InvalidParamException("password is required");
         }
-        identityAuthClient.verifyPassword(identityUserId, user.getPhoneNumber(), password.trim());
+        grpcIdentityServiceClient.verifyPassword(identityUserId, user.getPhoneNumber(), password.trim());
 
         user.setDeletionPending(true);
         user.setDeletionRequestedAt(LocalDateTime.now());

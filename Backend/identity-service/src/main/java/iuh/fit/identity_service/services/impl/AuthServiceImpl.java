@@ -1,7 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
-import iuh.fit.identity_service.clients.UserDeletionStateClient;
+import iuh.fit.identity_service.clients.GrpcUserServiceClient;
 import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
@@ -26,7 +26,7 @@ public class AuthServiceImpl implements AuthService {
     private static final String REFRESH_COOKIE_NAME = "unicall_rt";
 
     private final KeycloakAuthService keycloakAuthService;
-    private final UserDeletionStateClient userDeletionStateClient;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Value("${app.security.cookie.secure:true}")
     private boolean cookieSecure;
@@ -83,7 +83,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
         String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
-        userDeletionStateClient.cancelDeletionRequest(identityUserId);
+        grpcUserServiceClient.cancelDeletionRequest(identityUserId);
 
         return new LoginResult(
                 List.of(

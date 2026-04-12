@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useQuery } from "@/hooks/useQuery"
 import { chatService } from "@/services/chat/chat.service"
-import { friendService } from "@/services/friend/friend.service"
+import { friendService, type FriendApiItem } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type { UserSearchItem } from "@/types/user.type"
@@ -37,18 +37,6 @@ export type CreateGroupPresetMember = {
   displayName: string
   phoneNumber?: string
   avatar?: string | null
-}
-
-type RecentFriendApiItem = {
-  idAccountSent?: string
-  idAccountReceive?: string
-  idAccount?: string
-  identityUserId?: string
-  firstName?: string
-  lastName?: string
-  fullName?: string
-  pathAvartar?: string
-  avatar?: string
 }
 
 const categoryTabs = [
@@ -152,7 +140,7 @@ export function CreateGroupDialog({
     data: recentFriendsResponse,
     isLoading: isLoadingRecentMembers,
     error: recentMembersError,
-  } = useQuery<ResponseSuccess<RecentFriendApiItem[]>>(
+  } = useQuery<ResponseSuccess<FriendApiItem[]>>(
     () => friendService.getAllFriends(currentIdentityUserId as string),
     {
       enabled: open && Boolean(currentIdentityUserId),
@@ -227,8 +215,6 @@ export function CreateGroupDialog({
       new Set(
         items
           .map((friend) =>
-            friend.identityUserId ||
-            friend.idAccount ||
             (friend.idAccountSent === currentIdentityUserId
               ? friend.idAccountReceive
               : friend.idAccountSent)
@@ -295,32 +281,29 @@ export function CreateGroupDialog({
     }
 
     const items = recentFriendsResponse?.data ?? []
-    const mapped = items
-      .map((friend) => {
+    const mapped = items.reduce<MemberOption[]>((acc, friend) => {
         const peerIdentityUserId =
-          friend.identityUserId ||
-          friend.idAccount ||
           (friend.idAccountSent === currentIdentityUserId
             ? friend.idAccountReceive
             : friend.idAccountSent)
 
-        const displayName = `${friend.firstName ?? ""} ${friend.lastName ?? ""}`.trim() || friend.fullName || ""
+        const displayName = `${friend.firstName ?? ""} ${friend.lastName ?? ""}`.trim()
         const resolvedProfile = recentProfileMap[peerIdentityUserId ?? ""]
         const resolvedName = resolvedProfile?.displayName || displayName
 
         if (!peerIdentityUserId || !resolvedName) {
-          return null
+          return acc
         }
 
-        return {
+        acc.push({
           id: peerIdentityUserId,
           displayName: resolvedName,
           avatar: resolvedProfile?.avatar || friend.pathAvartar || friend.avatar,
           fallback: toFallback(resolvedName),
           source: "recent" as const,
-        }
-      })
-      .filter((member): member is MemberOption => member != null)
+        })
+        return acc
+      }, [])
 
     const unique = new Map<string, MemberOption>()
     for (const member of mapped) {
@@ -353,7 +336,8 @@ export function CreateGroupDialog({
   const toggleMember = (member: MemberOption) => {
     setSelectedMembers((prev) => {
       if (prev[member.id]) {
-        const { [member.id]: _, ...rest } = prev
+        const rest = { ...prev }
+        delete rest[member.id]
         return rest
       }
 
