@@ -38,6 +38,19 @@ export const chatService = {
     )
     return data
   },
+  searchMessages: async (conversationId: string, keyword: string, page = 1, limit = 50) => {
+    const { data } = await axiosClient.get<ResponseSuccess<PageResponse<ChatMessageResponse>>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/search`,
+      { params: { keyword, page, limit } }
+    )
+    return data
+  },
+  getMessageById: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.get<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`
+    )
+    return data
+  },
   sendMessageRest: async (
     conversationId: string,
     content: string,

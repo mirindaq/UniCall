@@ -19,6 +19,7 @@ public class ConversationResponse {
     private LocalDateTime dateCreate;
     private LocalDateTime dateUpdateMessage;
     private String lastMessageContent;
+    private String lastMessageSenderId;
     private int numberMember;
     private List<ParticipantInfo> participantInfos;
 

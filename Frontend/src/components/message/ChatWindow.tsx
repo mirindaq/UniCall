@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  ChevronUp,
   Copy,
   Forward,
   Image as ImageIcon,
@@ -19,7 +21,7 @@ import {
   Video,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import IncomingCallPopup from "@/components/message/IncomingCallPopup"
@@ -39,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -51,9 +54,16 @@ import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
 import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
+import { fileService } from "@/services/file/file.service"
 import { userService } from "@/services/user/user.service"
 import type { ChatAttachment, ChatMessageResponse, UserRealtimeEvent } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
+import {
+  extractFileNameFromFileMessage,
+  getOriginalFileNameFromUrl,
+  normalizeFileMessageContent,
+} from "@/utils/file-display.util"
+import { extractUrlsFromText, splitTextWithUrls } from "@/utils/link-display.util"
 
 const MESSAGE_PAGE_SIZE = 30
 const LOAD_MORE_THRESHOLD_PX = 80
@@ -74,14 +84,16 @@ const GIFS = [
 ]
 
 function messagePlainTextForCopy(msg: ChatMessageResponse): string {
+  const normalizedContent = normalizeFileMessageContent(msg.content)
+
   if (msg.recalled) {
-    return msg.content ?? ""
+    return normalizedContent
   }
   if (msg.type === "CALL") {
     return "Cuộc gọi thoại"
   }
   if (msg.type === "TEXT") {
-    return msg.content ?? ""
+    return normalizedContent
   }
   const a = msg.attachments?.[0]
   if (a?.type === "STICKER") {
@@ -90,7 +102,35 @@ function messagePlainTextForCopy(msg: ChatMessageResponse): string {
   if (a?.type === "GIF") {
     return "[GIF]"
   }
-  return msg.content ?? ""
+  if (a?.type === "LINK") {
+    return a.url || normalizedContent || "[Link]"
+  }
+  return normalizedContent
+}
+
+function renderMessageRichText(content: string): ReactNode {
+  const parts = splitTextWithUrls(content)
+  if (parts.length === 0) {
+    return content
+  }
+
+  return parts.map((part, index) => {
+    if (part.type === "url") {
+      return (
+        <a
+          key={`url-${index}-${part.value}`}
+          href={part.value}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="break-all text-blue-600 underline hover:text-blue-700"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {part.value}
+        </a>
+      )
+    }
+    return <span key={`text-${index}`}>{part.value}</span>
+  })
 }
 
 const formatCallDuration = (seconds?: number) => {
@@ -151,6 +191,8 @@ function buildCallMessageCard(
 export default function ChatWindow() {
   const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const draftCaretRef = useRef({ start: 0, end: 0 })
   const bottomRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<string | null>(null)
@@ -158,6 +200,11 @@ export default function ChatWindow() {
   const viewportRef = useRef<HTMLElement | null>(null)
   const prependAnchorRef = useRef<{ prevTop: number; prevHeight: number } | null>(null)
   const pendingScrollToBottomRef = useRef(false)
+  const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const highlightTimeoutRef = useRef<number | null>(null)
+  const loadingMissingMessageIdsRef = useRef<Set<string>>(new Set())
+  const failedMissingMessageIdsRef = useRef<Set<string>>(new Set())
+  const pendingFocusMessageIdRef = useRef<string | null>(null)
 
   const {
     selectedConversationId,
@@ -168,6 +215,9 @@ export default function ChatWindow() {
     onRealtimeMessage,
     selectedPeerProfile,
     setDetailsView,
+    isDetailsPanelOpen,
+    setDetailsPanelOpen,
+    toggleDetailsPanel,
     conversations,
   } = useChatPage()
 
@@ -200,11 +250,13 @@ export default function ChatWindow() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const [socketExtras, setSocketExtras] = useState<ChatMessageResponse[]>([])
+  const [replyTargetCache, setReplyTargetCache] = useState<Record<string, ChatMessageResponse>>({})
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { displayName: string; avatar?: string }>>({})
   const [callPeerProfile, setCallPeerProfile] = useState<{ displayName: string; avatar?: string } | null>(null)
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [stickerOpen, setStickerOpen] = useState(false)
   const [gifOpen, setGifOpen] = useState(false)
@@ -212,6 +264,13 @@ export default function ChatWindow() {
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set())
+  const [imagePreview, setImagePreview] = useState<{ url: string; alt: string } | null>(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
+  const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false)
+  const [messageSearchKeyword, setMessageSearchKeyword] = useState("")
+  const [searchMatchMessages, setSearchMatchMessages] = useState<ChatMessageResponse[]>([])
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false)
+  const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(-1)
 
   useEffect(() => {
     let cancelled = false
@@ -246,6 +305,7 @@ export default function ChatWindow() {
 
     void loadInitialMessages()
     setSocketExtras([])
+    setReplyTargetCache({})
     prependAnchorRef.current = null
     return () => {
       cancelled = true
@@ -360,10 +420,346 @@ export default function ChatWindow() {
     return m
   }, [displayMessages])
 
+  const searchMatchIds = useMemo(() => {
+    return searchMatchMessages.map((message) => message.idMessage)
+  }, [searchMatchMessages])
+
+  const searchMatchIdSet = useMemo(() => {
+    return new Set(searchMatchIds)
+  }, [searchMatchIds])
+
+  const loadMissingMessageById = useCallback((
+    messageId: string,
+    options?: { silentIfMissing?: boolean; focusAfterLoad?: boolean; forceRetry?: boolean },
+  ) => {
+    if (!selectedConversationId || !messageId) {
+      return
+    }
+
+    if (!options?.forceRetry && failedMissingMessageIdsRef.current.has(messageId)) {
+      if (!options?.silentIfMissing) {
+        toast.error("Tin nhắn gốc chưa được tải")
+      }
+      return
+    }
+
+    if (loadingMissingMessageIdsRef.current.has(messageId)) {
+      if (options?.focusAfterLoad) {
+        pendingFocusMessageIdRef.current = messageId
+      }
+      return
+    }
+
+    loadingMissingMessageIdsRef.current.add(messageId)
+    if (options?.focusAfterLoad) {
+      pendingFocusMessageIdRef.current = messageId
+    }
+
+    void chatService
+      .getMessageById(selectedConversationId, messageId)
+      .then((response) => {
+        const fetchedMessage = response.data
+        failedMissingMessageIdsRef.current.delete(messageId)
+        setReplyTargetCache((prev) => ({
+          ...prev,
+          [fetchedMessage.idMessage]: fetchedMessage,
+        }))
+        setSocketExtras((prev) => {
+          const index = prev.findIndex((message) => message.idMessage === fetchedMessage.idMessage)
+          if (index >= 0) {
+            const next = [...prev]
+            next[index] = fetchedMessage
+            return next
+          }
+          return [...prev, fetchedMessage]
+        })
+      })
+      .catch(() => {
+        failedMissingMessageIdsRef.current.add(messageId)
+        if (!options?.silentIfMissing) {
+          toast.error("Tin nhắn gốc chưa được tải")
+        }
+      })
+      .finally(() => {
+        loadingMissingMessageIdsRef.current.delete(messageId)
+      })
+  }, [selectedConversationId])
+
+  const focusReplyTargetMessage = useCallback((messageId?: string, options?: {
+    silentIfMissing?: boolean
+    tryFetchWhenMissing?: boolean
+    forceRetryWhenMissing?: boolean
+  }) => {
+    if (!messageId) {
+      return false
+    }
+
+    const target = messageElementRefs.current[messageId]
+    if (!target) {
+      const shouldTryFetchWhenMissing = options?.tryFetchWhenMissing !== false
+      if (shouldTryFetchWhenMissing && selectedConversationId) {
+        const cachedTargetMessage = replyTargetCache[messageId]
+        if (cachedTargetMessage) {
+          pendingFocusMessageIdRef.current = messageId
+          setSocketExtras((prev) => {
+            const index = prev.findIndex((message) => message.idMessage === cachedTargetMessage.idMessage)
+            if (index >= 0) {
+              const next = [...prev]
+              next[index] = cachedTargetMessage
+              return next
+            }
+            return [...prev, cachedTargetMessage]
+          })
+          return false
+        }
+
+        loadMissingMessageById(messageId, {
+          silentIfMissing: options?.silentIfMissing,
+          focusAfterLoad: true,
+          forceRetry: options?.forceRetryWhenMissing,
+        })
+        return false
+      }
+
+      if (!options?.silentIfMissing) {
+        toast.error("Tin nhắn gốc chưa được tải")
+      }
+      return false
+    }
+
+    target.scrollIntoView({ behavior: "smooth", block: "center" })
+    setHighlightedMessageId(messageId)
+
+    if (highlightTimeoutRef.current != null) {
+      window.clearTimeout(highlightTimeoutRef.current)
+    }
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === messageId ? null : current))
+      highlightTimeoutRef.current = null
+    }, 1600)
+    return true
+  }, [loadMissingMessageById, replyTargetCache, selectedConversationId])
+
+  useEffect(() => {
+    setReplyTargetCache((prev) => {
+      let changed = false
+      const next = { ...prev }
+
+      for (const message of displayMessages) {
+        if (!message.replyToMessageId) {
+          continue
+        }
+        const replyTarget = messageById.get(message.replyToMessageId)
+        if (!replyTarget) {
+          continue
+        }
+        if (next[replyTarget.idMessage] === replyTarget) {
+          continue
+        }
+        next[replyTarget.idMessage] = replyTarget
+        changed = true
+      }
+
+      return changed ? next : prev
+    })
+  }, [displayMessages, messageById])
+
+  useEffect(() => {
+    const pendingMessageId = pendingFocusMessageIdRef.current
+    if (!pendingMessageId) {
+      return
+    }
+
+    const focused = focusReplyTargetMessage(pendingMessageId, {
+      silentIfMissing: true,
+      tryFetchWhenMissing: false,
+    })
+    if (focused) {
+      pendingFocusMessageIdRef.current = null
+    }
+  }, [displayMessages, focusReplyTargetMessage])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return
+    }
+
+    const missingReplyIds = Array.from(
+      new Set(
+        displayMessages
+          .map((message) => message.replyToMessageId)
+          .filter((id): id is string => !!id),
+      ),
+    ).filter((id) => !messageById.has(id) && !replyTargetCache[id] && !loadingMissingMessageIdsRef.current.has(id))
+
+    for (const missingReplyId of missingReplyIds.slice(0, 8)) {
+      loadMissingMessageById(missingReplyId, {
+        silentIfMissing: true,
+        focusAfterLoad: false,
+      })
+    }
+  }, [displayMessages, loadMissingMessageById, messageById, replyTargetCache, selectedConversationId])
+
+  const goToPreviousSearchMatch = useCallback(() => {
+    if (searchMatchIds.length === 0) {
+      return
+    }
+    setActiveSearchMatchIndex((prev) => {
+      if (prev <= 0) {
+        return searchMatchIds.length - 1
+      }
+      return prev - 1
+    })
+  }, [searchMatchIds.length])
+
+  const goToNextSearchMatch = useCallback(() => {
+    if (searchMatchIds.length === 0) {
+      return
+    }
+    setActiveSearchMatchIndex((prev) => {
+      if (prev < 0 || prev >= searchMatchIds.length - 1) {
+        return 0
+      }
+      return prev + 1
+    })
+  }, [searchMatchIds.length])
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current != null) {
+        window.clearTimeout(highlightTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isMessageSearchOpen) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [isMessageSearchOpen])
+
+  useEffect(() => {
+    if (!isMessageSearchOpen || !selectedConversationId) {
+      setSearchMatchMessages([])
+      setIsSearchingMessages(false)
+      return
+    }
+
+    const keyword = messageSearchKeyword.trim()
+    if (!keyword) {
+      setSearchMatchMessages([])
+      setIsSearchingMessages(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setIsSearchingMessages(true)
+      void chatService
+        .searchMessages(selectedConversationId, keyword, 1, 100)
+        .then((response) => {
+          if (cancelled) {
+            return
+          }
+          const resultItems = response.data.items ?? []
+          const sortedMatches = [...resultItems].sort(
+            (a, b) => new Date(a.timeSent).getTime() - new Date(b.timeSent).getTime(),
+          )
+          setSearchMatchMessages(sortedMatches)
+
+          // Ensure searched messages are rendered so jump-to-result works even for older messages.
+          setSocketExtras((prev) => {
+            const byId = new Map<string, ChatMessageResponse>()
+            for (const message of prev) {
+              byId.set(message.idMessage, message)
+            }
+            for (const message of sortedMatches) {
+              byId.set(message.idMessage, message)
+            }
+            return [...byId.values()]
+          })
+        })
+        .catch(() => {
+          if (cancelled) {
+            return
+          }
+          setSearchMatchMessages([])
+          toast.error("Không tìm kiếm được tin nhắn")
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsSearchingMessages(false)
+          }
+        })
+    }, 600)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [isMessageSearchOpen, messageSearchKeyword, selectedConversationId])
+
+  useEffect(() => {
+    if (!isMessageSearchOpen) {
+      setActiveSearchMatchIndex(-1)
+      return
+    }
+
+    if (searchMatchIds.length === 0) {
+      setActiveSearchMatchIndex(-1)
+      return
+    }
+
+    setActiveSearchMatchIndex((prev) => {
+      if (prev < 0) {
+        return 0
+      }
+      return Math.min(prev, searchMatchIds.length - 1)
+    })
+  }, [isMessageSearchOpen, searchMatchIds])
+
+  useEffect(() => {
+    if (!isMessageSearchOpen) {
+      return
+    }
+    if (activeSearchMatchIndex < 0 || activeSearchMatchIndex >= searchMatchIds.length) {
+      return
+    }
+    const targetMessageId = searchMatchIds[activeSearchMatchIndex]
+    const focusedImmediately = focusReplyTargetMessage(targetMessageId, { silentIfMissing: true })
+    if (focusedImmediately) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      focusReplyTargetMessage(targetMessageId, { silentIfMissing: true })
+    }, 80)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [activeSearchMatchIndex, isMessageSearchOpen, searchMatchIds, focusReplyTargetMessage])
+
   useEffect(() => {
     setMultiSelectActive(false)
     setSelectedMessageIds(new Set())
     setReplyingTo(null)
+    loadingMissingMessageIdsRef.current.clear()
+    failedMissingMessageIdsRef.current.clear()
+    pendingFocusMessageIdRef.current = null
+    setReplyTargetCache({})
+    setIsMessageSearchOpen(false)
+    setMessageSearchKeyword("")
+    setSearchMatchMessages([])
+    setIsSearchingMessages(false)
+    setActiveSearchMatchIndex(-1)
   }, [selectedConversationId])
 
   useEffect(() => {
@@ -539,6 +935,7 @@ export default function ChatWindow() {
           attachments,
           replyToMessageId,
         )
+        onRealtimeMessage(res.data)
         setSocketExtras((prev) => {
           if (prev.some((x) => x.idMessage === res.data.idMessage)) {
             return prev
@@ -558,7 +955,23 @@ export default function ChatWindow() {
   }
 
   const sendText = async () => {
-    await sendMessage(draft, "TEXT", undefined, replyingTo?.idMessage)
+    const normalizedDraft = draft.trim()
+    if (!normalizedDraft) {
+      return
+    }
+
+    const linkAttachments = extractUrlsFromText(normalizedDraft).map((url, index) => ({
+      type: "LINK" as const,
+      url,
+      order: index,
+    }))
+
+    await sendMessage(
+      draft,
+      "TEXT",
+      linkAttachments.length > 0 ? linkAttachments : undefined,
+      replyingTo?.idMessage,
+    )
     setDraft("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -623,6 +1036,80 @@ export default function ChatWindow() {
       replyingTo?.idMessage,
     )
     setGifOpen(false)
+  }
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    // Reset input value to allow selecting the same file again
+    event.target.value = ""
+
+    // Validate file size (max 25MB)
+    const maxSize = 25 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error("Kích thước file tối đa 25MB")
+      return
+    }
+
+    setIsUploadingFile(true)
+    try {
+      const uploadResult = await fileService.uploadFile(file)
+      const { url, fileSize, type: attachmentType } = uploadResult.data
+
+      // Determine message content based on file type
+      let messageContent = ""
+      let messageType: ChatMessageResponse["type"] = "NONTEXT"
+
+      if (attachmentType === "IMAGE") {
+        messageContent = "Đã gửi hình ảnh"
+      } else if (attachmentType === "VIDEO") {
+        messageContent = "Đã gửi video"
+      } else if (attachmentType === "GIF") {
+        messageContent = "Đã gửi GIF"
+      } else if (attachmentType === "AUDIO") {
+        messageContent = "Đã gửi file âm thanh"
+      } else {
+        // Lấy tên file từ URL đã upload (đã bỏ UUID)
+        messageContent = `Đã gửi file: ${getOriginalFileNameFromUrl(url)}`
+      }
+
+      // If there's text in the draft, use MIX type
+      if (draft.trim()) {
+        messageContent = draft.trim()
+        messageType = "MIX"
+      }
+
+      await sendMessage(
+        messageContent,
+        messageType,
+        [{ type: attachmentType, url, size: formatFileSize(fileSize), order: 0 }],
+        replyingTo?.idMessage,
+      )
+
+      // Clear draft if it was used
+      if (draft.trim()) {
+        setDraft("")
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto"
+        }
+      }
+
+      toast.success("Gửi file thành công")
+    } catch (error) {
+      console.error("File upload error:", error)
+      toast.error("Upload file thất bại")
+    } finally {
+      setIsUploadingFile(false)
+    }
+  }
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   const copyMessageText = useCallback(async (msg: ChatMessageResponse) => {
@@ -751,7 +1238,10 @@ export default function ChatWindow() {
               <button
                 type="button"
                 className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600"
-                onClick={() => setDetailsView("group-members")}
+                onClick={() => {
+                  setDetailsView("group-members")
+                  setDetailsPanelOpen(true)
+                }}
               >
                 <Users className="h-3.5 w-3.5" />
                 {selectedConversation.numberMember} thành viên
@@ -762,7 +1252,13 @@ export default function ChatWindow() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="icon-sm" title="Tìm kiếm">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Tìm kiếm"
+            className={cn(isMessageSearchOpen ? "bg-blue-50 text-blue-700" : undefined)}
+            onClick={() => setIsMessageSearchOpen((prev) => !prev)}
+          >
             <Search className="h-5 w-5" />
           </Button>
           <Button
@@ -786,14 +1282,73 @@ export default function ChatWindow() {
           <Button
             variant="ghost"
             size="icon-sm"
-            className="text-primary"
-            onClick={() => setDetailsView("main")}
-            title="Thông tin hội thoại"
+            className={cn("text-primary", isDetailsPanelOpen ? "bg-blue-50" : undefined)}
+            onClick={() => {
+              if (!isDetailsPanelOpen) {
+                setDetailsView("main")
+              }
+              toggleDetailsPanel()
+            }}
+            title={isDetailsPanelOpen ? "Đóng thanh thông tin" : "Mở thanh thông tin"}
           >
-            <PanelRight className="h-5 w-5 text-blue-600" />
+            <PanelRight className={cn("h-5 w-5", isDetailsPanelOpen ? "text-blue-700" : "text-blue-600")} />
           </Button>
         </div>
       </div>
+
+      {isMessageSearchOpen ? (
+        <div className="flex shrink-0 items-center gap-2 border-b bg-background px-4 py-2">
+          <Input
+            ref={searchInputRef}
+            value={messageSearchKeyword}
+            onChange={(event) => setMessageSearchKeyword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                if (event.shiftKey) {
+                  goToPreviousSearchMatch()
+                  return
+                }
+                goToNextSearchMatch()
+              }
+            }}
+            placeholder="Tìm trong cuộc trò chuyện"
+            className="h-9"
+          />
+          <div className="flex w-16 shrink-0 items-center justify-center gap-1 text-center text-xs text-muted-foreground">
+            {isSearchingMessages ? <Spinner className="size-3 text-muted-foreground" /> : null}
+            <span>
+              {searchMatchIds.length > 0 ? `${activeSearchMatchIndex + 1}/${searchMatchIds.length}` : "0/0"}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            title="Kết quả trước"
+            disabled={isSearchingMessages || searchMatchIds.length === 0}
+            onClick={goToPreviousSearchMatch}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            title="Kết quả sau"
+            disabled={isSearchingMessages || searchMatchIds.length === 0}
+            onClick={goToNextSearchMatch}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Đóng tìm kiếm"
+            onClick={() => setIsMessageSearchOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
       <IncomingCallPopup
         open={isCallModalOpen}
         phase={conversationCall.phase === "idle" ? "outgoing" : conversationCall.phase}
@@ -850,13 +1405,27 @@ export default function ChatWindow() {
                   const callCard = isCallMessage ? buildCallMessageCard(msg, currentUserId) : null
 
                   const replyParent = msg.replyToMessageId
-                    ? messageById.get(msg.replyToMessageId)
+                    ? (messageById.get(msg.replyToMessageId) ?? replyTargetCache[msg.replyToMessageId])
                     : undefined
+                  const normalizedMessageContent = normalizeFileMessageContent(msg.content)
+                  const fileNameFromMessage = extractFileNameFromFileMessage(normalizedMessageContent)
 
                   return (
                     <div
                       key={msg.idMessage}
-                      className={cn("flex gap-2", isMe ? "justify-end" : "justify-start")}
+                      ref={(element) => {
+                        if (element) {
+                          messageElementRefs.current[msg.idMessage] = element
+                          return
+                        }
+                        delete messageElementRefs.current[msg.idMessage]
+                      }}
+                      className={cn(
+                        "flex gap-2 rounded-md px-1 py-0.5 transition-colors",
+                        searchMatchIdSet.has(msg.idMessage) && "bg-amber-50/70 ring-1 ring-amber-200",
+                        highlightedMessageId === msg.idMessage && "bg-primary/10",
+                        isMe ? "justify-end" : "justify-start",
+                      )}
                     >
                       {showAvatar && (
                         <Avatar size="sm" className={cn("shrink-0", showSenderName ? "mt-5 self-start" : "mb-1 self-end")}>
@@ -902,8 +1471,17 @@ export default function ChatWindow() {
                             ) : null}
                             {msg.replyToMessageId && !msg.recalled ? (
                               <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => focusReplyTargetMessage(msg.replyToMessageId, { forceRetryWhenMissing: true })}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault()
+                                    focusReplyTargetMessage(msg.replyToMessageId, { forceRetryWhenMissing: true })
+                                  }
+                                }}
                                 className={cn(
-                                  "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground dark:bg-white/5",
+                                  "mb-1.5 max-w-full rounded-md border-l-2 border-primary/50 bg-black/[0.03] px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-black/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 dark:bg-white/5 dark:hover:bg-white/10",
                                   isMe ? "mr-0" : "ml-0",
                                 )}
                               >
@@ -921,7 +1499,7 @@ export default function ChatWindow() {
                                   isMe ? "rounded-br-sm bg-primary/5" : "rounded-bl-sm border bg-muted/40",
                                 )}
                               >
-                                {msg.content}
+                                {normalizedMessageContent}
                               </div>
                             ) : msg.type === "TEXT" ? (
                               <div
@@ -932,7 +1510,7 @@ export default function ChatWindow() {
                                     : "rounded-bl-sm border bg-background text-foreground shadow-xs",
                                 )}
                               >
-                                {msg.content}
+                                {renderMessageRichText(normalizedMessageContent)}
                               </div>
                             ) : isCallMessage ? (
                               <div
@@ -981,9 +1559,104 @@ export default function ChatWindow() {
                               <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
                                 <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
                               </div>
+                            ) : firstAttachment?.type === "IMAGE" ? (
+                              <div className="overflow-hidden rounded-2xl border bg-background shadow-xs cursor-pointer">
+                                <img 
+                                  src={firstAttachment.url} 
+                                  alt="image" 
+                                  className="max-h-64 max-w-xs object-contain hover:opacity-90 transition-opacity" 
+                                  onClick={() => setImagePreview({ url: firstAttachment.url, alt: 'Image' })}
+                                />
+                                {normalizedMessageContent && normalizedMessageContent.trim() && (
+                                  <div className="px-3 py-2 text-sm text-foreground">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : firstAttachment?.type === "VIDEO" ? (
+                              <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
+                                <video 
+                                  src={firstAttachment.url} 
+                                  controls
+                                  className="max-h-64 max-w-xs bg-black"
+                                  preload="metadata"
+                                />
+                                {normalizedMessageContent && normalizedMessageContent.trim() && (
+                                  <div className="px-3 py-2 text-sm text-foreground">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : firstAttachment?.type === "AUDIO" ? (
+                              <div className="rounded-2xl border bg-background px-4 py-3 shadow-xs min-w-[280px]">
+                                <p className="text-xs text-muted-foreground mb-2">File âm thanh</p>
+                                <audio 
+                                  src={firstAttachment.url} 
+                                  controls
+                                  className="w-full h-8"
+                                  preload="metadata"
+                                />
+                                {normalizedMessageContent && normalizedMessageContent.trim() && (
+                                  <div className="mt-2 text-sm text-foreground">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : firstAttachment?.type === "LINK" ? (
+                              <div className="rounded-2xl border bg-background px-3 py-2.5 shadow-xs max-w-[280px]">
+                                <a
+                                  href={firstAttachment.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  className="block break-all text-sm text-blue-600 underline hover:text-blue-700"
+                                >
+                                  {firstAttachment.url}
+                                </a>
+                                {normalizedMessageContent
+                                  && normalizedMessageContent.trim()
+                                  && normalizedMessageContent.trim() !== firstAttachment.url && (
+                                  <div className="mt-2 border-t pt-2 text-sm text-foreground">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : firstAttachment?.type === "FILE" ? (
+                              (() => {
+                                const fileNameFromUrl = getOriginalFileNameFromUrl(firstAttachment.url)
+                                const displayFileName = fileNameFromMessage || fileNameFromUrl
+
+                                return (
+                              <a 
+                                href={firstAttachment.url} 
+                                download
+                                className="block rounded-xl border bg-background px-3 py-2.5 shadow-xs hover:bg-muted/50 transition-colors max-w-[280px]"
+                              >
+                                <div className="flex items-start gap-2.5">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-blue-500 text-white text-[10px] font-bold">
+                                    {firstAttachment.url.split('.').pop()?.toUpperCase().substring(0, 4) || 'FILE'}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-foreground line-clamp-2 break-all">
+                                      {displayFileName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {firstAttachment.size || 'Unknown size'}
+                                    </p>
+                                  </div>
+                                </div>
+                                {normalizedMessageContent
+                                  && normalizedMessageContent.trim()
+                                  && normalizedMessageContent !== `Đã gửi file: ${displayFileName}` && (
+                                  <div className="mt-2 text-sm text-foreground border-t pt-2">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </a>
+                                )
+                              })()
                             ) : (
                               <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
-                                {msg.content}
+                                {renderMessageRichText(normalizedMessageContent)}
                               </div>
                             )}
                             <span className="mt-1 text-[11px] text-muted-foreground">
@@ -1184,8 +1857,22 @@ export default function ChatWindow() {
               </div>
             </PopoverContent>
           </Popover>
-          <Button variant="ghost" size="icon-sm" title="Đính kèm tệp" type="button">
-            <Paperclip className="h-5 w-5" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+          />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Đính kèm tệp"
+            type="button"
+            disabled={isUploadingFile}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip className={cn("h-5 w-5", isUploadingFile && "animate-spin")} />
           </Button>
         </div>
 
@@ -1284,6 +1971,20 @@ export default function ChatWindow() {
               )}
             </div>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={imagePreview != null} onOpenChange={(open) => !open && setImagePreview(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95" showCloseButton>
+          <div className="relative flex items-center justify-center min-h-[400px] max-h-[85vh]">
+            {imagePreview && (
+              <img 
+                src={imagePreview.url} 
+                alt={imagePreview.alt}
+                className="max-w-full max-h-[85vh] object-contain"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -30,6 +30,15 @@ import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type { CreateGroupConversationResponse } from "@/types/chat"
 import type { UserSearchItem } from "@/types/user.type"
 import { formatChatSidebarTime } from "@/utils/chat-display.util"
+import { normalizeFileMessageContent } from "@/utils/file-display.util"
+
+const truncateWithEllipsis = (value: string, maxLength = 52): string => {
+  const normalized = value.trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+  return `${normalized.slice(0, maxLength).trimEnd()}...`
+}
 
 export default function ChatSidebar() {
   const {
@@ -224,7 +233,13 @@ export default function ChatSidebar() {
             {listForTab.map((chat) => {
               const title = conversationTitle(chat)
               const avatar = conversationAvatar(chat)
-              const last = chat.lastMessageContent ?? ""
+              const normalizedLast = normalizeFileMessageContent(chat.lastMessageContent)
+              const shouldShowYouPrefix =
+                !!currentIdentityUserId && chat.lastMessageSenderId === currentIdentityUserId
+              const last = shouldShowYouPrefix && normalizedLast && !normalizedLast.startsWith("Bạn:")
+                ? `Bạn: ${normalizedLast}`
+                : normalizedLast
+              const lastPreview = truncateWithEllipsis(last)
               const timeLabel = formatChatSidebarTime(chat.dateUpdateMessage)
               const isActive = chat.idConversation === selectedConversationId
 
@@ -248,7 +263,7 @@ export default function ChatSidebar() {
                       <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">{timeLabel}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="truncate text-xs text-muted-foreground">{last || " "}</p>
+                      <p className="truncate text-xs text-muted-foreground">{lastPreview || " "}</p>
                     </div>
                   </div>
                 </button>

@@ -202,7 +202,7 @@ export function SearchUserAccountDialog({
         throw new Error("Friend request ID not found")
       }
       return friendRequestService.updateFriendRequestStatus(friendRequestId, {
-        status: "CANCELED",
+        status: "CANCELLED",
       })
     },
     {

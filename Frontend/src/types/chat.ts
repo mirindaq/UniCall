@@ -1,5 +1,5 @@
 export type MessageType = "TEXT" | "NONTEXT" | "MIX" | "CALL"
-export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI"
+export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI" | "LINK"
 
 export type MessageEnum = "SENT" | "RECEIVED" | "DELETED" | "FAILED"
 
@@ -82,6 +82,7 @@ export interface ConversationResponse {
   dateCreate: string
   dateUpdateMessage: string
   lastMessageContent?: string
+  lastMessageSenderId?: string
   numberMember: number
   participantInfos: ChatParticipantInfo[]
 }

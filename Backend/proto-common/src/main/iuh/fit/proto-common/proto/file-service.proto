@@ -8,6 +8,7 @@ option java_outer_classname = "FileServiceProto";
 
 service FileService {
   rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse);
 }
 
 message UploadAvatarRequest {
@@ -19,4 +20,15 @@ message UploadAvatarRequest {
 
 message UploadAvatarResponse {
   string url = 1;
+}
+
+message UploadFileRequest {
+  string file_name = 1;
+  string content_type = 2;
+  bytes content = 3;
+}
+
+message UploadFileResponse {
+  string url = 1;
+  int64 file_size = 2;
 }

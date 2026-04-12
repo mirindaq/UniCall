@@ -51,12 +51,10 @@ public class FileStorageServiceImpl implements FileStorageService {
         if (content == null || content.length == 0) {
             throw new InvalidParamException("File không được để trống");
         }
-        if (!StringUtils.hasText(contentType) || !props.allowedMimeTypes().contains(contentType)) {
-            throw new InvalidFileTypeException("Định dạng file không được hỗ trợ");
-        }
+        String validatedContentType = resolveValidatedContentType(originalFilename, contentType);
 
         String key = buildObjectKey(originalFilename);
-        putByteArrayObject(key, contentType, content);
+        putByteArrayObject(key, validatedContentType, content);
 
         return FileUploadResponse.builder()
                 .url(buildPublicUrl(key))
@@ -81,11 +79,15 @@ public class FileStorageServiceImpl implements FileStorageService {
     }
 
     private String resolveValidatedContentType(MultipartFile file) {
-        String declared = file.getContentType();
-        if (StringUtils.hasText(declared) && props.allowedMimeTypes().contains(declared)) {
-            return declared;
+        return resolveValidatedContentType(file.getOriginalFilename(), file.getContentType());
+    }
+
+    private String resolveValidatedContentType(String originalFilename, String declaredContentType) {
+        String normalized = normalizeMimeType(declaredContentType);
+        if (StringUtils.hasText(normalized) && props.allowedMimeTypes().contains(normalized)) {
+            return normalized;
         }
-        String fromName = guessContentTypeFromFilename(file.getOriginalFilename());
+        String fromName = guessContentTypeFromFilename(originalFilename);
         if (fromName != null) {
             return fromName;
         }
@@ -103,6 +105,18 @@ public class FileStorageServiceImpl implements FileStorageService {
         }
         String ext = base.substring(dot + 1).toLowerCase(Locale.ROOT);
         return props.getExtensionToMime().get(ext);
+    }
+
+    private static String normalizeMimeType(String contentType) {
+        if (!StringUtils.hasText(contentType)) {
+            return null;
+        }
+        String normalized = contentType.trim().toLowerCase(Locale.ROOT);
+        int semicolon = normalized.indexOf(';');
+        if (semicolon >= 0) {
+            normalized = normalized.substring(0, semicolon).trim();
+        }
+        return normalized;
     }
 
     @Override

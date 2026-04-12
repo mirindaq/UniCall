@@ -6,6 +6,8 @@ import { chatService } from "@/services/chat/chat.service"
 import { userService } from "@/services/user/user.service"
 import type { ChatMessageResponse, ConversationResponse } from "@/types/chat"
 import type { UserProfile, UserSearchItem } from "@/types/user.type"
+import { normalizeFileMessageContent } from "@/utils/file-display.util"
+import { extractUrlsFromText } from "@/utils/link-display.util"
 
 type ChatPageContextValue = {
   currentUserId: string | null
@@ -23,15 +25,31 @@ type ChatPageContextValue = {
   selectedPeerProfile: UserProfile | null
   detailsView: "main" | "storage" | "group-members"
   setDetailsView: (view: "main" | "storage" | "group-members") => void
+  isDetailsPanelOpen: boolean
+  setDetailsPanelOpen: (open: boolean) => void
+  toggleDetailsPanel: () => void
   onRealtimeMessage: (message: ChatMessageResponse) => void
 }
 
+const normalizeConversationPreviewContent = (value: string | null | undefined): string => {
+  const normalized = normalizeFileMessageContent(value)
+  if (!normalized) {
+    return ""
+  }
+  if (extractUrlsFromText(normalized).length > 0) {
+    return "Đã gửi link"
+  }
+  return normalized
+}
+
 const buildConversationPreview = (message: ChatMessageResponse): string => {
+  const normalizedContent = normalizeFileMessageContent(message.content)
+
   if (message.type === "CALL") {
     return "Cuộc gọi thoại"
   }
   if (message.recalled) {
-    return message.content || "Tin nhắn đã thu hồi"
+    return normalizedContent || "Tin nhắn đã thu hồi"
   }
   const attachmentType = message.attachments?.[0]?.type
   if (attachmentType === "GIF") {
@@ -40,10 +58,25 @@ const buildConversationPreview = (message: ChatMessageResponse): string => {
   if (attachmentType === "STICKER") {
     return "Đã gửi sticker"
   }
-  if (attachmentType) {
-    return "Đã gửi tệp đính kèm"
+  if (attachmentType === "IMAGE") {
+    return normalizedContent || "Đã gửi hình ảnh"
   }
-  return message.content || ""
+  if (attachmentType === "VIDEO") {
+    return normalizedContent || "Đã gửi video"
+  }
+  if (attachmentType === "AUDIO") {
+    return normalizedContent || "Đã gửi file âm thanh"
+  }
+  if (attachmentType === "LINK") {
+    return "Đã gửi link"
+  }
+  if (attachmentType === "FILE") {
+    return normalizedContent || "Đã gửi file"
+  }
+  if (attachmentType) {
+    return normalizedContent || "Đã gửi tệp đính kèm"
+  }
+  return normalizeConversationPreviewContent(normalizedContent)
 }
 
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
@@ -51,6 +84,7 @@ const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
+  const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
   const [isStartingChat, setIsStartingChat] = useState(false)
 
   const { data: profileResponse } = useQuery(() => userService.getMyProfile(), {
@@ -75,7 +109,19 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const refetchInFlightRef = useRef(false)
 
   useEffect(() => {
-    setConversations(conversationsResponse?.data ?? [])
+    const incoming = conversationsResponse?.data ?? []
+    setConversations((prev) => {
+      const senderByConversationId = new Map(
+        prev.map((conversation) => [conversation.idConversation, conversation.lastMessageSenderId]),
+      )
+
+      return incoming.map((conversation) => ({
+        ...conversation,
+        lastMessageContent: normalizeConversationPreviewContent(conversation.lastMessageContent),
+        lastMessageSenderId:
+          conversation.lastMessageSenderId ?? senderByConversationId.get(conversation.idConversation),
+      }))
+    })
   }, [conversationsResponse?.data])
 
   const conversationTitle = useCallback(
@@ -128,6 +174,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       const updated: ConversationResponse = {
         ...next[index],
         lastMessageContent: preview,
+        lastMessageSenderId: message.idAccountSent,
         dateUpdateMessage: updateAt,
       }
       next.splice(index, 1)
@@ -143,6 +190,14 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
     setDetailsView("main")
+  }, [])
+
+  const setDetailsPanelOpen = useCallback((open: boolean) => {
+    setIsDetailsPanelOpen(open)
+  }, [])
+
+  const toggleDetailsPanel = useCallback(() => {
+    setIsDetailsPanelOpen((prev) => !prev)
   }, [])
 
   const startChatWithUser = useCallback(
@@ -181,6 +236,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectedPeerProfile,
       detailsView,
       setDetailsView,
+      isDetailsPanelOpen,
+      setDetailsPanelOpen,
+      toggleDetailsPanel,
       onRealtimeMessage,
     }),
     [
@@ -196,6 +254,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       selectedConversation,
       selectedPeerProfile,
       detailsView,
+      isDetailsPanelOpen,
+      setDetailsPanelOpen,
+      toggleDetailsPanel,
       onRealtimeMessage,
       selectedConversationId,
       startChatWithUser,
