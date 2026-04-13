@@ -1,5 +1,8 @@
 export type MessageType = "TEXT" | "NONTEXT" | "MIX" | "CALL"
 export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI" | "LINK"
+export const UNICALL_AI_BOT_ID = "unicall-ai-bot"
+export const UNICALL_IMAGE_BOT_ID = "unicall-image-bot"
+export const UNICALL_AI_BOT_IDS = [UNICALL_AI_BOT_ID, UNICALL_IMAGE_BOT_ID] as const
 
 export type MessageEnum = "SENT" | "RECEIVED" | "DELETED" | "FAILED"
 

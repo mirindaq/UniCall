@@ -20,12 +20,14 @@ import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
+import iuh.fit.chat_service.services.AiAssistantService;
 import iuh.fit.chat_service.services.ConversationBlockService;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -47,6 +49,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
@@ -81,6 +85,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final ChatConversationService chatConversationService;
+    private final AiAssistantService aiAssistantService;
+    @Qualifier("aiAssistantExecutor")
+    private final Executor aiAssistantExecutor;
     private final ConversationBlockService conversationBlockService;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
@@ -233,6 +240,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
         MessageResponse dto = MessageResponse.from(saved);
         broadcastToParticipants(conversation, dto);
+        scheduleAiReplyIfNeeded(conversationId, identityUserId, normalizedContent);
         return dto;
     }
 
@@ -553,6 +561,73 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
 
         return new ArrayList<>(targetConversationIds);
+    }
+
+    private void scheduleAiReplyIfNeeded(String conversationId, String requesterId, String content) {
+        if (!StringUtils.hasText(conversationId) || !StringUtils.hasText(requesterId) || !StringUtils.hasText(content)) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                aiAssistantService
+                        .buildReply(conversationId, requesterId, content)
+                        .ifPresent(reply -> persistAiReplyMessage(conversationId, reply));
+            } catch (Exception ignored) {
+                // AI là tính năng bổ sung, không làm gián đoạn luồng chat chính.
+            }
+        }, aiAssistantExecutor);
+    }
+
+    private void persistAiReplyMessage(String conversationId, AiAssistantService.AiAssistantReply reply) {
+        if (reply == null || !StringUtils.hasText(reply.botId())) {
+            return;
+        }
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        if (conversation == null || conversation.getParticipantInfos() == null || conversation.getParticipantInfos().isEmpty()) {
+            return;
+        }
+
+        List<Attachment> attachments = new ArrayList<>();
+        MessageType messageType = MessageType.TEXT;
+        if (StringUtils.hasText(reply.imageUrl())) {
+            Attachment attachment = new Attachment();
+            attachment.setIdAttachment(UUID.randomUUID().toString());
+            attachment.setType(AttachmentType.IMAGE);
+            attachment.setUrl(reply.imageUrl().trim());
+            attachment.setOrder(0);
+            attachment.setTimeUpload(LocalDateTime.now());
+            attachments.add(attachment);
+            messageType = StringUtils.hasText(reply.content()) ? MessageType.MIX : MessageType.NONTEXT;
+        }
+
+        String normalizedContent = reply.content() == null ? "" : reply.content().trim();
+        if (normalizedContent.isBlank() && attachments.isEmpty()) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Message aiMessage = new Message();
+        aiMessage.setIdMessage(UUID.randomUUID().toString());
+        aiMessage.setIdConversation(conversationId);
+        aiMessage.setIdAccountSent(reply.botId().trim());
+        aiMessage.setStatus(MessageEnum.SENT);
+        aiMessage.setContent(normalizedContent);
+        aiMessage.setType(messageType);
+        aiMessage.setTimeSent(now);
+        aiMessage.setTimeUpdate(now);
+        aiMessage.setAttachments(attachments.isEmpty() ? List.of() : attachments);
+        aiMessage.setEdited(false);
+        aiMessage.setPinned(false);
+        aiMessage.setPinnedByAccountId(null);
+        aiMessage.setPinnedAt(null);
+        aiMessage.setReplyToMessageId(null);
+
+        Message saved = messageRepository.save(aiMessage);
+        conversation.setLastMessageContent(buildLastMessagePreview(normalizedContent, attachments));
+        conversation.setDateUpdateMessage(now);
+        conversationRepository.save(conversation);
+
+        broadcastToParticipants(conversation, MessageResponse.from(saved));
     }
 
     private static List<MessageAttachmentRequest> toAttachmentRequests(List<Attachment> attachments) {

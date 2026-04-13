@@ -29,7 +29,7 @@ import { formatChatSidebarTime } from "@/utils/chat-display.util"
 import { normalizeFileMessageContent } from "@/utils/file-display.util"
 
 const truncateWithEllipsis = (value: string, maxLength = 52): string => {
-  const normalized = value.trim()
+  const normalized = value.replace(/\s+/g, " ").trim()
   if (normalized.length <= maxLength) {
     return normalized
   }
@@ -268,7 +268,7 @@ export default function ChatSidebar() {
                   type="button"
                   onClick={() => selectConversation(chat.idConversation)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-md p-3 text-left transition-colors hover:bg-muted",
+                    "flex w-full items-center gap-3 overflow-hidden rounded-md p-3 text-left transition-colors hover:bg-muted",
                     isActive && "bg-muted"
                   )}
                 >
@@ -276,11 +276,11 @@ export default function ChatSidebar() {
                     <AvatarImage src={avatar} alt={title} />
                     <AvatarFallback>{title.slice(0, 2)}</AvatarFallback>
                   </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-baseline justify-between">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="mb-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
                       <h3
                         className={cn(
-                          "truncate text-sm text-foreground",
+                          "min-w-0 flex-1 truncate text-sm text-foreground",
                           hasUnread && !isActive ? "font-semibold" : "font-medium",
                         )}
                       >
@@ -288,17 +288,18 @@ export default function ChatSidebar() {
                       </h3>
                       <span
                         className={cn(
-                          "ml-2 whitespace-nowrap text-xs",
+                          "ml-2 max-w-[84px] shrink-0 truncate text-right whitespace-nowrap text-xs",
                           hasUnread && !isActive ? "font-semibold text-blue-600" : "text-muted-foreground",
                         )}
+                        title={timeLabel}
                       >
                         {timeLabel}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                       <p
                         className={cn(
-                          "truncate text-xs",
+                          "min-w-0 truncate text-xs",
                           hasUnread && !isActive ? "font-medium text-slate-700" : "text-muted-foreground",
                         )}
                       >

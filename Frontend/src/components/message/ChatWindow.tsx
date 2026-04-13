@@ -1,4 +1,5 @@
 import {
+  Bot,
   Check,
   CalendarDays,
   ChevronDown,
@@ -62,6 +63,7 @@ import { chatSocketService } from "@/services/chat/chat-socket.service"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { friendService } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
+import { UNICALL_AI_BOT_IDS } from "@/types/chat"
 import type {
   ChatAttachment,
   ChatMessageResponse,
@@ -117,6 +119,29 @@ type PendingImageUpload = {
   file: File
   previewUrl: string
 }
+
+type MentionCommand = {
+  token: "@Unicall" | "@UnicallImage"
+  description: string
+}
+
+type MentionSuggestionState = {
+  replaceStart: number
+  replaceEnd: number
+  query: string
+  highlightedIndex: number
+}
+
+const AI_MENTION_COMMANDS: MentionCommand[] = [
+  {
+    token: "@Unicall",
+    description: "Hỏi UniCall AI trả lời văn bản.",
+  },
+  {
+    token: "@UnicallImage",
+    description: "Yêu cầu UniCall AI tạo hình ảnh.",
+  },
+]
 
 function renderHighlightedSearchText(content: string, keyword: string): ReactNode {
   const normalizedKeyword = keyword.trim()
@@ -331,6 +356,7 @@ export default function ChatWindow() {
   const [callPeerProfile, setCallPeerProfile] = useState<{ displayName: string; avatar?: string } | null>(null)
 
   const [draft, setDraft] = useState("")
+  const [mentionSuggestion, setMentionSuggestion] = useState<MentionSuggestionState | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [blockStatus, setBlockStatus] = useState<ConversationBlockStatusResponse | null>(null)
   const [isLoadingBlockStatus, setIsLoadingBlockStatus] = useState(false)
@@ -1378,9 +1404,27 @@ export default function ChatWindow() {
       return
     }
 
+    const botEntries = missingIds
+      .filter((id) => UNICALL_AI_BOT_IDS.includes(id as (typeof UNICALL_AI_BOT_IDS)[number]))
+      .map((id) => [
+        id,
+        {
+          displayName: "UniCall AI",
+          avatar: undefined,
+        },
+      ] as const)
+    if (botEntries.length > 0) {
+      setSenderProfiles((prev) => ({ ...prev, ...Object.fromEntries(botEntries) }))
+    }
+
+    const userMissingIds = missingIds.filter((id) => !UNICALL_AI_BOT_IDS.includes(id as (typeof UNICALL_AI_BOT_IDS)[number]))
+    if (userMissingIds.length === 0) {
+      return
+    }
+
     let cancelled = false
     void Promise.all(
-      missingIds.map(async (identityUserId) => {
+      userMissingIds.map(async (identityUserId) => {
         try {
           const response = await userService.getProfileByIdentityUserId(identityUserId)
           const profile = response.data
@@ -1503,6 +1547,95 @@ export default function ChatWindow() {
     textarea.style.height = "auto"
     textarea.style.height = `${textarea.scrollHeight}px`
   }
+
+  const updateMentionSuggestion = useCallback((nextDraft: string, caret: number) => {
+    const safeCaret = Math.min(Math.max(caret, 0), nextDraft.length)
+    const leftText = nextDraft.slice(0, safeCaret)
+    const matched = leftText.match(/(?:^|\s)@([^\s@]*)$/)
+    if (!matched) {
+      setMentionSuggestion(null)
+      return
+    }
+
+    const rawQuery = matched[1] ?? ""
+    const atIndex = leftText.lastIndexOf("@")
+    if (atIndex < 0) {
+      setMentionSuggestion(null)
+      return
+    }
+
+    const hasCandidate = AI_MENTION_COMMANDS.some((command) =>
+      command.token.toLowerCase().slice(1).startsWith(rawQuery.toLowerCase()),
+    )
+    if (!hasCandidate) {
+      setMentionSuggestion(null)
+      return
+    }
+
+    setMentionSuggestion((prev) => ({
+      replaceStart: atIndex,
+      replaceEnd: safeCaret,
+      query: rawQuery,
+      highlightedIndex: prev ? Math.min(prev.highlightedIndex, AI_MENTION_COMMANDS.length - 1) : 0,
+    }))
+  }, [])
+
+  const handleDraftChange = (value: string, caret?: number) => {
+    setDraft(value)
+    const resolvedCaret = Math.min(
+      Math.max(caret ?? draftCaretRef.current.start, 0),
+      value.length,
+    )
+    draftCaretRef.current = { start: resolvedCaret, end: resolvedCaret }
+    updateMentionSuggestion(value, resolvedCaret)
+  }
+
+  const applyMentionCommand = useCallback((command: MentionCommand) => {
+    const suggestion = mentionSuggestion
+    if (!suggestion) {
+      return
+    }
+    const nextDraft = `${draft.slice(0, suggestion.replaceStart)}${command.token} ${draft.slice(suggestion.replaceEnd)}`
+    const caretAfter = suggestion.replaceStart + command.token.length + 1
+    setDraft(nextDraft)
+    setMentionSuggestion(null)
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    window.setTimeout(() => {
+      const textarea = textareaRef.current
+      if (!textarea) {
+        return
+      }
+      textarea.focus()
+      textarea.setSelectionRange(caretAfter, caretAfter)
+      handleInput()
+    }, 0)
+  }, [draft, mentionSuggestion])
+
+  const visibleMentionCommands = useMemo(() => {
+    if (!mentionSuggestion) {
+      return []
+    }
+    const query = mentionSuggestion.query.trim().toLowerCase()
+    if (!query) {
+      return AI_MENTION_COMMANDS
+    }
+    return AI_MENTION_COMMANDS.filter((command) => command.token.toLowerCase().slice(1).startsWith(query))
+  }, [mentionSuggestion])
+
+  useEffect(() => {
+    if (!mentionSuggestion) {
+      return
+    }
+    if (visibleMentionCommands.length === 0) {
+      setMentionSuggestion(null)
+      return
+    }
+    if (mentionSuggestion.highlightedIndex >= visibleMentionCommands.length) {
+      setMentionSuggestion((prev) => (
+        prev ? { ...prev, highlightedIndex: visibleMentionCommands.length - 1 } : prev
+      ))
+    }
+  }, [mentionSuggestion, visibleMentionCommands.length])
 
   const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
     if (allConversationImages.length > 0) {
@@ -1645,6 +1778,7 @@ export default function ChatWindow() {
       replyingTo?.idMessage,
     )
     setDraft("")
+    setMentionSuggestion(null)
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
@@ -2765,15 +2899,23 @@ export default function ChatWindow() {
                 )}
                 {displayMessages.map((msg) => {
                   const isMe = msg.idAccountSent === currentUserId
+                  const isAiMessage = UNICALL_AI_BOT_IDS.includes(msg.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number])
                   const showAvatar = !isMe
-                  const showSenderName = !isMe && selectedConversation.type === "GROUP"
+                  const showSenderName = (!isMe && selectedConversation.type === "GROUP") || isAiMessage
                   const senderInfo = senderProfiles[msg.idAccountSent]
+                  const aiDisplayName = "UniCall AI"
                   const senderName =
-                    selectedConversation.type === "GROUP"
+                    isAiMessage
+                      ? aiDisplayName
+                      : selectedConversation.type === "GROUP"
                       ? senderInfo?.displayName ?? msg.idAccountSent
-                      : headerTitle
+                      : !isMe
+                        ? senderInfo?.displayName ?? headerTitle
+                        : headerTitle
                   const senderAvatar =
-                    selectedConversation.type === "GROUP"
+                    isAiMessage
+                      ? undefined
+                      : selectedConversation.type === "GROUP"
                       ? senderInfo?.avatar
                       : headerAvatar
                   const firstAttachment = msg.attachments?.[0]
@@ -2823,7 +2965,9 @@ export default function ChatWindow() {
                       {showAvatar && (
                         <Avatar size="sm" className={cn("shrink-0", showSenderName ? "mt-5 self-start" : "mb-1 self-end")}>
                           <AvatarImage src={senderAvatar} alt={senderName} />
-                          <AvatarFallback>{senderName.slice(0, 2)}</AvatarFallback>
+                          <AvatarFallback className={cn(isAiMessage && "bg-cyan-100 text-cyan-700")}>
+                            {isAiMessage ? <Bot className="size-3.5" /> : senderName.slice(0, 2)}
+                          </AvatarFallback>
                         </Avatar>
                       )}
                         <div
@@ -2860,7 +3004,12 @@ export default function ChatWindow() {
                             )}
                           >
                             {showSenderName ? (
-                              <p className="mb-1 px-1 text-xs font-medium text-slate-600">{senderName}</p>
+                              <p className={cn("mb-1 px-1 text-xs font-medium", isAiMessage ? "text-cyan-700" : "text-slate-600")}>
+                                <span className="inline-flex items-center gap-1">
+                                  {isAiMessage ? <Bot className="size-3.5" /> : null}
+                                  {senderName}
+                                </span>
+                              </p>
                             ) : null}
                             {msg.replyToMessageId && !msg.recalled ? (
                               <div
@@ -2899,7 +3048,9 @@ export default function ChatWindow() {
                               <div
                                 className={cn(
                                   "rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap break-all",
-                                  isMe
+                                  isAiMessage
+                                    ? "rounded-bl-sm border border-cyan-200 bg-cyan-50 text-slate-800"
+                                    : isMe
                                     ? "rounded-br-sm bg-primary/10 text-foreground"
                                     : "rounded-bl-sm border bg-background text-foreground shadow-xs",
                                 )}
@@ -3454,22 +3605,105 @@ export default function ChatWindow() {
             </div>
 
             <div className="flex items-end gap-2">
-              <div className="flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
+              <div className="relative flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
+                {mentionSuggestion && visibleMentionCommands.length > 0 ? (
+                  <div className="absolute bottom-full left-0 z-20 mb-2 w-[320px] max-w-[90vw] overflow-hidden rounded-xl border bg-popover shadow-lg">
+                    <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
+                      Gợi ý lệnh AI
+                    </div>
+                    <div className="p-1">
+                      {visibleMentionCommands.map((command, index) => (
+                        <button
+                          key={command.token}
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted/70",
+                            mentionSuggestion.highlightedIndex === index && "bg-muted",
+                          )}
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                          }}
+                          onClick={() => applyMentionCommand(command)}
+                        >
+                          <Bot className="h-4 w-4 text-blue-600" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground">{command.token}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{command.description}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <Textarea
                   ref={textareaRef}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(event) => {
+                    handleDraftChange(event.target.value, event.target.selectionStart)
+                  }}
                   onSelect={syncDraftCaret}
                   onClick={syncDraftCaret}
                   onKeyUp={syncDraftCaret}
-                  onBlur={syncDraftCaret}
+                  onBlur={() => {
+                    syncDraftCaret()
+                    window.setTimeout(() => {
+                      setMentionSuggestion(null)
+                    }, 100)
+                  }}
                   onInput={handleInput}
                   onPaste={(event) => {
                     void handlePaste(event)
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
+                  onKeyDown={(event) => {
+                    if (mentionSuggestion && visibleMentionCommands.length > 0) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault()
+                        setMentionSuggestion((prev) => {
+                          if (!prev) {
+                            return prev
+                          }
+                          return {
+                            ...prev,
+                            highlightedIndex: (prev.highlightedIndex + 1) % visibleMentionCommands.length,
+                          }
+                        })
+                        return
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault()
+                        setMentionSuggestion((prev) => {
+                          if (!prev) {
+                            return prev
+                          }
+                          return {
+                            ...prev,
+                            highlightedIndex:
+                              (prev.highlightedIndex - 1 + visibleMentionCommands.length)
+                              % visibleMentionCommands.length,
+                          }
+                        })
+                        return
+                      }
+                      if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+                        event.preventDefault()
+                        const selectedCommand =
+                          visibleMentionCommands[
+                          Math.min(mentionSuggestion.highlightedIndex, visibleMentionCommands.length - 1)
+                          ]
+                        if (selectedCommand) {
+                          applyMentionCommand(selectedCommand)
+                        }
+                        return
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        setMentionSuggestion(null)
+                        return
+                      }
+                    }
+
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault()
                       void sendText()
                     }
                   }}
