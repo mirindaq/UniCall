@@ -1,13 +1,17 @@
 import type { MockAvatar } from './chat-conversations';
+import type { ChatAttachment, MessageType } from '@/types/chat';
 
 export type MockMessageSender = 'me' | 'other';
-export type MockMessageKind = 'text' | 'sticker';
+export type MockMessageKind = 'text' | 'sticker' | 'attachment';
 
 export interface MockChatMessage {
   id: string;
   sender: MockMessageSender;
   kind: MockMessageKind;
   content: string;
+  rawType?: MessageType;
+  attachments?: ChatAttachment[];
+  recalled?: boolean;
   senderName?: string;
   timeLabel?: string;
   showAvatar?: boolean;

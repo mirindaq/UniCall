@@ -7,8 +7,6 @@ import { authTokenStore } from "@/configurations/axios.config";
 
 const PAGE_DOTS = 5;
 const ACTIVE_DOT_INDEX = 4;
-global.TextEncoder = TextEncoder;
-global.TextDecoder = TextDecoder;
 
 export default function HomeScreen() {
   const router = useRouter();
