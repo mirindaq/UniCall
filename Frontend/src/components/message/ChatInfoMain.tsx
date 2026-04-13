@@ -7,26 +7,33 @@ import {
   EyeOff,
   HelpCircle,
   Link as LinkIcon,
+  Lock,
   Pin,
   Trash2,
   Users,
+  Eye,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { toast } from "sonner"
 import {
   messageInfoPreviewFiles,
   messageInfoPreviewLinks,
 } from "@/mock/message-data"
+import { relationshipService } from "@/services/relationship/relationship.service"
+import { userService } from "@/services/user/user.service"
 
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
   title: string
   avatarSrc?: string
   avatarFallback: string
+  peerId?: string
+  onBlockStatusChange?: (isBlocked: boolean) => void
 }
 
 interface SectionProps {
@@ -55,9 +62,8 @@ function CollapsibleSection({
       >
         <h4 className="text-sm font-medium text-foreground">{title}</h4>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""
+            }`}
         />
       </button>
 
@@ -71,13 +77,32 @@ export default function ChatInfoMain({
   title,
   avatarSrc,
   avatarFallback,
+  peerId,
+  onBlockStatusChange,
 }: ChatInfoMainProps) {
   const [openSections, setOpenSections] = useState({
     images: true,
     files: true,
     links: true,
     security: true,
+    management: false,
   })
+  const [relationshipTypes, setRelationshipTypes] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  // Load current user ID on mount
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const res = await userService.getMyProfile()
+        setCurrentUserId(res.data.identityUserId)
+      } catch (error) {
+        console.error("Error loading current user:", error)
+      }
+    }
+    void loadCurrentUser()
+  }, [])
 
   const toggleSection = (key: keyof typeof openSections) => {
     setOpenSections((prev) => ({
@@ -85,6 +110,65 @@ export default function ChatInfoMain({
       [key]: !prev[key],
     }))
   }
+
+  const updateRelationship = useCallback(
+    async (newTypes: string[]) => {
+      if (!currentUserId || !peerId) {
+        toast.error("Không thể cập nhật")
+        return
+      }
+
+      setIsLoading(true)
+      try {
+        let res = await relationshipService.updateRelationship({
+          actorId: currentUserId,
+          targetId: peerId,
+          relationshipType: newTypes,
+        })
+        console.log('res update: ', res);
+
+        setRelationshipTypes(newTypes)
+
+        // Check if blocked
+        const isBlocked = newTypes.includes("BLOCK_ALL") || newTypes.includes("BLOCK_MESSAGE")
+        onBlockStatusChange?.(isBlocked)
+      } catch (error) {
+        console.error("Error updating relationship:", error)
+        toast.error("Lỗi cập nhật")
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [currentUserId, peerId, onBlockStatusChange],
+  )
+
+  const handleTogglePin = useCallback(() => {
+    const newTypes = relationshipTypes.includes("PIN")
+      ? relationshipTypes.filter((t) => t !== "PIN")
+      : [...relationshipTypes, "PIN"]
+    void updateRelationship(newTypes)
+    const pinned = newTypes.includes("PIN")
+    toast.success(pinned ? "Đã ghim cuộc trò chuyện" : "Bỏ ghim cuộc trò chuyện")
+  }, [relationshipTypes, updateRelationship])
+
+  const handleToggleHide = useCallback(() => {
+    const newTypes = relationshipTypes.includes("HIDE")
+      ? relationshipTypes.filter((t) => t !== "HIDE")
+      : [...relationshipTypes, "HIDE"]
+    void updateRelationship(newTypes)
+    const hidden = newTypes.includes("HIDE")
+    toast.success(hidden ? "Đã ẩn cuộc trò chuyện" : "Bỏ ẩn cuộc trò chuyện")
+  }, [relationshipTypes, updateRelationship])
+
+  const handleToggleBlock = useCallback(() => {
+    const isCurrentlyBlocked = relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
+    const newTypes = isCurrentlyBlocked
+      ? relationshipTypes.filter((t) => t !== "BLOCK_ALL" && t !== "BLOCK_MESSAGE")
+      : [...relationshipTypes, "BLOCK_ALL"]
+    void updateRelationship(newTypes)
+    const blocked = newTypes.includes("BLOCK_ALL") || newTypes.includes("BLOCK_MESSAGE")
+    toast.success(blocked ? "Đã chặn người này" : "Đã bỏ chặn người này")
+  }, [relationshipTypes, updateRelationship])
 
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
@@ -260,6 +344,64 @@ export default function ChatInfoMain({
               >
                 Xem tất cả
               </Button>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Quản lý cuộc trò chuyện"
+              open={openSections.management}
+              onToggle={() => toggleSection("management")}
+            >
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleTogglePin}
+                  disabled={isLoading}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
+                >
+                  <Pin className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 text-sm text-foreground">
+                    {relationshipTypes.includes("PIN") ? "Bỏ ghim" : "Ghim cuộc trò chuyện"}
+                  </span>
+                  {relationshipTypes.includes("PIN") && (
+                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleHide}
+                  disabled={isLoading}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
+                >
+                  <Eye className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 text-sm text-foreground">
+                    {relationshipTypes.includes("HIDE") ? "Bỏ ẩn" : "Ẩn cuộc trò chuyện"}
+                  </span>
+                  {relationshipTypes.includes("HIDE") && (
+                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleBlock}
+                  disabled={isLoading}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Lock className="h-5 w-5 shrink-0 text-red-500" />
+                  <span className={`flex-1 text-sm ${relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
+                    ? "text-red-600 font-medium"
+                    : "text-foreground"
+                    }`}>
+                    {relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
+                      ? "Bỏ chặn"
+                      : "Chặn người này"}
+                  </span>
+                  {(relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")) && (
+                    <div className="h-2 w-2 rounded-full bg-red-500" />
+                  )}
+                </button>
+              </div>
             </CollapsibleSection>
 
             <CollapsibleSection

@@ -12,10 +12,15 @@ export default function ChatDetails() {
 
   const [currentView, setCurrentView] = useState<"main" | "storage">("main")
   const [activeStorageTab, setActiveStorageTab] = useState<"images" | "files" | "links">("images")
+  const [isBlocked, setIsBlocked] = useState(false)
 
   const handleOpenStorage = (tab: "images" | "files" | "links") => {
     setActiveStorageTab(tab)
     setCurrentView("storage")
+  }
+
+  const handleBlockStatusChange = (blocked: boolean) => {
+    setIsBlocked(blocked)
   }
 
   if (currentView === "storage") {
@@ -49,6 +54,8 @@ export default function ChatDetails() {
       title={title}
       avatarSrc={avatarSrc}
       avatarFallback={fallback}
+      peerId={selectedPeerProfile?.identityUserId}
+      onBlockStatusChange={handleBlockStatusChange}
     />
   )
 }
