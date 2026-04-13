@@ -102,7 +102,7 @@ export function SearchUserAccountDialog({
     if (!profile) {
       return selectedUser?.fullName ?? ""
     }
-    return `${profile.firstName} ${profile.lastName}`.trim()
+    return `${profile.lastName} ${profile.firstName}`.trim()
   }, [profile, selectedUser?.fullName])
 
   const memoizedRelationshipStatus = useMemo(
@@ -202,7 +202,7 @@ export function SearchUserAccountDialog({
         throw new Error("Friend request ID not found")
       }
       return friendRequestService.updateFriendRequestStatus(friendRequestId, {
-        status: "CANCELLED",
+        status: "CANCELED",
       })
     },
     {

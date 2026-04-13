@@ -1,5 +1,6 @@
 ﻿import {
   AlertTriangle,
+  Ban,
   BellOff,
   ChevronDown,
   Clock,
@@ -34,6 +35,8 @@ import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { useChatPage } from "@/contexts/ChatPageContext"
+import { useMutation } from "@/hooks/useMutation"
+import { useQuery } from "@/hooks/useQuery"
 import { chatService } from "@/services/chat/chat.service"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { formatChatSidebarTime } from "@/utils/chat-display.util"
@@ -71,6 +74,7 @@ type LinkPreviewItem = {
 const PREVIEW_LIMIT = 3
 const LINK_PAGE_LIMIT = 100
 const LINK_MAX_PAGES = 8
+const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
 
 function CollapsibleSection({
   title,
@@ -142,6 +146,51 @@ export default function ChatInfoMain({
       selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId) ?? null
     )
   }, [currentUserId, selectedConversation])
+
+  const canManageBlockMessaging = Boolean(selectedConversationId) && selectedConversation?.type === "DOUBLE"
+  const {
+    data: blockStatusResponse,
+    isLoading: isLoadingBlockStatus,
+    refetch: refetchBlockStatus,
+  } = useQuery(
+    () => chatService.getConversationBlockStatus(selectedConversationId as string),
+    {
+      enabled: canManageBlockMessaging,
+      deps: [selectedConversationId, selectedConversation?.type],
+      onError: () => {
+        toast.error("Không thể tải trạng thái chặn nhắn tin.")
+      },
+    },
+  )
+  const blockStatus = blockStatusResponse?.data ?? null
+
+  const { mutate: mutateBlockMessaging, isLoading: isTogglingBlock } = useMutation(
+    () => {
+      if (!selectedConversationId) {
+        throw new Error("Missing conversation id")
+      }
+      return blockStatus?.blockedByMe
+        ? chatService.unblockConversation(selectedConversationId)
+        : chatService.blockConversation(selectedConversationId)
+    },
+    {
+      onSuccess: () => {
+        void refetchBlockStatus()
+        if (selectedConversationId) {
+          window.dispatchEvent(
+            new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
+              detail: { conversationId: selectedConversationId },
+            }),
+          )
+        }
+        toast.success(blockStatus?.blockedByMe ? "Đã bỏ chặn nhắn tin." : "Đã chặn nhắn tin.")
+      },
+      onError: (error: unknown) => {
+        const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        toast.error(backendMessage || "Cập nhật trạng thái chặn thất bại.")
+      },
+    },
+  )
 
   useEffect(() => {
     if (!isNicknameDialogOpen) {
@@ -340,6 +389,13 @@ export default function ChatInfoMain({
     } finally {
       setIsPinningConversation(false)
     }
+  }
+
+  const handleToggleBlockMessaging = () => {
+    if (!canManageBlockMessaging || isTogglingBlock) {
+      return
+    }
+    void mutateBlockMessaging(null)
   }
 
   return (
@@ -592,6 +648,35 @@ export default function ChatInfoMain({
                   </div>
                   <Switch />
                 </div>
+
+                {selectedConversation?.type === "DOUBLE" ? (
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Ban className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="text-sm text-foreground">
+                          {blockStatus?.blockedByMe ? "Đã chặn nhắn tin" : "Chặn nhắn tin"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {blockStatus?.blockedByMe
+                            ? "Bạn đã chặn người này trong hội thoại 1-1."
+                            : blockStatus?.blockedByOther
+                              ? "Bạn đang bị người này chặn nhắn tin."
+                              : "Chặn người này nhắn tin cho bạn trong hội thoại này."}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={blockStatus?.blockedByMe ? "outline" : "destructive"}
+                      size="sm"
+                      disabled={isLoadingBlockStatus || isTogglingBlock}
+                      onClick={() => void handleToggleBlockMessaging()}
+                    >
+                      {isTogglingBlock ? "Đang xử lý..." : blockStatus?.blockedByMe ? "Bỏ chặn" : "Chặn"}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </CollapsibleSection>
           </div>

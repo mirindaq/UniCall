@@ -6,11 +6,13 @@ import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
+import iuh.fit.chat_service.dtos.response.ConversationBlockStatusResponse;
 import iuh.fit.chat_service.dtos.response.FileUploadResponse;
 import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
+import iuh.fit.chat_service.services.ConversationBlockService;
 import iuh.fit.chat_service.services.FileUploadService;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
@@ -44,6 +46,7 @@ public class ChatController {
     private final ChatConversationService chatConversationService;
     private final ChatMessageService chatMessageService;
     private final FileUploadService fileUploadService;
+    private final ConversationBlockService conversationBlockService;
 
     @GetMapping("/conversations")
     public ResponseEntity<ResponseSuccess<List<ConversationResponse>>> listConversations(
@@ -101,6 +104,42 @@ public class ChatController {
         ConversationResponse data = chatConversationService.unpinConversation(identityUserId, conversationId);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Bỏ ghim hội thoại thành công", data)
+        );
+    }
+
+    @GetMapping("/conversations/{conversationId}/block-status")
+    public ResponseEntity<ResponseSuccess<ConversationBlockStatusResponse>> getConversationBlockStatus(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        ConversationBlockStatusResponse data = conversationBlockService.getBlockStatus(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Lấy trạng thái chặn tin nhắn thành công", data)
+        );
+    }
+
+    @PostMapping("/conversations/{conversationId}/block")
+    public ResponseEntity<ResponseSuccess<ConversationBlockStatusResponse>> blockConversation(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        ConversationBlockStatusResponse data = conversationBlockService.blockConversation(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Đã chặn nhắn tin thành công", data)
+        );
+    }
+
+    @DeleteMapping("/conversations/{conversationId}/block")
+    public ResponseEntity<ResponseSuccess<ConversationBlockStatusResponse>> unblockConversation(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        ConversationBlockStatusResponse data = conversationBlockService.unblockConversation(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Đã bỏ chặn nhắn tin thành công", data)
         );
     }
 

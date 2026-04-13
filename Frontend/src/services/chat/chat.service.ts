@@ -5,6 +5,7 @@ import type {
   AddGroupMembersRequest,
   ChatAttachment,
   ChatMessageResponse,
+  ConversationBlockStatusResponse,
   ConversationResponse,
   CreateGroupConversationRequest,
   CreateGroupConversationResponse,
@@ -113,6 +114,24 @@ export const chatService = {
   unpinConversation: async (conversationId: string) => {
     const { data } = await axiosClient.delete<ResponseSuccess<ConversationResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/pin`,
+    )
+    return data
+  },
+  getConversationBlockStatus: async (conversationId: string) => {
+    const { data } = await axiosClient.get<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block-status`,
+    )
+    return data
+  },
+  blockConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block`,
+    )
+    return data
+  },
+  unblockConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block`,
     )
     return data
   },

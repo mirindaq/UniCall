@@ -20,6 +20,7 @@ import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
+import iuh.fit.chat_service.services.ConversationBlockService;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
@@ -80,6 +81,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final ChatConversationService chatConversationService;
+    private final ConversationBlockService conversationBlockService;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Override
@@ -194,6 +196,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             List<MessageAttachmentRequest> attachmentRequests,
             String replyToMessageId
     ) {
+        conversationBlockService.assertCanSendMessage(identityUserId, conversationId);
+
         String normalizedContent = content == null ? "" : content.trim();
         List<Attachment> attachments = toAttachments(attachmentRequests);
         if (normalizedContent.isBlank() && attachments.isEmpty()) {

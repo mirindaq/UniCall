@@ -105,6 +105,15 @@ export interface ConversationResponse {
   participantInfos: ChatParticipantInfo[]
 }
 
+export interface ConversationBlockStatusResponse {
+  conversationId: string
+  directPeerId?: string
+  blocked: boolean
+  blockedByMe: boolean
+  blockedByOther: boolean
+  blockedAt?: string
+}
+
 export type CreateGroupConversationRequest = {
   name: string
   memberIdentityUserIds: string[]

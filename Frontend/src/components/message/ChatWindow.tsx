@@ -62,7 +62,13 @@ import { chatSocketService } from "@/services/chat/chat-socket.service"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { friendService } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
-import type { ChatAttachment, ChatMessageResponse, ConversationResponse, UserRealtimeEvent } from "@/types/chat"
+import type {
+  ChatAttachment,
+  ChatMessageResponse,
+  ConversationBlockStatusResponse,
+  ConversationResponse,
+  UserRealtimeEvent,
+} from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime, formatChatSidebarTime } from "@/utils/chat-display.util"
 import {
   extractFileNameFromFileMessage,
@@ -92,6 +98,7 @@ const SEARCH_PAGE_SIZE = 12
 const SEARCH_DEBOUNCE_MS = 500
 const SEARCH_FILES_PREVIEW_LIMIT = 8
 const MESSAGE_REACTIONS = ["👍", "❤️", "😆", "😮", "😭", "😡"] as const
+const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
 
 type ForwardTab = "recent" | "groups" | "friends"
 
@@ -325,6 +332,9 @@ export default function ChatWindow() {
 
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [blockStatus, setBlockStatus] = useState<ConversationBlockStatusResponse | null>(null)
+  const [isLoadingBlockStatus, setIsLoadingBlockStatus] = useState(false)
+  const [isTogglingBlockFromComposer, setIsTogglingBlockFromComposer] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [stickerOpen, setStickerOpen] = useState(false)
@@ -364,6 +374,28 @@ export default function ChatWindow() {
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [pendingImageUploads, setPendingImageUploads] = useState<PendingImageUpload[]>([])
   const [allConversationImages, setAllConversationImages] = useState<ImageViewerItem[]>([])
+  const isDirectConversation = selectedConversation?.type === "DOUBLE"
+  const isMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked)
+  const blockedReasonText = blockStatus?.blockedByMe
+    ? "Bạn đã chặn người này. Hãy bỏ chặn để tiếp tục nhắn tin."
+    : "Hiện không thể nhắn tin vì người này đã chặn bạn."
+
+  const refreshBlockStatus = useCallback(async () => {
+    if (!selectedConversationId || selectedConversation?.type !== "DOUBLE") {
+      setBlockStatus(null)
+      setIsLoadingBlockStatus(false)
+      return
+    }
+    setIsLoadingBlockStatus(true)
+    try {
+      const response = await chatService.getConversationBlockStatus(selectedConversationId)
+      setBlockStatus(response.data)
+    } catch {
+      setBlockStatus(null)
+    } finally {
+      setIsLoadingBlockStatus(false)
+    }
+  }, [selectedConversation?.type, selectedConversationId])
 
   useEffect(() => {
     pendingImageUploadsRef.current = pendingImageUploads
@@ -384,6 +416,26 @@ export default function ChatWindow() {
       return []
     })
   }, [selectedConversationId])
+
+  useEffect(() => {
+    void refreshBlockStatus()
+  }, [refreshBlockStatus])
+
+  useEffect(() => {
+    const handleBlockStatusChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ conversationId?: string }>
+      const changedConversationId = customEvent.detail?.conversationId
+      if (!changedConversationId || changedConversationId !== selectedConversationId) {
+        return
+      }
+      void refreshBlockStatus()
+    }
+
+    window.addEventListener(CHAT_BLOCK_STATUS_CHANGED_EVENT, handleBlockStatusChanged)
+    return () => {
+      window.removeEventListener(CHAT_BLOCK_STATUS_CHANGED_EVENT, handleBlockStatusChanged)
+    }
+  }, [refreshBlockStatus, selectedConversationId])
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -1482,6 +1534,28 @@ export default function ChatWindow() {
     openImagePreview(conversationImageItems, targetIndex >= 0 ? targetIndex : 0)
   }, [conversationImageItems, openImagePreview])
 
+  const handleUnblockFromComposer = async () => {
+    if (!selectedConversationId || !blockStatus?.blockedByMe || isTogglingBlockFromComposer) {
+      return
+    }
+    setIsTogglingBlockFromComposer(true)
+    try {
+      const response = await chatService.unblockConversation(selectedConversationId)
+      setBlockStatus(response.data)
+      window.dispatchEvent(
+        new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
+          detail: { conversationId: selectedConversationId },
+        }),
+      )
+      toast.success("Đã bỏ chặn nhắn tin.")
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Bỏ chặn nhắn tin thất bại.")
+    } finally {
+      setIsTogglingBlockFromComposer(false)
+    }
+  }
+
   const sendMessage = async (
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
@@ -1490,7 +1564,10 @@ export default function ChatWindow() {
   ) => {
     const normalized = content.trim()
     const hasAttachments = (attachments?.length ?? 0) > 0
-    if ((!normalized && !hasAttachments) || !selectedConversationId || !currentUserId) {
+    if ((!normalized && !hasAttachments) || !selectedConversationId || !currentUserId || isMessageBlocked) {
+      if (isMessageBlocked) {
+        toast.error(blockedReasonText)
+      }
       return
     }
 
@@ -1525,8 +1602,12 @@ export default function ChatWindow() {
       if (replyToMessageId) {
         setReplyingTo(null)
       }
-    } catch {
-      toast.error("Gửi tin nhắn thất bại")
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      if (backendMessage && /chặn/i.test(backendMessage)) {
+        void refreshBlockStatus()
+      }
+      toast.error(backendMessage || "Gửi tin nhắn thất bại")
     } finally {
       setIsSending(false)
     }
@@ -3289,138 +3370,158 @@ export default function ChatWindow() {
             </div>
           </div>
         ) : null}
-        <div className="mb-2 flex gap-1">
-          <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-sm" title="Gửi sticker" type="button">
-                <Sticker className="h-5 w-5" />
+        {isMessageBlocked ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p>{isLoadingBlockStatus ? "Đang kiểm tra quyền nhắn tin..." : blockedReasonText}</p>
+            {blockStatus?.blockedByMe ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                disabled={isTogglingBlockFromComposer}
+                onClick={() => void handleUnblockFromComposer()}
+              >
+                {isTogglingBlockFromComposer ? "Đang xử lý..." : "Bỏ chặn để nhắn tin"}
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-3" align="start">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn sticker</div>
-              <div className="grid grid-cols-3 gap-2">
-                {STICKERS.map((stickerUrl) => (
-                  <button
-                    key={stickerUrl}
-                    type="button"
-                    className="rounded-md bg-amber-50 p-1 hover:bg-amber-100"
-                    onClick={() => void sendSticker(stickerUrl)}
-                  >
-                    <img src={stickerUrl} alt="sticker" className="mx-auto h-12 w-12 object-contain" />
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Popover open={gifOpen} onOpenChange={setGifOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-sm" title="Gửi GIF" type="button">
-                <ImageIcon className="h-5 w-5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-3" align="start">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn GIF</div>
-              <div className="grid grid-cols-2 gap-2">
-                {GIFS.map((gifUrl) => (
-                  <button
-                    key={gifUrl}
-                    type="button"
-                    className="overflow-hidden rounded-md border hover:opacity-90"
-                    onClick={() => void sendGif(gifUrl)}
-                  >
-                    <img src={gifUrl} alt="gif" className="h-20 w-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleFileSelect}
-            multiple
-            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
-          />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Đính kèm tệp"
-            type="button"
-            disabled={isUploadingFile}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip className={cn("h-5 w-5", isUploadingFile && "animate-spin")} />
-          </Button>
-        </div>
-
-        <div className="flex items-end gap-2">
-          <div className="flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
-            <Textarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onSelect={syncDraftCaret}
-              onClick={syncDraftCaret}
-              onKeyUp={syncDraftCaret}
-              onBlur={syncDraftCaret}
-              onInput={handleInput}
-              onPaste={(event) => {
-                void handlePaste(event)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault()
-                  void sendText()
-                }
-              }}
-              placeholder={`Nhập tin nhắn tới ${headerTitle}`}
-              rows={1}
-              disabled={isSending}
-              className="custom-scrollbar max-h-32 min-h-[38px] w-full min-w-0 resize-none overflow-x-hidden border-0 bg-transparent shadow-none whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus-visible:ring-0"
-            />
-            <Separator orientation="vertical" className="h-5 self-center" />
-            <Popover open={emojiOpen} onOpenChange={handleEmojiOpenChange}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="mb-1 ml-1"
-                  title="Biểu cảm"
-                  type="button"
-                >
-                  <Smile className="h-5 w-5" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-3" align="end">
-                <div className="mb-2 text-xs font-medium text-muted-foreground">Biểu cảm</div>
-                <div className="grid grid-cols-6 gap-2">
-                  {EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      className="rounded-md py-1 text-2xl hover:bg-muted"
-                      onClick={() => insertEmojiIntoDraft(emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+            ) : null}
           </div>
+        ) : (
+          <>
+            <div className="mb-2 flex gap-1">
+              <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" title="Gửi sticker" type="button">
+                    <Sticker className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn sticker</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {STICKERS.map((stickerUrl) => (
+                      <button
+                        key={stickerUrl}
+                        type="button"
+                        className="rounded-md bg-amber-50 p-1 hover:bg-amber-100"
+                        onClick={() => void sendSticker(stickerUrl)}
+                      >
+                        <img src={stickerUrl} alt="sticker" className="mx-auto h-12 w-12 object-contain" />
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Popover open={gifOpen} onOpenChange={setGifOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" title="Gửi GIF" type="button">
+                    <ImageIcon className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-3" align="start">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Chọn GIF</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {GIFS.map((gifUrl) => (
+                      <button
+                        key={gifUrl}
+                        type="button"
+                        className="overflow-hidden rounded-md border hover:opacity-90"
+                        onClick={() => void sendGif(gifUrl)}
+                      >
+                        <img src={gifUrl} alt="gif" className="h-20 w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileSelect}
+                multiple
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+              />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Đính kèm tệp"
+                type="button"
+                disabled={isUploadingFile}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className={cn("h-5 w-5", isUploadingFile && "animate-spin")} />
+              </Button>
+            </div>
 
-          <Button
-            size="icon"
-            className="rounded-full bg-blue-600"
-            title="Gửi"
-            type="button"
-            disabled={isSending || (!draft.trim() && pendingImageUploads.length === 0)}
-            onClick={() => void sendText()}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+            <div className="flex items-end gap-2">
+              <div className="flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
+                <Textarea
+                  ref={textareaRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onSelect={syncDraftCaret}
+                  onClick={syncDraftCaret}
+                  onKeyUp={syncDraftCaret}
+                  onBlur={syncDraftCaret}
+                  onInput={handleInput}
+                  onPaste={(event) => {
+                    void handlePaste(event)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      void sendText()
+                    }
+                  }}
+                  placeholder={`Nhập tin nhắn tới ${headerTitle}`}
+                  rows={1}
+                  disabled={isSending}
+                  className="custom-scrollbar max-h-32 min-h-[38px] w-full min-w-0 resize-none overflow-x-hidden border-0 bg-transparent shadow-none whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus-visible:ring-0"
+                />
+                <Separator orientation="vertical" className="h-5 self-center" />
+                <Popover open={emojiOpen} onOpenChange={handleEmojiOpenChange}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="mb-1 ml-1"
+                      title="Biểu cảm"
+                      type="button"
+                    >
+                      <Smile className="h-5 w-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="end">
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">Biểu cảm</div>
+                    <div className="grid grid-cols-6 gap-2">
+                      {EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          className="rounded-md py-1 text-2xl hover:bg-muted"
+                          onClick={() => insertEmojiIntoDraft(emoji)}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <Button
+                size="icon"
+                className="rounded-full bg-blue-600"
+                title="Gửi"
+                type="button"
+                disabled={isSending || (!draft.trim() && pendingImageUploads.length === 0)}
+                onClick={() => void sendText()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       <Dialog
