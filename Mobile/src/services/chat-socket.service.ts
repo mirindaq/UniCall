@@ -1,5 +1,5 @@
 import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs';
-import { Platform } from 'react-native';
+import SockJS from 'sockjs-client';
 
 import axiosClient, { authTokenStore } from '@/configurations/axios.config';
 import { API_WS_PREFIXES } from '@/constants/api-prefixes';
@@ -29,18 +29,21 @@ type MobileWebSocketCtor = new (
 const buildChatStompBrokerUrl = () => {
   const baseUrl = ((axiosClient.defaults.baseURL as string) || '').replace(/\/+$/, '');
   if (!baseUrl) {
-    return API_WS_PREFIXES.chat;
+    return 'http://localhost:8083/ws';
   }
 
   try {
     const parsed = new URL(baseUrl);
-    const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProtocol}//${parsed.host}${API_WS_PREFIXES.chat}`;
+    // Mobile connect trực tiếp tới chat-service port 8083 (SockJS)
+    return `${parsed.protocol}//${parsed.hostname}:8083/ws`;
   } catch {
-    const wsBase = baseUrl
-      .replace(/^https?:\/\//i, (scheme) => (scheme.toLowerCase() === 'https://' ? 'wss://' : 'ws://'))
-      .replace(/\/api-gateway$/i, '');
-    return `${wsBase}${API_WS_PREFIXES.chat}`;
+    // Fallback: extract host from baseUrl string
+    const hostMatch = baseUrl.match(/https?:\/\/([^:\/]+)/);
+    if (hostMatch) {
+      const protocol = baseUrl.startsWith('https') ? 'https:' : 'http:';
+      return `${protocol}//${hostMatch[1]}:8083/ws`;
+    }
+    return 'http://localhost:8083/ws';
   }
 };
 
@@ -106,29 +109,25 @@ export const chatSocketService = {
       return sharedClient;
     }
 
-    const brokerURL = buildChatStompBrokerUrl();
-    let socketHeaders: Record<string, string> = {};
+    const baseURL = buildChatStompBrokerUrl();
+    const accessToken = await authTokenStore.get();
+    const brokerURL = accessToken ? `${baseURL}?access_token=${accessToken}` : baseURL;
+    console.log('[UniCall Mobile] Connecting to SockJS URL (with token):', baseURL + '?access_token=***');
 
     const client = new Client({
-      // RN: always refresh token before each connect/reconnect attempt.
-      beforeConnect: async () => {
-        socketHeaders = await buildSocketAuthHeaders();
-        client.connectHeaders = socketHeaders;
-      },
+      // SockJS WebSocket factory - tương thích tốt với React Native
       webSocketFactory: () => {
-        if (Platform.OS === 'web') {
-          return new WebSocket(brokerURL);
-        }
-        const NativeWebSocket = WebSocket as unknown as MobileWebSocketCtor;
-        return new NativeWebSocket(brokerURL, [], {
-          headers: socketHeaders,
-        });
+        console.log('[UniCall Mobile] Creating SockJS connection');
+        return new SockJS(brokerURL) as any;
       },
-      // Best practice for React Native WebSocket with STOMP.
-      appendMissingNULLonIncoming: true,
+      // Token đã gửi qua query param, không cần trong STOMP headers
+      connectHeaders: {},
       reconnectDelay: 5000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
+      debug: (str) => {
+        console.log('[UniCall STOMP Debug]', str);
+      },
       onConnect: () => {
         console.log('[mobile chat ws] connected');
         onConnected?.();
@@ -187,12 +186,23 @@ export const chatSocketService = {
     handler: (message: ChatMessageResponse) => void
   ): StompSubscription | undefined {
     const client = sharedClient;
+    console.log('[UniCall Mobile] subscribeConversation called:', {
+      conversationId,
+      clientActive: client?.active,
+      clientConnected: client?.connected,
+    });
     if (!client?.connected) {
+      console.warn('[UniCall Mobile] Cannot subscribe - client not connected');
       return undefined;
     }
-    return client.subscribe(`/topic/conversations.${conversationId}.messages`, (m) => {
+    const destination = `/topic/conversations.${conversationId}.messages`;
+    console.log('[UniCall Mobile] Subscribing to:', destination);
+    const subscription = client.subscribe(destination, (m) => {
+      console.log('[UniCall Mobile] Received message from conversation:', conversationId);
       handler(parseMessage(m));
     });
+    console.log('[UniCall Mobile] Subscription created:', subscription?.id);
+    return subscription;
   },
 
   sendMessage(

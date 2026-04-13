@@ -49,6 +49,8 @@ const waitForSocketConnected = async (timeoutMs = 5000) => {
   return false;
 };
 
+const MESSAGE_PAGE_SIZE = 20;
+
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
@@ -57,6 +59,11 @@ export default function ConversationDetailScreen() {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null);
   const [headerTitle, setHeaderTitle] = useState('Cuộc trò chuyện');
   const [myIdentityId, setMyIdentityId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
 
   const peerInfo = useMemo(() => {
     const participants = conversation?.participantInfos ?? [];
@@ -79,16 +86,20 @@ export default function ConversationDetailScreen() {
     let mounted = true;
     void (async () => {
       try {
+        setIsInitialLoading(true);
         const [messagesResponse, myProfileResponse, conversationsResponse] = await Promise.all([
-          chatService.listMessages(conversationId, 1, 100),
+          chatService.listMessages(conversationId, 1, MESSAGE_PAGE_SIZE),
           userService.getMyProfile(),
           chatService.listConversations(),
         ]);
         if (!mounted) {
           return;
         }
-        setMessages([...(messagesResponse.data.items ?? [])].reverse().map(toUiMessage));
+        setMessages((messagesResponse.data.items ?? []).map(toUiMessage));
+        setPage(1);
+        setHasMore((messagesResponse.data.page ?? 1) < (messagesResponse.data.totalPage ?? 1));
         setMyIdentityId(myProfileResponse.data.identityUserId ?? null);
+        setShouldScrollToBottom(true);
 
         const matched = (conversationsResponse.data ?? []).find(
           (conversation) => conversation.idConversation === conversationId
@@ -103,6 +114,11 @@ export default function ConversationDetailScreen() {
           type: 'error',
           text1: 'Không tải được hội thoại',
         });
+      } finally {
+        if (!mounted) {
+          return;
+        }
+        setIsInitialLoading(false);
       }
     })();
 
@@ -111,26 +127,59 @@ export default function ConversationDetailScreen() {
     };
   }, [conversationId]);
 
+  const loadMoreMessages = async () => {
+    if (!conversationId || !hasMore || isLoadingMore || isInitialLoading) {
+      return;
+    }
+    
+    setIsLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const res = await chatService.listMessages(conversationId, nextPage, MESSAGE_PAGE_SIZE);
+      const moreItems = (res.data.items ?? []).map(toUiMessage);
+      
+      setMessages((prev) => [...prev, ...moreItems]);
+      setPage(nextPage);
+      setHasMore((res.data.page ?? nextPage) < (res.data.totalPage ?? nextPage));
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Không tải thêm được tin nhắn',
+      });
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
     if (!conversationId) {
       return;
     }
 
-    let subscription: ReturnType<typeof chatSocketService.subscribeConversation>;
+    let subscription: ReturnType<typeof chatSocketService.subscribeUserEvents>;
     let cancelled = false;
 
-    const subscribeCurrentConversation = () => {
+    const subscribeUserEvents = () => {
       if (cancelled) {
         return;
       }
       subscription?.unsubscribe();
-      subscription = chatSocketService.subscribeConversation(conversationId, (incoming) => {
+      // Subscribe /user/queue/events và filter theo conversationId (giống web)
+      subscription = chatSocketService.subscribeUserEvents((event) => {
+        // Chỉ xử lý MESSAGE_UPSERT event cho conversation hiện tại
+        if (event.eventType !== 'MESSAGE_UPSERT' || event.conversationId !== conversationId) {
+          return;
+        }
+        const incoming = event.message;
+        if (!incoming) {
+          return;
+        }
+        const isMine = myIdentityId != null && incoming.idAccountSent === myIdentityId;
         setMessages((prev) => {
           if (prev.some((message) => message.idMessage === incoming.idMessage)) {
             return prev;
           }
           const incomingUi = toUiMessage(incoming);
-          const isMine = myIdentityId != null && incoming.idAccountSent === myIdentityId;
           if (isMine) {
             const pendingIdx = prev.findIndex(
               (message) =>
@@ -143,13 +192,14 @@ export default function ConversationDetailScreen() {
               cloned[pendingIdx] = incomingUi;
               return cloned;
             }
+            setShouldScrollToBottom(true);
           }
-          return [...prev, incomingUi];
+          return [incomingUi, ...prev];
         });
       });
     };
 
-    void chatSocketService.connect(subscribeCurrentConversation, () => {
+    void chatSocketService.connect(subscribeUserEvents, () => {
       subscription?.unsubscribe();
       subscription = undefined;
     });
@@ -226,7 +276,8 @@ export default function ConversationDetailScreen() {
       recalled: false,
       optimisticStatus: 'SENDING',
     };
-    setMessages((prev) => [...prev, tempMessage]);
+    setMessages((prev) => [tempMessage, ...prev]);
+    setShouldScrollToBottom(true);
 
     try {
       await chatSocketService.connect();
@@ -317,7 +368,12 @@ export default function ConversationDetailScreen() {
         otherAvatarUrl={conversation?.avatar ?? null}
         inputPlaceholder="Tin nhắn"
         isSending={false}
+        isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        shouldScrollToBottom={shouldScrollToBottom}
         onSend={handleSendMessage}
+        onLoadMore={loadMoreMessages}
+        onScrolledToBottom={() => setShouldScrollToBottom(false)}
       />
     </View>
   );

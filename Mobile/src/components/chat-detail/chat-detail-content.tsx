@@ -1,6 +1,5 @@
 import React from 'react';
-import { FlatList, Image, Keyboard, Modal, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { ActivityIndicator, FlatList, Image, Keyboard, Modal, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MockAvatar } from '@/mock/chat-conversations';
@@ -16,7 +15,12 @@ interface ChatDetailContentProps {
   galleryImages?: { url: string }[];
   inputPlaceholder?: string;
   isSending?: boolean;
+  isLoadingMore?: boolean;
+  hasMore?: boolean;
+  shouldScrollToBottom?: boolean;
   onSend?: (content: string) => Promise<void> | void;
+  onLoadMore?: () => void;
+  onScrolledToBottom?: () => void;
 }
 
 export function ChatDetailContent({
@@ -26,7 +30,12 @@ export function ChatDetailContent({
   galleryImages = [],
   inputPlaceholder,
   isSending = false,
+  isLoadingMore = false,
+  hasMore = false,
+  shouldScrollToBottom = false,
   onSend,
+  onLoadMore,
+  onScrolledToBottom,
 }: ChatDetailContentProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -35,6 +44,16 @@ export function ChatDetailContent({
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerIndex, setViewerIndex] = React.useState(0);
   const viewerListRef = React.useRef<FlatList<{ url: string }> | null>(null);
+  const flatListRef = React.useRef<FlatList<MockChatMessage> | null>(null);
+
+  React.useEffect(() => {
+    if (shouldScrollToBottom && messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        onScrolledToBottom?.();
+      }, 100);
+    }
+  }, [shouldScrollToBottom, messages.length, onScrolledToBottom]);
 
   React.useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -54,10 +73,10 @@ export function ChatDetailContent({
     };
   }, []);
 
-  const keyboardOffset = Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
-  const inputBottom = Platform.OS === 'ios' ? insets.bottom + keyboardOffset : 0;
+  const keyboardOffset = Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : keyboardHeight;
+  const inputBottom = Platform.OS === 'ios' ? insets.bottom + keyboardOffset : Math.max(insets.bottom, 16) + keyboardOffset;
 
-  const listBottomPadding = inputAreaHeight + inputBottom + 8;
+  const listTopPadding = inputAreaHeight + inputBottom + 8;
 
   const openImageViewer = React.useCallback((targetUrl: string) => {
     if (galleryImages.length === 0) {
@@ -68,31 +87,56 @@ export function ChatDetailContent({
     setViewerOpen(true);
   }, [galleryImages]);
 
+  const renderFooter = () => {
+    if (!hasMore) {
+      return null;
+    }
+    return (
+      <View className="py-3 items-center">
+        {isLoadingMore ? (
+          <ActivityIndicator size="small" color="#1e98f3" />
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderItem = ({ item: message }: { item: MockChatMessage }) => (
+    <View className="mt-2">
+      <ChatMessageRow
+        message={message}
+        otherAvatar={otherAvatar}
+        otherAvatarUrl={otherAvatarUrl}
+        onOpenImageGallery={openImageViewer}
+      />
+    </View>
+  );
+
   return (
     <View className="flex-1">
-      <KeyboardAwareScrollView
-        className="flex-1"
-        enableOnAndroid
-        enableAutomaticScroll
-        enableResetScrollToCoords={false}
-        extraScrollHeight={16}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        inverted
+        onEndReached={() => {
+          if (hasMore && !isLoadingMore) {
+            onLoadMore?.();
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={renderFooter}
         keyboardShouldPersistTaps="always"
-        keyboardDismissMode="none"
+        keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 14, paddingBottom: listBottomPadding }}>
-        <View className="pb-2">
-          {messages.map((message, index) => (
-            <View key={message.id} className={index === 0 ? 'mt-2' : 'mt-2'}>
-              <ChatMessageRow
-                message={message}
-                otherAvatar={otherAvatar}
-                otherAvatarUrl={otherAvatarUrl}
-                onOpenImageGallery={openImageViewer}
-              />
-            </View>
-          ))}
-        </View>
-      </KeyboardAwareScrollView>
+        contentContainerStyle={{ 
+          paddingTop: listTopPadding,
+          paddingBottom: 14,
+        }}
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+        }}
+      />
 
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: inputBottom }}>
         <ChatInputBar

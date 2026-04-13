@@ -27,12 +27,27 @@ public class UserIdHandshakeInterceptor implements HandshakeInterceptor {
         if (!(request instanceof ServletServerHttpRequest servletRequest)) {
             return false;
         }
+        
+        String userId = null;
+        
+        // Try Authorization header first (web via Gateway)
         String authorization = servletRequest.getServletRequest().getHeader(AUTHORIZATION_HEADER);
-        String userId = extractSubFromBearerToken(authorization);
-        if (userId == null || userId.isBlank()) {
-            return false;
+        if (StringUtils.hasText(authorization)) {
+            userId = extractSubFromBearerToken(authorization);
         }
-        attributes.put(ChatWsConstants.USER_ID_SESSION_ATTR, userId);
+        
+        // Fallback to query parameter (mobile SockJS)
+        if (userId == null || userId.isBlank()) {
+            String accessToken = servletRequest.getServletRequest().getParameter("access_token");
+            if (StringUtils.hasText(accessToken)) {
+                userId = extractSubFromJwt(accessToken);
+            }
+        }
+        
+        // Allow handshake even without userId (will authenticate in STOMP CONNECT)
+        if (userId != null && !userId.isBlank()) {
+            attributes.put(ChatWsConstants.USER_ID_SESSION_ATTR, userId);
+        }
         return true;
     }
 
@@ -51,6 +66,10 @@ public class UserIdHandshakeInterceptor implements HandshakeInterceptor {
             return "";
         }
         String token = authorization.substring(BEARER_PREFIX.length()).trim();
+        return extractSubFromJwt(token);
+    }
+    
+    private static String extractSubFromJwt(String token) {
         if (!StringUtils.hasText(token)) {
             return "";
         }
