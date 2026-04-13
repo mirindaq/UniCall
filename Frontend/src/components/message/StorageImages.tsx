@@ -4,13 +4,14 @@ import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { useChatPage } from "@/contexts/ChatPageContext"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { userService } from "@/services/user/user.service"
+
+import ImageGalleryViewer, { type ImageViewerItem } from "./ImageGalleryViewer"
 
 type SenderOption = {
   id: string
@@ -45,7 +46,7 @@ export default function StorageImages() {
   const [selectedSenderId, setSelectedSenderId] = useState("")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
-  const [imagePreview, setImagePreview] = useState<{ url: string; alt: string } | null>(null)
+  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
   const [senderPopoverOpen, setSenderPopoverOpen] = useState(false)
 
   const participantIds = useMemo(() => {
@@ -81,6 +82,14 @@ export default function StorageImages() {
   }, [senderOptions, senderSearch])
 
   const hasActiveFilter = !!selectedSenderId || !!fromDate || !!toDate
+  const imageAttachments = useMemo(
+    () => attachments.filter((attachment) => attachment.type === "IMAGE"),
+    [attachments],
+  )
+  const imageIndexById = useMemo(
+    () => new Map(imageAttachments.map((attachment, index) => [attachment.idAttachment, index])),
+    [imageAttachments],
+  )
 
   const applyRecentDays = (days: number) => {
     const end = new Date()
@@ -329,7 +338,13 @@ export default function StorageImages() {
                     src={attachment.url}
                     alt="attachment"
                     className="aspect-square w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => setImagePreview({ url: attachment.url, alt: 'Image' })}
+                    onClick={() => {
+                      const index = imageIndexById.get(attachment.idAttachment) ?? 0
+                      setImagePreview({
+                        images: imageAttachments.map((item) => ({ url: item.url, alt: "Image" })),
+                        initialIndex: index,
+                      })
+                    }}
                   />
                 )}
               </div>
@@ -338,19 +353,16 @@ export default function StorageImages() {
         )}
       </div>
 
-      <Dialog open={imagePreview != null} onOpenChange={(open) => !open && setImagePreview(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95" showCloseButton>
-          <div className="relative flex items-center justify-center min-h-[400px] max-h-[85vh]">
-            {imagePreview && (
-              <img 
-                src={imagePreview.url} 
-                alt={imagePreview.alt}
-                className="max-w-full max-h-[85vh] object-contain"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImageGalleryViewer
+        open={imagePreview != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImagePreview(null)
+          }
+        }}
+        images={imagePreview?.images ?? []}
+        initialIndex={imagePreview?.initialIndex ?? 0}
+      />
     </div>
   )
 }

@@ -38,6 +38,8 @@ import { formatChatSidebarTime } from "@/utils/chat-display.util"
 import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
 import { extractUrlsFromText, getDomainFromUrl } from "@/utils/link-display.util"
 
+import ImageGalleryViewer, { type ImageViewerItem } from "./ImageGalleryViewer"
+
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
   title: string
@@ -121,12 +123,15 @@ export default function ChatInfoMain({
   const [filesPreview, setFilesPreview] = useState<AttachmentResponse[]>([])
   const [linksPreview, setLinksPreview] = useState<LinkPreviewItem[]>([])
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [allImageAttachments, setAllImageAttachments] = useState<AttachmentResponse[]>([])
+  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
 
   const { selectedConversationId } = useChatPage()
 
   useEffect(() => {
     if (!selectedConversationId) {
       setImagesPreview([])
+      setAllImageAttachments([])
       setFilesPreview([])
       setLinksPreview([])
       return
@@ -188,7 +193,15 @@ export default function ChatInfoMain({
 
         linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
 
-        setImagesPreview((imagesRes.data ?? []).slice(0, PREVIEW_LIMIT))
+        const sortedImages = (imagesRes.data ?? []).slice().sort((a, b) => {
+          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+          return right - left
+        })
+        const onlyImages = sortedImages.filter((item) => item.type === "IMAGE")
+
+        setAllImageAttachments(onlyImages)
+        setImagesPreview(sortedImages.slice(0, PREVIEW_LIMIT))
         setFilesPreview((filesRes.data ?? []).slice(0, PREVIEW_LIMIT))
         setLinksPreview(linksCollected.slice(0, PREVIEW_LIMIT))
       } catch (error) {
@@ -208,6 +221,11 @@ export default function ChatInfoMain({
       cancelled = true
     }
   }, [selectedConversationId])
+
+  const imageIndexById = useMemo(
+    () => new Map(allImageAttachments.map((item, index) => [item.idAttachment, index])),
+    [allImageAttachments],
+  )
 
   const getFileExtension = useMemo(() => {
     return (url: string): string => {
@@ -349,7 +367,14 @@ export default function ChatInfoMain({
                           <img
                             src={item.url}
                             alt="attachment"
-                            className="aspect-square h-full w-full object-cover"
+                            className="aspect-square h-full w-full cursor-pointer object-cover"
+                            onClick={() => {
+                              const index = imageIndexById.get(item.idAttachment) ?? 0
+                              setImagePreview({
+                                images: allImageAttachments.map((attachment) => ({ url: attachment.url, alt: "Image" })),
+                                initialIndex: index,
+                              })
+                            }}
                           />
                         )}
                       </div>
@@ -576,6 +601,17 @@ export default function ChatInfoMain({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ImageGalleryViewer
+        open={imagePreview != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImagePreview(null)
+          }
+        }}
+        images={imagePreview?.images ?? []}
+        initialIndex={imagePreview?.initialIndex ?? 0}
+      />
     </div>
   )
 }

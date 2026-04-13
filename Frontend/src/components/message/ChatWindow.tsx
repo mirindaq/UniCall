@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { toast } from "sonner"
 
 import IncomingCallPopup from "@/components/message/IncomingCallPopup"
+import ImageGalleryViewer, { type ImageViewerItem } from "@/components/message/ImageGalleryViewer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -101,6 +102,12 @@ type ForwardTargetOption = {
   label: string
   subtitle?: string
   avatar?: string
+}
+
+type PendingImageUpload = {
+  id: string
+  file: File
+  previewUrl: string
 }
 
 function renderHighlightedSearchText(content: string, keyword: string): ReactNode {
@@ -261,6 +268,7 @@ export default function ChatWindow() {
   const failedMissingMessageIdsRef = useRef<Set<string>>(new Set())
   const pendingFocusMessageIdRef = useRef<string | null>(null)
   const suppressAutoLoadMoreUntilRef = useRef(0)
+  const pendingImageUploadsRef = useRef<PendingImageUpload[]>([])
 
   const {
     selectedConversationId,
@@ -336,7 +344,7 @@ export default function ChatWindow() {
   const [isDeletingSelectedMessages, setIsDeletingSelectedMessages] = useState(false)
   const [selectedPinnedMessageId, setSelectedPinnedMessageId] = useState<string | null>(null)
   const [selectedReplyTargetMessageId, setSelectedReplyTargetMessageId] = useState<string | null>(null)
-  const [imagePreview, setImagePreview] = useState<{ url: string; alt: string } | null>(null)
+  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false)
   const [messageSearchKeyword, setMessageSearchKeyword] = useState("")
@@ -353,6 +361,67 @@ export default function ChatWindow() {
   const [isSearchingMessages, setIsSearchingMessages] = useState(false)
   const [searchMatchedFiles, setSearchMatchedFiles] = useState<AttachmentResponse[]>([])
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
+  const [pendingImageUploads, setPendingImageUploads] = useState<PendingImageUpload[]>([])
+  const [allConversationImages, setAllConversationImages] = useState<ImageViewerItem[]>([])
+
+  useEffect(() => {
+    pendingImageUploadsRef.current = pendingImageUploads
+  }, [pendingImageUploads])
+
+  useEffect(() => {
+    return () => {
+      pendingImageUploadsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+    }
+  }, [])
+
+  useEffect(() => {
+    setPendingImageUploads((prev) => {
+      if (prev.length === 0) {
+        return prev
+      }
+      prev.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+      return []
+    })
+  }, [selectedConversationId])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setAllConversationImages([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadAllConversationImages = async () => {
+      try {
+        const response = await fileService.getAttachments(selectedConversationId, { type: "images" })
+        if (cancelled) {
+          return
+        }
+        const items = (response.data ?? [])
+          .filter((attachment) => attachment.type === "IMAGE")
+          .slice()
+          .sort((a, b) => {
+            const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+            const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+            return right - left
+          })
+          .map((attachment) => ({ url: attachment.url, alt: "Image" }))
+
+        setAllConversationImages(items)
+      } catch (error) {
+        console.error("Failed to load all conversation images", error)
+        if (!cancelled) {
+          setAllConversationImages([])
+        }
+      }
+    }
+
+    void loadAllConversationImages()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedConversationId])
 
   useEffect(() => {
     let cancelled = false
@@ -1376,6 +1445,36 @@ export default function ChatWindow() {
     textarea.style.height = `${textarea.scrollHeight}px`
   }
 
+  const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
+    if (allConversationImages.length > 0) {
+      return allConversationImages
+    }
+    return displayMessages.flatMap((message) =>
+      (message.attachments ?? [])
+        .filter((attachment) => attachment.type === "IMAGE")
+        .map((attachment) => ({ url: attachment.url, alt: "Image" })),
+    )
+  }, [allConversationImages, displayMessages])
+
+  const openImagePreview = useCallback((images: ImageViewerItem[], startIndex = 0) => {
+    if (images.length === 0) {
+      return
+    }
+    const boundedIndex = Math.min(Math.max(startIndex, 0), images.length - 1)
+    setImagePreview({
+      images,
+      initialIndex: boundedIndex,
+    })
+  }, [])
+
+  const openConversationImagePreview = useCallback((targetUrl: string) => {
+    if (conversationImageItems.length === 0) {
+      return
+    }
+    const targetIndex = conversationImageItems.findIndex((item) => item.url === targetUrl)
+    openImagePreview(conversationImageItems, targetIndex >= 0 ? targetIndex : 0)
+  }, [conversationImageItems, openImagePreview])
+
   const sendMessage = async (
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
@@ -1427,7 +1526,20 @@ export default function ChatWindow() {
 
   const sendText = async () => {
     const normalizedDraft = draft.trim()
-    if (!normalizedDraft) {
+    if (!normalizedDraft && pendingImageUploads.length === 0) {
+      return
+    }
+
+    if (pendingImageUploads.length > 0) {
+      const result = await handleAttachmentUpload(pendingImageUploads.map((item) => item.file))
+      const retainedFiles = new Set<File>([...result.failedFiles, ...result.oversizedFiles])
+      setPendingImageUploads((prev) => {
+        const next = prev.filter((item) => retainedFiles.has(item.file))
+        prev
+          .filter((item) => !retainedFiles.has(item.file))
+          .forEach((item) => URL.revokeObjectURL(item.previewUrl))
+        return next
+      })
       return
     }
 
@@ -1509,72 +1621,230 @@ export default function ChatWindow() {
     setGifOpen(false)
   }
 
+  const uploadSingleAttachment = async (file: File, mixedText: string) => {
+    const hasMixedText = mixedText.trim().length > 0
+    const uploadResult = await fileService.uploadFile(file)
+    const { url, fileSize, type: attachmentType } = uploadResult.data
+
+    // Determine message content based on file type
+    let messageContent = ""
+    let messageType: ChatMessageResponse["type"] = "NONTEXT"
+
+    if (attachmentType === "IMAGE") {
+      messageContent = "Đã gửi hình ảnh"
+    } else if (attachmentType === "VIDEO") {
+      messageContent = "Đã gửi video"
+    } else if (attachmentType === "GIF") {
+      messageContent = "Đã gửi GIF"
+    } else if (attachmentType === "AUDIO") {
+      messageContent = "Đã gửi file âm thanh"
+    } else {
+      // Lấy tên file từ URL đã upload (đã bỏ UUID)
+      messageContent = `Đã gửi file: ${getOriginalFileNameFromUrl(url)}`
+    }
+
+    // If there's text in the draft, use MIX type
+    if (hasMixedText) {
+      messageContent = mixedText.trim()
+      messageType = "MIX"
+    }
+
+    await sendMessage(
+      messageContent,
+      messageType,
+      [{ type: attachmentType, url, size: formatFileSize(fileSize), order: 0 }],
+      replyingTo?.idMessage,
+    )
+  }
+
+  const handleAttachmentUpload = async (rawFiles: File[]) => {
+    if (rawFiles.length === 0) {
+      return { successCount: 0, failedFiles: [] as File[], oversizedFiles: [] as File[] }
+    }
+
+    const files = rawFiles.map((rawFile, index) => (
+      rawFile.name
+        ? rawFile
+        : new File(
+          [rawFile],
+          `pasted-image-${Date.now()}-${index + 1}.png`,
+          { type: rawFile.type || "image/png" },
+        )
+    ))
+
+    const maxSize = 25 * 1024 * 1024
+    const draftText = draft.trim()
+    let hasUsedDraftText = false
+    let successCount = 0
+    let failedCount = 0
+    let oversizedCount = 0
+    const failedFiles: File[] = []
+    const oversizedFiles: File[] = []
+
+    setIsUploadingFile(true)
+    try {
+      const validFiles = files.filter((file) => {
+        if (file.size <= maxSize) {
+          return true
+        }
+        oversizedCount += 1
+        oversizedFiles.push(file)
+        return false
+      })
+
+      const allAreImages = validFiles.length > 0 && validFiles.every((file) => file.type.startsWith("image/"))
+      if (allAreImages && validFiles.length > 1) {
+        try {
+          const uploadedAttachments: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">> = []
+          for (let index = 0; index < validFiles.length; index += 1) {
+            const uploadResult = await fileService.uploadFile(validFiles[index])
+            const { url, fileSize, type: attachmentType } = uploadResult.data
+            uploadedAttachments.push({
+              type: attachmentType,
+              url,
+              size: formatFileSize(fileSize),
+              order: index,
+            })
+          }
+
+          const mixedText = draftText.trim()
+          const hasMixedText = mixedText.length > 0
+          await sendMessage(
+            hasMixedText ? mixedText : "Đã gửi hình ảnh",
+            hasMixedText ? "MIX" : "NONTEXT",
+            uploadedAttachments,
+            replyingTo?.idMessage,
+          )
+          hasUsedDraftText = hasMixedText
+          successCount = uploadedAttachments.length
+        } catch (error) {
+          console.error("Multi image upload error:", error)
+          failedCount = validFiles.length
+          failedFiles.push(...validFiles)
+        }
+      } else {
+        for (const file of validFiles) {
+          try {
+            const mixedText = !hasUsedDraftText ? draftText : ""
+            await uploadSingleAttachment(file, mixedText)
+            if (mixedText) {
+              hasUsedDraftText = true
+            }
+            successCount += 1
+          } catch (error) {
+            failedCount += 1
+            failedFiles.push(file)
+            console.error("File upload error:", error)
+          }
+        }
+      }
+    } finally {
+      setIsUploadingFile(false)
+    }
+
+    if (hasUsedDraftText) {
+      setDraft("")
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto"
+      }
+    }
+
+    if (oversizedCount > 0) {
+      toast.error(
+        oversizedCount === 1
+          ? "Có 1 file vượt quá 25MB nên không gửi được"
+          : `Có ${oversizedCount} file vượt quá 25MB nên không gửi được`,
+      )
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        successCount === 1
+          ? "Gửi file thành công"
+          : `Gửi thành công ${successCount} file`,
+      )
+    }
+
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === 1
+          ? "Có 1 file upload thất bại"
+          : `Có ${failedCount} file upload thất bại`,
+      )
+    }
+
+    return { successCount, failedFiles, oversizedFiles }
+  }
+
+  const appendPendingImages = useCallback((rawFiles: File[]) => {
+    if (rawFiles.length === 0) {
+      return
+    }
+
+    const files = rawFiles.map((rawFile, index) => (
+      rawFile.name
+        ? rawFile
+        : new File(
+          [rawFile],
+          `pasted-image-${Date.now()}-${index + 1}.png`,
+          { type: rawFile.type || "image/png" },
+        )
+    ))
+
+    const nextItems = files.map((file, index) => ({
+      id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }))
+
+    setPendingImageUploads((prev) => [...prev, ...nextItems])
+  }, [])
+
+  const removePendingImage = useCallback((id: string) => {
+    setPendingImageUploads((prev) => {
+      const target = prev.find((item) => item.id === id)
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl)
+      }
+      return prev.filter((item) => item.id !== id)
+    })
+  }, [])
+
+  const clearPendingImages = useCallback(() => {
+    setPendingImageUploads((prev) => {
+      prev.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+      return []
+    })
+  }, [])
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
       return
     }
 
     // Reset input value to allow selecting the same file again
     event.target.value = ""
 
-    // Validate file size (max 25MB)
-    const maxSize = 25 * 1024 * 1024
-    if (file.size > maxSize) {
-      toast.error("Kích thước file tối đa 25MB")
+    await handleAttachmentUpload(files)
+  }
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isUploadingFile) {
       return
     }
 
-    setIsUploadingFile(true)
-    try {
-      const uploadResult = await fileService.uploadFile(file)
-      const { url, fileSize, type: attachmentType } = uploadResult.data
+    const imageFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
 
-      // Determine message content based on file type
-      let messageContent = ""
-      let messageType: ChatMessageResponse["type"] = "NONTEXT"
-
-      if (attachmentType === "IMAGE") {
-        messageContent = "Đã gửi hình ảnh"
-      } else if (attachmentType === "VIDEO") {
-        messageContent = "Đã gửi video"
-      } else if (attachmentType === "GIF") {
-        messageContent = "Đã gửi GIF"
-      } else if (attachmentType === "AUDIO") {
-        messageContent = "Đã gửi file âm thanh"
-      } else {
-        // Lấy tên file từ URL đã upload (đã bỏ UUID)
-        messageContent = `Đã gửi file: ${getOriginalFileNameFromUrl(url)}`
-      }
-
-      // If there's text in the draft, use MIX type
-      if (draft.trim()) {
-        messageContent = draft.trim()
-        messageType = "MIX"
-      }
-
-      await sendMessage(
-        messageContent,
-        messageType,
-        [{ type: attachmentType, url, size: formatFileSize(fileSize), order: 0 }],
-        replyingTo?.idMessage,
-      )
-
-      // Clear draft if it was used
-      if (draft.trim()) {
-        setDraft("")
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto"
-        }
-      }
-
-      toast.success("Gửi file thành công")
-    } catch (error) {
-      console.error("File upload error:", error)
-      toast.error("Upload file thất bại")
-    } finally {
-      setIsUploadingFile(false)
+    if (imageFiles.length === 0) {
+      return
     }
+
+    event.preventDefault()
+    appendPendingImages(imageFiles)
   }
 
   const formatFileSize = (bytes: number): string => {
@@ -2408,6 +2678,8 @@ export default function ChatWindow() {
                       ? senderInfo?.avatar
                       : headerAvatar
                   const firstAttachment = msg.attachments?.[0]
+                  const imageAttachments = (msg.attachments ?? []).filter((attachment) => attachment.type === "IMAGE")
+                  const hasMultiImageAttachments = imageAttachments.length > 1
                   const isCallMessage = msg.type === "CALL" && msg.callInfo != null
                   const callCard = isCallMessage ? buildCallMessageCard(msg, currentUserId) : null
 
@@ -2505,7 +2777,7 @@ export default function ChatWindow() {
                             {msg.recalled ? (
                               <div
                                 className={cn(
-                                  "rounded-2xl px-4 py-2 text-sm italic text-muted-foreground",
+                                  "rounded-2xl px-4 py-2 text-sm italic text-muted-foreground whitespace-pre-wrap break-all",
                                   isMe ? "rounded-br-sm bg-primary/5" : "rounded-bl-sm border bg-muted/40",
                                 )}
                               >
@@ -2514,7 +2786,7 @@ export default function ChatWindow() {
                             ) : msg.type === "TEXT" ? (
                               <div
                                 className={cn(
-                                  "rounded-2xl px-4 py-2 text-sm",
+                                  "rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap break-all",
                                   isMe
                                     ? "rounded-br-sm bg-primary/10 text-foreground"
                                     : "rounded-bl-sm border bg-background text-foreground shadow-xs",
@@ -2569,16 +2841,52 @@ export default function ChatWindow() {
                               <div className="overflow-hidden rounded-2xl border bg-background shadow-xs">
                                 <img src={firstAttachment.url} alt="gif" className="max-h-52 w-56 object-cover" />
                               </div>
+                            ) : hasMultiImageAttachments ? (
+                              <div className="max-w-xs">
+                                <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-2xl border bg-background p-1 shadow-xs">
+                                  {imageAttachments.slice(0, 4).map((attachment, index) => {
+                                    const isThreeImagesFirst = imageAttachments.length === 3 && index === 0
+                                    const isOverflowTile = index === 3 && imageAttachments.length > 4
+                                    return (
+                                      <button
+                                        key={`${attachment.url}-${index}`}
+                                        type="button"
+                                        className={cn(
+                                          "relative overflow-hidden rounded-md bg-muted",
+                                          isThreeImagesFirst ? "col-span-2 aspect-[2/1]" : "aspect-square",
+                                        )}
+                                        onClick={() => openConversationImagePreview(attachment.url)}
+                                      >
+                                        <img
+                                          src={attachment.url}
+                                          alt={`image-${index + 1}`}
+                                          className="h-full w-full object-cover transition-opacity hover:opacity-90"
+                                        />
+                                        {isOverflowTile ? (
+                                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-xl font-semibold text-white">
+                                            +{imageAttachments.length - 4}
+                                          </div>
+                                        ) : null}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                                {normalizedMessageContent && normalizedMessageContent.trim() && (
+                                  <div className="px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-all">
+                                    {renderMessageRichText(normalizedMessageContent)}
+                                  </div>
+                                )}
+                              </div>
                             ) : firstAttachment?.type === "IMAGE" ? (
                               <div className="overflow-hidden rounded-2xl border bg-background shadow-xs cursor-pointer">
                                 <img 
                                   src={firstAttachment.url} 
                                   alt="image" 
                                   className="max-h-64 max-w-xs object-contain hover:opacity-90 transition-opacity" 
-                                  onClick={() => setImagePreview({ url: firstAttachment.url, alt: 'Image' })}
+                                  onClick={() => openConversationImagePreview(firstAttachment.url)}
                                 />
                                 {normalizedMessageContent && normalizedMessageContent.trim() && (
-                                  <div className="px-3 py-2 text-sm text-foreground">
+                                  <div className="px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-all">
                                     {renderMessageRichText(normalizedMessageContent)}
                                   </div>
                                 )}
@@ -2592,7 +2900,7 @@ export default function ChatWindow() {
                                   preload="metadata"
                                 />
                                 {normalizedMessageContent && normalizedMessageContent.trim() && (
-                                  <div className="px-3 py-2 text-sm text-foreground">
+                                  <div className="px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-all">
                                     {renderMessageRichText(normalizedMessageContent)}
                                   </div>
                                 )}
@@ -2607,7 +2915,7 @@ export default function ChatWindow() {
                                   preload="metadata"
                                 />
                                 {normalizedMessageContent && normalizedMessageContent.trim() && (
-                                  <div className="mt-2 text-sm text-foreground">
+                                  <div className="mt-2 text-sm text-foreground whitespace-pre-wrap break-all">
                                     {renderMessageRichText(normalizedMessageContent)}
                                   </div>
                                 )}
@@ -2625,7 +2933,7 @@ export default function ChatWindow() {
                                 {normalizedMessageContent
                                   && normalizedMessageContent.trim()
                                   && normalizedMessageContent.trim() !== firstAttachment.url && (
-                                  <div className="mt-2 border-t pt-2 text-sm text-foreground">
+                                  <div className="mt-2 border-t pt-2 text-sm text-foreground whitespace-pre-wrap break-all">
                                     {renderMessageRichText(normalizedMessageContent)}
                                   </div>
                                 )}
@@ -2657,7 +2965,7 @@ export default function ChatWindow() {
                                 {normalizedMessageContent
                                   && normalizedMessageContent.trim()
                                   && normalizedMessageContent !== `Đã gửi file: ${displayFileName}` && (
-                                  <div className="mt-2 text-sm text-foreground border-t pt-2">
+                                  <div className="mt-2 border-t pt-2 text-sm text-foreground whitespace-pre-wrap break-all">
                                     {renderMessageRichText(normalizedMessageContent)}
                                   </div>
                                 )}
@@ -2665,7 +2973,7 @@ export default function ChatWindow() {
                                 )
                               })()
                             ) : (
-                              <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground">
+                              <div className="rounded-2xl border bg-background px-4 py-2 text-sm text-muted-foreground whitespace-pre-wrap break-all">
                                 {renderMessageRichText(normalizedMessageContent)}
                               </div>
                             )}
@@ -2884,6 +3192,39 @@ export default function ChatWindow() {
             </Button>
           </div>
         ) : null}
+        {pendingImageUploads.length > 0 ? (
+          <div className="mb-2 rounded-lg border bg-muted/20 p-2">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground">
+                {pendingImageUploads.length} ảnh
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                className="h-7 px-2 text-xs"
+                onClick={clearPendingImages}
+              >
+                Xóa tất cả
+              </Button>
+            </div>
+            <div className="custom-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {pendingImageUploads.map((item) => (
+                <div key={item.id} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-background">
+                  <img src={item.previewUrl} alt="preview" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"
+                    onClick={() => removePendingImage(item.id)}
+                    aria-label="Xóa ảnh khỏi danh sách chờ"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="mb-2 flex gap-1">
           <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
             <PopoverTrigger asChild>
@@ -2934,6 +3275,7 @@ export default function ChatWindow() {
             type="file"
             className="hidden"
             onChange={handleFileSelect}
+            multiple
             accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
           />
           <Button
@@ -2949,7 +3291,7 @@ export default function ChatWindow() {
         </div>
 
         <div className="flex items-end gap-2">
-          <div className="flex flex-1 items-end rounded-lg border bg-background pr-1">
+          <div className="flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
             <Textarea
               ref={textareaRef}
               value={draft}
@@ -2959,6 +3301,9 @@ export default function ChatWindow() {
               onKeyUp={syncDraftCaret}
               onBlur={syncDraftCaret}
               onInput={handleInput}
+              onPaste={(event) => {
+                void handlePaste(event)
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault()
@@ -2968,7 +3313,7 @@ export default function ChatWindow() {
               placeholder={`Nhập tin nhắn tới ${headerTitle}`}
               rows={1}
               disabled={isSending}
-              className="custom-scrollbar max-h-32 min-h-[38px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              className="custom-scrollbar max-h-32 min-h-[38px] w-full min-w-0 resize-none overflow-x-hidden border-0 bg-transparent shadow-none whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus-visible:ring-0"
             />
             <Separator orientation="vertical" className="h-5 self-center" />
             <Popover open={emojiOpen} onOpenChange={handleEmojiOpenChange}>
@@ -3006,7 +3351,7 @@ export default function ChatWindow() {
             className="rounded-full bg-blue-600"
             title="Gửi"
             type="button"
-            disabled={isSending || !draft.trim()}
+            disabled={isSending || (!draft.trim() && pendingImageUploads.length === 0)}
             onClick={() => void sendText()}
           >
             <Send className="h-4 w-4" />
@@ -3131,19 +3476,16 @@ export default function ChatWindow() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={imagePreview != null} onOpenChange={(open) => !open && setImagePreview(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95" showCloseButton>
-          <div className="relative flex items-center justify-center min-h-[400px] max-h-[85vh]">
-            {imagePreview && (
-              <img 
-                src={imagePreview.url} 
-                alt={imagePreview.alt}
-                className="max-w-full max-h-[85vh] object-contain"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImageGalleryViewer
+        open={imagePreview != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImagePreview(null)
+          }
+        }}
+        images={imagePreview?.images ?? []}
+        initialIndex={imagePreview?.initialIndex ?? 0}
+      />
     </div>
   )
 }
