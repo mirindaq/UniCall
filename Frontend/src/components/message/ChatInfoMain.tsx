@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
@@ -125,8 +127,28 @@ export default function ChatInfoMain({
   const [previewLoading, setPreviewLoading] = useState(false)
   const [allImageAttachments, setAllImageAttachments] = useState<AttachmentResponse[]>([])
   const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
+  const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false)
+  const [nicknameDraft, setNicknameDraft] = useState("")
+  const [isSavingNickname, setIsSavingNickname] = useState(false)
+  const [isPinningConversation, setIsPinningConversation] = useState(false)
 
-  const { selectedConversationId } = useChatPage()
+  const { selectedConversationId, selectedConversation, currentUserId, refetchConversations } = useChatPage()
+
+  const directPeer = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId) ?? null
+    )
+  }, [currentUserId, selectedConversation])
+
+  useEffect(() => {
+    if (!isNicknameDialogOpen) {
+      return
+    }
+    setNicknameDraft(directPeer?.nickname?.trim() ?? "")
+  }, [directPeer, isNicknameDialogOpen])
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -281,6 +303,45 @@ export default function ChatInfoMain({
     }
   }
 
+  const handleSaveNickname = async () => {
+    if (!selectedConversationId || !directPeer || isSavingNickname) {
+      return
+    }
+    setIsSavingNickname(true)
+    try {
+      await chatService.updateMemberNickname(selectedConversationId, directPeer.idAccount, {
+        nickname: nicknameDraft.trim(),
+      })
+      toast.success("Đã cập nhật biệt danh.")
+      setIsNicknameDialogOpen(false)
+      await refetchConversations()
+    } catch {
+      toast.error("Cập nhật biệt danh thất bại, vui lòng thử lại.")
+    } finally {
+      setIsSavingNickname(false)
+    }
+  }
+
+  const handleToggleConversationPin = async () => {
+    if (!selectedConversationId || !selectedConversation || isPinningConversation) {
+      return
+    }
+    setIsPinningConversation(true)
+    try {
+      if (selectedConversation.pinned) {
+        await chatService.unpinConversation(selectedConversationId)
+      } else {
+        await chatService.pinConversation(selectedConversationId)
+      }
+      await refetchConversations()
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Cập nhật ghim hội thoại thất bại.")
+    } finally {
+      setIsPinningConversation(false)
+    }
+  }
+
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
       <div className="flex shrink-0 items-center justify-center border-b px-4 py-5">
@@ -301,9 +362,16 @@ export default function ChatInfoMain({
               <h4 className="ml-6 max-w-[220px] truncate text-base font-medium">
                 {title}
               </h4>
-              <Button variant="secondary" size="icon-xs" title="Sửa biệt danh">
-                <Edit2 className="h-3.5 w-3.5" />
-              </Button>
+              {directPeer ? (
+                <Button
+                  variant="secondary"
+                  size="icon-xs"
+                  title="Sửa biệt danh"
+                  onClick={() => setIsNicknameDialogOpen(true)}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
             </div>
 
             <div className="mt-4 grid w-full min-w-0 grid-cols-3 gap-2">
@@ -317,11 +385,16 @@ export default function ChatInfoMain({
               </div>
 
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
-                <Button variant="secondary" size="icon">
+                <Button
+                  variant={selectedConversation?.pinned ? "default" : "secondary"}
+                  size="icon"
+                  disabled={isPinningConversation || !selectedConversationId}
+                  onClick={() => void handleToggleConversationPin()}
+                >
                   <Pin className="h-4 w-4" />
                 </Button>
                 <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                  Ghim hội thoại
+                  {selectedConversation?.pinned ? "Bỏ ghim hội thoại" : "Ghim hội thoại"}
                 </span>
               </div>
 
@@ -601,6 +674,37 @@ export default function ChatInfoMain({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Đổi biệt danh</DialogTitle>
+            <DialogDescription>
+              Biệt danh sẽ được dùng để hiển thị hội thoại 1-1 này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Nhập biệt danh"
+              value={nicknameDraft}
+              maxLength={50}
+              onChange={(event) => setNicknameDraft(event.target.value)}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={isSavingNickname}
+                onClick={() => setIsNicknameDialogOpen(false)}
+              >
+                Hủy
+              </Button>
+              <Button disabled={isSavingNickname} onClick={() => void handleSaveNickname()}>
+                {isSavingNickname ? "Đang lưu..." : "Lưu"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ImageGalleryViewer
         open={imagePreview != null}

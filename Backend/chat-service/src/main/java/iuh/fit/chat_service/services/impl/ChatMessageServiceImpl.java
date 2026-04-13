@@ -5,6 +5,7 @@ import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
 import iuh.fit.chat_service.dtos.request.ForwardMessageRequest;
 import iuh.fit.chat_service.dtos.request.MessageAttachmentRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
+import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
@@ -39,8 +40,10 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -298,6 +301,117 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
         return dto;
+    }
+
+    @Override
+    public MessageResponse reactMessage(
+            String identityUserId,
+            String conversationId,
+            String messageId,
+            UpdateMessageReactionRequest request
+    ) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = requireMessageInConversation(conversationId, messageId);
+        if (message.isRecalled()) {
+            throw new InvalidParamException("Không thể thả cảm xúc cho tin nhắn đã thu hồi");
+        }
+
+        String reaction = request == null || request.getReaction() == null ? "" : request.getReaction().trim();
+        if (reaction.isBlank()) {
+            throw new InvalidParamException("Reaction is required");
+        }
+        if (reaction.length() > 8) {
+            throw new InvalidParamException("Reaction must be at most 8 characters");
+        }
+
+        Map<String, List<String>> reactionStacks = normalizeReactionStacks(message);
+        List<String> myReactions = reactionStacks.get(identityUserId) == null
+                ? new ArrayList<>()
+                : new ArrayList<>(reactionStacks.get(identityUserId));
+        myReactions.add(reaction);
+        if (myReactions.size() > 30) {
+            myReactions = new ArrayList<>(myReactions.subList(myReactions.size() - 30, myReactions.size()));
+        }
+        reactionStacks.put(identityUserId, myReactions);
+        message.setReactionStacks(reactionStacks);
+        message.setReactions(buildLegacyReactionsFromStacks(reactionStacks));
+        message.setTimeUpdate(LocalDateTime.now());
+
+        Message saved = messageRepository.save(message);
+        MessageResponse dto = MessageResponse.from(saved);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        broadcastToParticipants(conversation, dto);
+        return dto;
+    }
+
+    @Override
+    public MessageResponse clearReaction(String identityUserId, String conversationId, String messageId) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        Message message = requireMessageInConversation(conversationId, messageId);
+        if (message.isRecalled()) {
+            return MessageResponse.from(message);
+        }
+
+        Map<String, List<String>> reactionStacks = normalizeReactionStacks(message);
+        if (!reactionStacks.containsKey(identityUserId)) {
+            return MessageResponse.from(message);
+        }
+        reactionStacks.remove(identityUserId);
+        message.setReactionStacks(reactionStacks.isEmpty() ? null : reactionStacks);
+        message.setReactions(buildLegacyReactionsFromStacks(reactionStacks));
+        message.setTimeUpdate(LocalDateTime.now());
+
+        Message saved = messageRepository.save(message);
+        MessageResponse dto = MessageResponse.from(saved);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        broadcastToParticipants(conversation, dto);
+        return dto;
+    }
+
+    private static Map<String, String> buildLegacyReactionsFromStacks(Map<String, List<String>> reactionStacks) {
+        if (reactionStacks == null || reactionStacks.isEmpty()) {
+            return null;
+        }
+        Map<String, String> legacy = new HashMap<>();
+        for (Map.Entry<String, List<String>> entry : reactionStacks.entrySet()) {
+            String userId = entry.getKey();
+            if (!StringUtils.hasText(userId)) {
+                continue;
+            }
+            List<String> stack = entry.getValue();
+            if (stack == null || stack.isEmpty()) {
+                continue;
+            }
+            String latest = stack.get(stack.size() - 1);
+            if (!StringUtils.hasText(latest)) {
+                continue;
+            }
+            legacy.put(userId, latest);
+        }
+        return legacy.isEmpty() ? null : legacy;
+    }
+
+    private static Map<String, List<String>> normalizeReactionStacks(Message message) {
+        Map<String, List<String>> fromStacks = message.getReactionStacks();
+        if (fromStacks != null && !fromStacks.isEmpty()) {
+            return new HashMap<>(fromStacks);
+        }
+
+        Map<String, String> legacy = message.getReactions();
+        if (legacy == null || legacy.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        Map<String, List<String>> normalized = new HashMap<>();
+        for (Map.Entry<String, String> entry : legacy.entrySet()) {
+            String userId = entry.getKey();
+            String reaction = entry.getValue();
+            if (!StringUtils.hasText(userId) || !StringUtils.hasText(reaction)) {
+                continue;
+            }
+            normalized.put(userId, new ArrayList<>(List.of(reaction)));
+        }
+        return normalized;
     }
 
     @Override

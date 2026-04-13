@@ -1,8 +1,4 @@
-﻿import {
-  ChevronDown,
-  MessageCircle,
-  MoreHorizontal,
-} from "lucide-react"
+import { ChevronDown, MessageCircle, MoreHorizontal, Pin } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { AddFriendDialog } from "@/components/message/AddFriendDialog"
@@ -308,11 +304,14 @@ export default function ChatSidebar() {
                       >
                         {lastPreview || " "}
                       </p>
-                      {hasUnread ? (
-                        <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
-                          {formatUnreadBadge(unreadCount)}
-                        </span>
-                      ) : null}
+                      <div className="ml-2 flex shrink-0 items-center gap-1">
+                        {hasUnread ? (
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
+                            {formatUnreadBadge(unreadCount)}
+                          </span>
+                        ) : null}
+                        {chat.pinned ? <Pin className="size-3 text-slate-500" /> : null}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -358,3 +357,6 @@ export default function ChatSidebar() {
     </div>
   )
 }
+
+
+

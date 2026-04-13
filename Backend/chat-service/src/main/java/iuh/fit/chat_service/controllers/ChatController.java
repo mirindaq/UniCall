@@ -3,6 +3,7 @@ package iuh.fit.chat_service.controllers;
 import iuh.fit.chat_service.dtos.request.CreateDirectConversationRequest;
 import iuh.fit.chat_service.dtos.request.ForwardMessageRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
+import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.dtos.response.FileUploadResponse;
@@ -21,6 +22,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -75,6 +77,30 @@ public class ChatController {
         chatConversationService.markConversationAsRead(identityUserId, conversationId);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Đánh dấu đã đọc thành công", null)
+        );
+    }
+
+    @PostMapping("/conversations/{conversationId}/pin")
+    public ResponseEntity<ResponseSuccess<ConversationResponse>> pinConversation(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        ConversationResponse data = chatConversationService.pinConversation(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Ghim hội thoại thành công", data)
+        );
+    }
+
+    @DeleteMapping("/conversations/{conversationId}/pin")
+    public ResponseEntity<ResponseSuccess<ConversationResponse>> unpinConversation(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId
+    ) {
+        requireUser(identityUserId);
+        ConversationResponse data = chatConversationService.unpinConversation(identityUserId, conversationId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Bỏ ghim hội thoại thành công", data)
         );
     }
 
@@ -169,6 +195,33 @@ public class ChatController {
         MessageResponse data = chatMessageService.unpinMessage(identityUserId, conversationId, messageId);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Bỏ ghim tin nhắn thành công", data)
+        );
+    }
+
+    @PatchMapping("/conversations/{conversationId}/messages/{messageId}/reaction")
+    public ResponseEntity<ResponseSuccess<MessageResponse>> reactMessage(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @Valid @RequestBody UpdateMessageReactionRequest request
+    ) {
+        requireUser(identityUserId);
+        MessageResponse data = chatMessageService.reactMessage(identityUserId, conversationId, messageId, request);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Thả cảm xúc thành công", data)
+        );
+    }
+
+    @DeleteMapping("/conversations/{conversationId}/messages/{messageId}/reaction")
+    public ResponseEntity<ResponseSuccess<MessageResponse>> clearReaction(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String messageId
+    ) {
+        requireUser(identityUserId);
+        MessageResponse data = chatMessageService.clearReaction(identityUserId, conversationId, messageId);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Gỡ cảm xúc thành công", data)
         );
     }
 

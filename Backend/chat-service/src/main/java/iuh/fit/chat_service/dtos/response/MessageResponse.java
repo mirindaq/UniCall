@@ -25,6 +25,7 @@ public class MessageResponse {
     private LocalDateTime timeUpdate;
     private List<Attachment> attachments;
     private Map<String, String> reactions;
+    private Map<String, List<String>> reactionStacks;
     private String replyToMessageId;
     private boolean edited;
     private boolean recalled;
@@ -48,6 +49,7 @@ public class MessageResponse {
                 .timeUpdate(entity.getTimeUpdate())
                 .attachments(entity.getAttachments())
                 .reactions(entity.getReactions())
+                .reactionStacks(entity.getReactionStacks())
                 .replyToMessageId(entity.getReplyToMessageId())
                 .edited(entity.isEdited())
                 .recalled(entity.isRecalled())

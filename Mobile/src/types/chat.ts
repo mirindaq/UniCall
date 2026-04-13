@@ -1,4 +1,4 @@
-export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX';
+export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX' | 'CALL';
 export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI';
 
 export type MessageEnum = 'SENT' | 'RECEIVED' | 'DELETED' | 'FAILED';

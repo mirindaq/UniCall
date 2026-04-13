@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 public class ChatConversationServiceImpl implements ChatConversationService {
 
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+", Pattern.CASE_INSENSITIVE);
+    private static final int MAX_PINNED_CONVERSATIONS = 5;
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
@@ -79,6 +80,7 @@ public class ChatConversationServiceImpl implements ChatConversationService {
             response.setUnreadCount(resolveUnreadCount(conversation.getIdConversation(), identityUserId, readStatusByConversationId));
             responses.add(response);
         }
+        responses.sort(this::compareConversationOrder);
         return responses;
     }
 
@@ -160,7 +162,63 @@ public class ChatConversationServiceImpl implements ChatConversationService {
     }
 
     @Override
+    public ConversationResponse pinConversation(String identityUserId, String conversationId) {
+        if (identityUserId == null || identityUserId.isBlank()) {
+            throw new InvalidParamException("Thiếu người dùng đã xác thực");
+        }
+        if (!StringUtils.hasText(conversationId)) {
+            throw new InvalidParamException("conversationId không hợp lệ");
+        }
+
+        Conversation targetConversation = requireParticipantAndGetConversation(conversationId, identityUserId);
+        List<String> pinnedByAccountIds = targetConversation.getPinnedByAccountIds() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(targetConversation.getPinnedByAccountIds());
+        if (pinnedByAccountIds.contains(identityUserId)) {
+            return toConversationResponse(targetConversation, identityUserId, new HashMap<>());
+        }
+
+        long pinnedCount = conversationRepository.findByParticipantAccount(identityUserId).stream()
+                .filter(conversation -> conversation.getPinnedByAccountIds() != null
+                        && conversation.getPinnedByAccountIds().contains(identityUserId))
+                .count();
+        if (pinnedCount >= MAX_PINNED_CONVERSATIONS) {
+            throw new InvalidParamException("Bạn chỉ có thể ghim tối đa 5 hội thoại");
+        }
+
+        pinnedByAccountIds.add(identityUserId);
+        targetConversation.setPinnedByAccountIds(pinnedByAccountIds);
+        Conversation saved = conversationRepository.save(targetConversation);
+        return toConversationResponse(saved, identityUserId, new HashMap<>());
+    }
+
+    @Override
+    public ConversationResponse unpinConversation(String identityUserId, String conversationId) {
+        if (identityUserId == null || identityUserId.isBlank()) {
+            throw new InvalidParamException("Thiếu người dùng đã xác thực");
+        }
+        if (!StringUtils.hasText(conversationId)) {
+            throw new InvalidParamException("conversationId không hợp lệ");
+        }
+
+        Conversation targetConversation = requireParticipantAndGetConversation(conversationId, identityUserId);
+        List<String> pinnedByAccountIds = targetConversation.getPinnedByAccountIds() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(targetConversation.getPinnedByAccountIds());
+        if (!pinnedByAccountIds.remove(identityUserId)) {
+            return toConversationResponse(targetConversation, identityUserId, new HashMap<>());
+        }
+        targetConversation.setPinnedByAccountIds(pinnedByAccountIds.isEmpty() ? null : pinnedByAccountIds);
+        Conversation saved = conversationRepository.save(targetConversation);
+        return toConversationResponse(saved, identityUserId, new HashMap<>());
+    }
+
+    @Override
     public void requireParticipant(String conversationId, String identityUserId) {
+        requireParticipantAndGetConversation(conversationId, identityUserId);
+    }
+
+    private Conversation requireParticipantAndGetConversation(String conversationId, String identityUserId) {
         if (identityUserId == null || identityUserId.isBlank()) {
             throw new InvalidParamException("Thiếu người dùng đã xác thực");
         }
@@ -174,6 +232,7 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         if (!allowed) {
             throw new InvalidParamException("Bạn không thuộc cuộc hội thoại này");
         }
+        return conversation;
     }
 
     private static Conversation newDirectConversation(String identityUserId, String otherUserId) {
@@ -192,6 +251,7 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         conversation.setLastMessageContent(null);
         conversation.setNumberMember(2);
         conversation.setParticipantInfos(participantInfos);
+        conversation.setPinnedByAccountIds(new ArrayList<>());
         return conversation;
     }
 
@@ -204,6 +264,7 @@ public class ChatConversationServiceImpl implements ChatConversationService {
         if (response == null) {
             return null;
         }
+        response.setPinned(isPinnedByUser(conversation, currentIdentityUserId));
         enrichLastMessageMeta(response, conversation.getIdConversation(), currentIdentityUserId);
         if (conversation.getType() != ConversationType.DOUBLE) {
             return response;
@@ -212,14 +273,25 @@ public class ChatConversationServiceImpl implements ChatConversationService {
             return response;
         }
 
-        String peerIdentityUserId = conversation.getParticipantInfos() == null
+        ParticipantInfo peerParticipant = conversation.getParticipantInfos() == null
                 ? null
                 : conversation.getParticipantInfos().stream()
-                .map(ParticipantInfo::getIdAccount)
-                .filter(id -> id != null && !id.isBlank() && !id.equals(currentIdentityUserId))
+                .filter(participant -> participant != null
+                        && participant.getIdAccount() != null
+                        && !participant.getIdAccount().isBlank()
+                        && !participant.getIdAccount().equals(currentIdentityUserId))
                 .findFirst()
                 .orElse(null);
+        String peerIdentityUserId = peerParticipant == null ? null : peerParticipant.getIdAccount();
         if (peerIdentityUserId == null || peerIdentityUserId.isBlank()) {
+            return response;
+        }
+
+        String peerNickname = peerParticipant.getNickname();
+        if (StringUtils.hasText(peerNickname)) {
+            response.setName(peerNickname.trim());
+        }
+        if (StringUtils.hasText(response.getName()) && StringUtils.hasText(response.getAvatar())) {
             return response;
         }
 
@@ -229,11 +301,39 @@ public class ChatConversationServiceImpl implements ChatConversationService {
                         .orElse(new GrpcUserServiceClient.UserDisplayInfo(key, null))
         );
 
-        response.setName(displayInfo.displayName());
+        if (!StringUtils.hasText(response.getName())) {
+            response.setName(displayInfo.displayName());
+        }
         if (response.getAvatar() == null || response.getAvatar().isBlank()) {
             response.setAvatar(displayInfo.avatar());
         }
         return response;
+    }
+
+    private boolean isPinnedByUser(Conversation conversation, String identityUserId) {
+        if (conversation == null || identityUserId == null || identityUserId.isBlank()) {
+            return false;
+        }
+        return conversation.getPinnedByAccountIds() != null
+                && conversation.getPinnedByAccountIds().contains(identityUserId);
+    }
+
+    private int compareConversationOrder(ConversationResponse left, ConversationResponse right) {
+        if (left == right) {
+            return 0;
+        }
+        if (left == null) {
+            return 1;
+        }
+        if (right == null) {
+            return -1;
+        }
+        if (left.isPinned() != right.isPinned()) {
+            return left.isPinned() ? -1 : 1;
+        }
+        long rightTime = right.getDateUpdateMessage() == null ? Long.MIN_VALUE : right.getDateUpdateMessage().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long leftTime = left.getDateUpdateMessage() == null ? Long.MIN_VALUE : left.getDateUpdateMessage().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        return Long.compare(rightTime, leftTime);
     }
 
     private void enrichLastMessageMeta(

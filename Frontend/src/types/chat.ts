@@ -15,6 +15,8 @@ export interface ChatMessageResponse {
   replyToMessageId?: string
   edited: boolean
   recalled?: boolean
+  reactions?: Record<string, string>
+  reactionStacks?: Record<string, string[]>
   pinned?: boolean
   pinnedByAccountId?: string
   pinnedAt?: string
@@ -98,6 +100,7 @@ export interface ConversationResponse {
   lastMessageContent?: string
   lastMessageSenderId?: string
   unreadCount?: number
+  pinned?: boolean
   numberMember: number
   participantInfos: ChatParticipantInfo[]
 }
@@ -135,6 +138,10 @@ export type AddGroupMembersRequest = {
 
 export type UpdateGroupMemberRoleRequest = {
   role: GroupParticipantRole
+}
+
+export type UpdateMemberNicknameRequest = {
+  nickname?: string
 }
 
 export type TransferGroupAdminRequest = {

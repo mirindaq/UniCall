@@ -12,6 +12,8 @@ public interface ChatConversationService {
     ConversationResponse getOrCreateDirect(String identityUserId, CreateDirectConversationRequest request);
 
     void markConversationAsRead(String identityUserId, String conversationId);
+    ConversationResponse pinConversation(String identityUserId, String conversationId);
+    ConversationResponse unpinConversation(String identityUserId, String conversationId);
 
     void requireParticipant(String conversationId, String identityUserId);
 }

@@ -21,6 +21,7 @@ public class ConversationResponse {
     private String lastMessageContent;
     private String lastMessageSenderId;
     private int unreadCount;
+    private boolean pinned;
     private int numberMember;
     private List<ParticipantInfo> participantInfos;
 
@@ -37,6 +38,7 @@ public class ConversationResponse {
                 .dateUpdateMessage(entity.getDateUpdateMessage())
                 .lastMessageContent(entity.getLastMessageContent())
                 .unreadCount(0)
+                .pinned(false)
                 .numberMember(entity.getNumberMember())
                 .participantInfos(entity.getParticipantInfos())
                 .build();

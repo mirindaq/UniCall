@@ -12,7 +12,7 @@ import { chatSocketService } from '@/services/chat-socket.service';
 import { chatService } from '@/services/chat.service';
 import { userService } from '@/services/user.service';
 import type { MockChatMessage } from '@/mock/chat-thread-messages';
-import type { ChatMessageResponse, ConversationResponse, MessageType } from '@/types/chat';
+import type { ChatAttachment, ChatMessageResponse, ConversationResponse, MessageType } from '@/types/chat';
 
 type UiMessage = {
   idMessage: string;
@@ -21,6 +21,8 @@ type UiMessage = {
   content: string;
   type: MessageType;
   timeSent: string;
+  attachments: ChatAttachment[];
+  recalled: boolean;
   optimisticStatus?: 'SENDING' | 'SENT';
 };
 
@@ -31,6 +33,8 @@ const toUiMessage = (message: ChatMessageResponse): UiMessage => ({
   content: message.content ?? '',
   type: message.type,
   timeSent: message.timeSent,
+  attachments: message.attachments ?? [],
+  recalled: message.recalled ?? false,
 });
 
 const waitForSocketConnected = async (timeoutMs = 5000) => {
@@ -174,9 +178,18 @@ export default function ConversationDetailScreen() {
       return {
         id: message.idMessage,
         sender: isMine ? 'me' : 'other',
-        kind: message.type === 'TEXT' ? 'text' : 'sticker',
+        kind: message.recalled
+          ? 'text'
+          : message.attachments.some((attachment) => attachment.type === 'STICKER')
+            ? 'sticker'
+            : message.attachments.length > 0 || message.type !== 'TEXT'
+              ? 'attachment'
+              : 'text',
         content: message.content || '',
-        senderName: !isMine ? headerTitle : undefined,
+        rawType: message.type,
+        attachments: message.attachments,
+        recalled: message.recalled,
+        senderName: !isMine && (!prev || prev.idAccountSent !== message.idAccountSent) ? headerTitle : undefined,
         timeLabel,
         showAvatar: prev ? prev.idAccountSent !== message.idAccountSent && !isMine : !isMine,
         statusText: isMine && index === lastMineIndex
@@ -187,6 +200,14 @@ export default function ConversationDetailScreen() {
       };
     });
   }, [messages, myIdentityId, headerTitle]);
+
+  const conversationGalleryImages = useMemo(() => {
+    return messages.flatMap((message) =>
+      message.attachments
+        .filter((attachment) => attachment.type === 'IMAGE')
+        .map((attachment) => ({ url: attachment.url }))
+    );
+  }, [messages]);
 
   const handleSendMessage = async (content: string) => {
     if (!conversationId || !myIdentityId) {
@@ -201,6 +222,8 @@ export default function ConversationDetailScreen() {
       content,
       type: 'TEXT',
       timeSent: nowIso,
+      attachments: [],
+      recalled: false,
       optimisticStatus: 'SENDING',
     };
     setMessages((prev) => [...prev, tempMessage]);
@@ -289,6 +312,7 @@ export default function ConversationDetailScreen() {
 
       <ChatDetailContent
         messages={mappedMessages}
+        galleryImages={conversationGalleryImages}
         otherAvatar={avatar}
         otherAvatarUrl={conversation?.avatar ?? null}
         inputPlaceholder="Tin nhắn"

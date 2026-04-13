@@ -25,4 +25,5 @@ public class Conversation {
     private String lastMessageContent;
     private int numberMember;
     private List<ParticipantInfo> participantInfos;
+    private List<String> pinnedByAccountIds;
 }

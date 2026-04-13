@@ -83,6 +83,19 @@ const buildConversationPreview = (message: ChatMessageResponse): string => {
   return normalizeConversationPreviewContent(normalizedContent)
 }
 
+const sortConversationsByPinnedAndTime = (items: ConversationResponse[]): ConversationResponse[] => {
+  return [...items].sort((left, right) => {
+    const leftPinned = Boolean(left.pinned)
+    const rightPinned = Boolean(right.pinned)
+    if (leftPinned !== rightPinned) {
+      return leftPinned ? -1 : 1
+    }
+    const leftTime = left.dateUpdateMessage ? new Date(left.dateUpdateMessage).getTime() : 0
+    const rightTime = right.dateUpdateMessage ? new Date(right.dateUpdateMessage).getTime() : 0
+    return rightTime - leftTime
+  })
+}
+
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
@@ -121,12 +134,13 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
         prev.map((conversation) => [conversation.idConversation, conversation.lastMessageSenderId]),
       )
 
-      return incoming.map((conversation) => ({
+      const normalized = incoming.map((conversation) => ({
         ...conversation,
         lastMessageContent: normalizeConversationPreviewContent(conversation.lastMessageContent),
         lastMessageSenderId:
           conversation.lastMessageSenderId ?? senderByConversationId.get(conversation.idConversation),
       }))
+      return sortConversationsByPinnedAndTime(normalized)
     })
 
     setUnreadCountByConversationId((prev) => {
@@ -233,9 +247,8 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
         lastMessageSenderId: message.idAccountSent,
         dateUpdateMessage: updateAt,
       }
-      next.splice(index, 1)
-      next.unshift(updated)
-      return next
+      next[index] = updated
+      return sortConversationsByPinnedAndTime(next)
     })
 
     if (!found) {

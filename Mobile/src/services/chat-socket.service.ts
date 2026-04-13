@@ -15,6 +15,7 @@ let pendingOnConnectedCallbacks: (() => void)[] = [];
 let pendingOnDisconnectedCallbacks: (() => void)[] = [];
 const userEventListeners = new Set<(event: UserRealtimeEvent) => void>();
 let userEventSubscription: StompSubscription | undefined;
+const MOBILE_CLIENT_TYPE = 'mobile';
 
 const parseMessage = (raw: IMessage): ChatMessageResponse => JSON.parse(raw.body) as ChatMessageResponse;
 const parseUserEvent = (raw: IMessage): UserRealtimeEvent => JSON.parse(raw.body) as UserRealtimeEvent;
@@ -76,6 +77,17 @@ const waitForConnected = async (timeoutMs = 5000) => {
   return false;
 };
 
+const buildSocketAuthHeaders = async (): Promise<Record<string, string>> => {
+  const accessToken = await authTokenStore.get();
+  const headers: Record<string, string> = {
+    'X-Client-Type': MOBILE_CLIENT_TYPE,
+  };
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return headers;
+};
+
 export const chatSocketService = {
   getClient: () => sharedClient,
   waitForConnected,
@@ -94,19 +106,26 @@ export const chatSocketService = {
       return sharedClient;
     }
 
-    const accessToken = await authTokenStore.get();
     const brokerURL = buildChatStompBrokerUrl();
+    let socketHeaders: Record<string, string> = {};
 
     const client = new Client({
+      // RN: always refresh token before each connect/reconnect attempt.
+      beforeConnect: async () => {
+        socketHeaders = await buildSocketAuthHeaders();
+        client.connectHeaders = socketHeaders;
+      },
       webSocketFactory: () => {
         if (Platform.OS === 'web') {
           return new WebSocket(brokerURL);
         }
         const NativeWebSocket = WebSocket as unknown as MobileWebSocketCtor;
         return new NativeWebSocket(brokerURL, [], {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          headers: socketHeaders,
         });
       },
+      // Best practice for React Native WebSocket with STOMP.
+      appendMissingNULLonIncoming: true,
       reconnectDelay: 5000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
@@ -128,6 +147,13 @@ export const chatSocketService = {
       },
       onWebSocketError: (event) => {
         console.error('[mobile chat ws]', event);
+      },
+      onWebSocketClose: (event) => {
+        console.warn('[mobile chat ws] closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
       },
     });
 

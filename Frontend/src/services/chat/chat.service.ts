@@ -14,6 +14,7 @@ import type {
   ForwardMessageResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
+  UpdateMemberNicknameRequest,
 } from "@/types/chat"
 
 const CHAT_API_PREFIX = API_PREFIXES.conversations
@@ -90,6 +91,31 @@ export const chatService = {
     )
     return data
   },
+  reactMessage: async (conversationId: string, messageId: string, reaction: string) => {
+    const { data } = await axiosClient.patch<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reaction`,
+      { reaction },
+    )
+    return data
+  },
+  clearReaction: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reaction`,
+    )
+    return data
+  },
+  pinConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ConversationResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/pin`,
+    )
+    return data
+  },
+  unpinConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ConversationResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/pin`,
+    )
+    return data
+  },
   forwardMessage: async (
     conversationId: string,
     messageId: string,
@@ -147,6 +173,19 @@ export const chatService = {
       ResponseSuccess<ManageGroupParticipantsResponse>
     >(
       `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(memberIdentityUserId)}/role`,
+      payload
+    )
+    return response.data
+  },
+  updateMemberNickname: async (
+    conversationId: string,
+    memberIdentityUserId: string,
+    payload: UpdateMemberNicknameRequest
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.patch<
+      ResponseSuccess<ManageGroupParticipantsResponse>
+    >(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(memberIdentityUserId)}/nickname`,
       payload
     )
     return response.data

@@ -91,6 +91,7 @@ const GIFS = [
 const SEARCH_PAGE_SIZE = 12
 const SEARCH_DEBOUNCE_MS = 500
 const SEARCH_FILES_PREVIEW_LIMIT = 8
+const MESSAGE_REACTIONS = ["👍", "❤️", "😆", "😮", "😭", "😡"] as const
 
 type ForwardTab = "recent" | "groups" | "friends"
 
@@ -521,16 +522,8 @@ export default function ChatWindow() {
     if (msg.idConversation !== selectedIdRef.current) {
       return
     }
-    setSocketExtras((prev) => {
-      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
-      if (i >= 0) {
-        const next = [...prev]
-        next[i] = msg
-        return next
-      }
-      pendingScrollToBottomRef.current = true
-      return [...prev, msg]
-    })
+    const existsInApi = apiMessages.some((item) => item.idMessage === msg.idMessage)
+
     setApiMessages((prev) => {
       const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
       if (i < 0) {
@@ -540,7 +533,21 @@ export default function ChatWindow() {
       next[i] = msg
       return next
     })
-  }, [onRealtimeMessage])
+
+    setSocketExtras((prev) => {
+      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
+      if (i >= 0) {
+        const next = [...prev]
+        next[i] = msg
+        return next
+      }
+      if (existsInApi) {
+        return prev
+      }
+      pendingScrollToBottomRef.current = true
+      return [...prev, msg]
+    })
+  }, [apiMessages, onRealtimeMessage])
 
   useChatSocket({
     autoConnect: true,
@@ -1482,7 +1489,8 @@ export default function ChatWindow() {
     replyToMessageId?: string | null,
   ) => {
     const normalized = content.trim()
-    if (!normalized || !selectedConversationId || !currentUserId) {
+    const hasAttachments = (attachments?.length ?? 0) > 0
+    if ((!normalized && !hasAttachments) || !selectedConversationId || !currentUserId) {
       return
     }
 
@@ -1631,7 +1639,7 @@ export default function ChatWindow() {
     let messageType: ChatMessageResponse["type"] = "NONTEXT"
 
     if (attachmentType === "IMAGE") {
-      messageContent = "Đã gửi hình ảnh"
+      messageContent = ""
     } else if (attachmentType === "VIDEO") {
       messageContent = "Đã gửi video"
     } else if (attachmentType === "GIF") {
@@ -1710,7 +1718,7 @@ export default function ChatWindow() {
           const mixedText = draftText.trim()
           const hasMixedText = mixedText.length > 0
           await sendMessage(
-            hasMixedText ? mixedText : "Đã gửi hình ảnh",
+            hasMixedText ? mixedText : "",
             hasMixedText ? "MIX" : "NONTEXT",
             uploadedAttachments,
             replyingTo?.idMessage,
@@ -1754,14 +1762,6 @@ export default function ChatWindow() {
         oversizedCount === 1
           ? "Có 1 file vượt quá 25MB nên không gửi được"
           : `Có ${oversizedCount} file vượt quá 25MB nên không gửi được`,
-      )
-    }
-
-    if (successCount > 0) {
-      toast.success(
-        successCount === 1
-          ? "Gửi file thành công"
-          : `Gửi thành công ${successCount} file`,
       )
     }
 
@@ -2057,6 +2057,24 @@ export default function ChatWindow() {
       }
     },
     [mergeIncomingOrUpdatedMessage, selectedConversationId, selectedPinnedMessageId, selectedReplyTargetMessageId],
+  )
+
+  const handleReactMessage = useCallback(
+    async (msg: ChatMessageResponse, reaction: string | null) => {
+      if (!selectedConversationId || !currentUserId) {
+        return
+      }
+      try {
+        const shouldClear = reaction == null
+        const response = shouldClear
+          ? await chatService.clearReaction(selectedConversationId, msg.idMessage)
+          : await chatService.reactMessage(selectedConversationId, msg.idMessage, reaction)
+        mergeIncomingOrUpdatedMessage(response.data)
+      } catch {
+        toast.error("Không cập nhật được cảm xúc")
+      }
+    },
+    [currentUserId, mergeIncomingOrUpdatedMessage, selectedConversationId],
   )
 
   const closeForwardDialog = useCallback(() => {
@@ -2682,6 +2700,19 @@ export default function ChatWindow() {
                   const hasMultiImageAttachments = imageAttachments.length > 1
                   const isCallMessage = msg.type === "CALL" && msg.callInfo != null
                   const callCard = isCallMessage ? buildCallMessageCard(msg, currentUserId) : null
+                  const reactionStacks = msg.reactionStacks ?? {}
+                  const hasReactionStacks = Object.keys(reactionStacks).length > 0
+                  const flattenedReactions = hasReactionStacks
+                    ? Object.values(reactionStacks).flat().filter((reaction) => typeof reaction === "string" && reaction.trim().length > 0)
+                    : Object.values(msg.reactions ?? {})
+                  const reactionCounts = flattenedReactions.reduce<Record<string, number>>((acc, reaction) => {
+                    acc[reaction] = (acc[reaction] ?? 0) + 1
+                    return acc
+                  }, {})
+                  const reactionSummary = Object.entries(reactionCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                  const totalReactionCount = flattenedReactions.length
 
                   const replyParent = msg.replyToMessageId
                     ? (messageById.get(msg.replyToMessageId) ?? replyTargetCache[msg.replyToMessageId])
@@ -2714,12 +2745,12 @@ export default function ChatWindow() {
                           <AvatarFallback>{senderName.slice(0, 2)}</AvatarFallback>
                         </Avatar>
                       )}
-                      <div
-                        className={cn(
-                          "flex max-w-[min(70%,28rem)] items-end gap-2",
-                          isMe ? "flex-row-reverse" : "flex-row",
-                        )}
-                      >
+                        <div
+                          className={cn(
+                            "flex max-w-[min(78%,36rem)] items-end gap-2",
+                            isMe ? "flex-row-reverse" : "flex-row",
+                          )}
+                        >
                         {multiSelectActive ? (
                           <button
                             type="button"
@@ -2986,6 +3017,12 @@ export default function ChatWindow() {
                             <span className="mt-1 text-[11px] text-muted-foreground">
                               {formatChatMessageTime(msg.timeSent)}
                             </span>
+                            {totalReactionCount > 0 ? (
+                              <div className="mt-1 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                                <span>{reactionSummary.map(([emoji]) => emoji).join(" ")}</span>
+                                <span>{totalReactionCount}</span>
+                              </div>
+                            ) : null}
                           </div>
 
                           {!msg.recalled && !multiSelectActive && !isCallMessage ? (
@@ -2995,6 +3032,33 @@ export default function ChatWindow() {
                                 "pointer-events-none group-hover/msg:pointer-events-auto",
                               )}
                             >
+                              <div className="mr-1 flex items-center rounded-full border bg-background px-1 py-0.5 shadow-sm">
+                                {MESSAGE_REACTIONS.map((emoji) => (
+                                  <button
+                                    key={`quick-react-${msg.idMessage}-${emoji}`}
+                                    type="button"
+                                    className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-muted"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void handleReactMessage(msg, emoji)
+                                    }}
+                                    title={`Thả cảm xúc ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                                <button
+                                  type="button"
+                                  className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleReactMessage(msg, null)
+                                  }}
+                                  title="Gỡ cảm xúc"
+                                >
+                                  <X className="size-4" />
+                                </button>
+                              </div>
                               <Button
                                 type="button"
                                 variant="secondary"

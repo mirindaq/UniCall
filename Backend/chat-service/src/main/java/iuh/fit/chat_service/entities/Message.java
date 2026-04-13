@@ -30,6 +30,7 @@ public class Message {
     private LocalDateTime timeUpdate;
     private List<Attachment> attachments;
     private Map<String, String> reactions;
+    private Map<String, List<String>> reactionStacks;
     private String replyToMessageId;
     private boolean isEdited;
     private List<String> editHistory;
