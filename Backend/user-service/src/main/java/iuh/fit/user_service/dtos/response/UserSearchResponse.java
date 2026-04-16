@@ -17,7 +17,7 @@ public class UserSearchResponse {
     public static UserSearchResponse from(User user) {
         String firstName = user.getFirstName() == null ? "" : user.getFirstName().trim();
         String lastName = user.getLastName() == null ? "" : user.getLastName().trim();
-        String fullName = (firstName + " " + lastName).trim();
+        String fullName = (lastName + " " + firstName).trim();
 
         return UserSearchResponse.builder()
                 .identityUserId(user.getIdentityUserId())

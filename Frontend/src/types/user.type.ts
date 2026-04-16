@@ -2,12 +2,21 @@ export type UserProfile = {
   id: number
   identityUserId: string
   phoneNumber: string
+  email: string
   firstName: string
   lastName: string
   gender: string
   dateOfBirth: string
   avatar?: string | null
   isActive: boolean
+  allowFriendInvites?: boolean
+}
+
+export type UpdateMyProfileRequest = {
+  firstName: string
+  lastName: string
+  gender: string
+  dateOfBirth: string
 }
 
 export type UserSearchItem = {
@@ -25,4 +34,26 @@ export type UserSearchQuery = {
   limit?: number
   sortBy?: string
   search?: string
+}
+
+export type FriendInvitePrivacy = {
+  allowFriendInvites: boolean
+}
+
+export type PhoneSearchPrivacy = {
+  allowPhoneSearch: boolean
+}
+
+export type RequestAccountDeletionPayload = {
+  phoneNumber: string
+  reason: string
+  password: string
+}
+
+export type AccountDeletionStatus = {
+  deletionPending: boolean
+  deletionRequestedAt: string | null
+  pendingDays: number
+  remainingDays: number
+  deletionReason: string | null
 }

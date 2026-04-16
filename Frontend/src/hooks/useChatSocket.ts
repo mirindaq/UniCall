@@ -1,43 +1,54 @@
 import { useEffect, useRef } from "react"
 
+import { useAuth } from "@/contexts/auth-context"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
-import { authTokenStore } from "@/stores/auth-token.store"
-import type { ChatMessageResponse } from "@/types/chat"
+import type { UserRealtimeEvent } from "@/types/chat"
 
 type Options = {
-  /** Kết nối khi có access token. Mặc định true. */
+  /** Kết nối khi có phiên đăng nhập. Mặc định true. */
   autoConnect?: boolean
-  conversationId?: string
-  onMessage?: (message: ChatMessageResponse) => void
+  onUserEvent?: (event: UserRealtimeEvent) => void
 }
 
 /**
  * Hook kết nối STOMP (WebSocket) chat qua API Gateway.
- * `authTokenStore` không trigger re-render: sau login, mount lại component hoặc đổi `key` để kết nối lại.
+ * Tự kết nối theo trạng thái đăng nhập từ AuthContext.
  */
-export function useChatSocket({ autoConnect = true, conversationId, onMessage }: Options = {}) {
-  const onMessageRef = useRef(onMessage)
+export function useChatSocket({
+  autoConnect = true,
+  onUserEvent,
+}: Options = {}) {
+  const { isAuthenticated } = useAuth()
+  const onUserEventRef = useRef(onUserEvent)
 
   useEffect(() => {
-    onMessageRef.current = onMessage
-  }, [onMessage])
+    onUserEventRef.current = onUserEvent
+  }, [onUserEvent])
 
   useEffect(() => {
-    if (!autoConnect || !conversationId || !authTokenStore.get()) {
+    if (!autoConnect || !onUserEventRef.current || !isAuthenticated) {
       return
     }
 
-    let subscription: ReturnType<typeof chatSocketService.subscribeConversation>
-
-    chatSocketService.connect(() => {
-      subscription = chatSocketService.subscribeConversation(conversationId, (msg) =>
-        onMessageRef.current?.(msg)
+    let userQueueSubscription: ReturnType<typeof chatSocketService.subscribeUserEvents>
+    const handleConnected = () => {
+      userQueueSubscription = chatSocketService.subscribeUserEvents((event) =>
+        onUserEventRef.current?.(event)
       )
-    })
+    }
+    const handleDisconnected = () => {
+      userQueueSubscription?.unsubscribe()
+      userQueueSubscription = undefined
+    }
+
+    chatSocketService.connect(handleConnected, handleDisconnected)
 
     return () => {
-      subscription?.unsubscribe()
-      chatSocketService.disconnect()
+      userQueueSubscription?.unsubscribe()
+      chatSocketService.disconnect({
+        onConnected: handleConnected,
+        onDisconnected: handleDisconnected,
+      })
     }
-  }, [autoConnect, conversationId])
+  }, [autoConnect, isAuthenticated])
 }

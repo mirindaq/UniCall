@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -26,6 +27,9 @@ public class User {
     @Column(nullable = false, unique = true, length = 20)
     private String phoneNumber;
 
+    @Column(nullable = false, unique = true, length = 255)
+    private String email;
+
     @Column(nullable = false, length = 100)
     private String firstName;
 
@@ -44,4 +48,22 @@ public class User {
     @Column(nullable = false)
     @Builder.Default
     private Boolean isActive = true;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deletionPending = false;
+
+    @Column
+    private LocalDateTime deletionRequestedAt;
+
+    @Column(length = 500)
+    private String deletionReason;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean allowFriendInvites = true;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean allowPhoneSearch = true;
 }

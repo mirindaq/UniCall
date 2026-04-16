@@ -3,27 +3,6 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-@font-face {
-  font-family: 'Gilroy';
-  src: url('/fonts/Gilroy-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Gilroy';
-  src: url('/fonts/Gilroy-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Gilroy';
-  src: url('/fonts/Gilroy-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -60,7 +39,7 @@
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
     --footer-bg: #f8f9fa;
-    --font-gilroy: 'Gilroy', sans-serif;
+    --font-gilroy: "Inter Variable", "Inter", sans-serif;
 }
 
 .dark {

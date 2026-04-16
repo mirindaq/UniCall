@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class FriendRequestResponse {
     private String idFriendRequest;
     private String idAccountSent;
+    private String idAccountReceive;
     private String pathAvartar;
     private String firstNameSender;
     private String lastNameSender;

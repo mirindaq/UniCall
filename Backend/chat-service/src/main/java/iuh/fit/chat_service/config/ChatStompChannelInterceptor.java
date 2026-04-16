@@ -11,6 +11,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.security.Principal;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,6 +21,9 @@ import java.util.regex.Pattern;
 public class ChatStompChannelInterceptor implements ChannelInterceptor {
     private static final Pattern CONVERSATION_TOPIC =
             Pattern.compile("^/topic/conversations\\.([^.]+)\\.messages$");
+    private static final Pattern CONVERSATION_CALL_TOPIC =
+            Pattern.compile("^/topic/conversations\\.([^.]+)\\.calls$");
+    private static final String USER_EVENT_QUEUE = "/user/queue/events";
 
     private final ChatConversationService chatConversationService;
 
@@ -31,7 +35,33 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
         }
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-            requireUserId(accessor);
+            String userId = null;
+            
+            // Try Authorization from STOMP CONNECT headers (web)
+            String authorization = accessor.getFirstNativeHeader("Authorization");
+            if (authorization != null && authorization.startsWith("Bearer ")) {
+                userId = extractUserIdFromToken(authorization.substring(7));
+            }
+            
+            // Fallback to session userId from handshake (mobile query param)
+            if (userId == null || userId.isBlank()) {
+                userId = getSessionUserId(accessor);
+            }
+            
+            if (userId == null || userId.isBlank()) {
+                throw new InvalidParamException("Thiếu authentication: không có Authorization header hoặc session userId");
+            }
+            
+            // Set userId in session for subsequent frames
+            Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
+            if (sessionAttrs != null) {
+                sessionAttrs.put(ChatWsConstants.USER_ID_SESSION_ATTR, userId);
+            }
+            
+            if (accessor.getUser() == null) {
+                final String finalUserId = userId;
+                accessor.setUser(() -> finalUserId);
+            }
             return message;
         }
 
@@ -41,11 +71,17 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
             if (dest == null) {
                 throw new InvalidParamException("Thiếu destination STOMP");
             }
-            Matcher matcher = CONVERSATION_TOPIC.matcher(dest);
-            if (!matcher.matches()) {
+            Matcher messageMatcher = CONVERSATION_TOPIC.matcher(dest);
+            Matcher callMatcher = CONVERSATION_CALL_TOPIC.matcher(dest);
+            if (USER_EVENT_QUEUE.equals(dest)) {
+                return message;
+            }
+            boolean isMessageTopic = messageMatcher.matches();
+            boolean isCallTopic = callMatcher.matches();
+            if (!isMessageTopic && !isCallTopic) {
                 throw new InvalidParamException("Destination subscribe không hợp lệ");
             }
-            String conversationId = matcher.group(1);
+            String conversationId = isMessageTopic ? messageMatcher.group(1) : callMatcher.group(1);
             chatConversationService.requireParticipant(conversationId, userId);
             return message;
         }
@@ -59,14 +95,51 @@ public class ChatStompChannelInterceptor implements ChannelInterceptor {
     }
 
     private static String requireUserId(StompHeaderAccessor accessor) {
-        Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
-        if (sessionAttrs == null) {
-            throw new InvalidParamException("Thiếu session WebSocket");
+        Principal principal = accessor.getUser();
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return principal.getName();
         }
-        Object raw = sessionAttrs.get(ChatWsConstants.USER_ID_SESSION_ATTR);
-        if (!(raw instanceof String userId) || userId.isBlank()) {
+
+        String userId = getSessionUserId(accessor);
+        if (userId == null || userId.isBlank()) {
             throw new InvalidParamException("Thiếu user trên phiên chat");
         }
         return userId;
+    }
+    
+    private static String getSessionUserId(StompHeaderAccessor accessor) {
+        Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
+        if (sessionAttrs == null) {
+            return null;
+        }
+        Object raw = sessionAttrs.get(ChatWsConstants.USER_ID_SESSION_ATTR);
+        return (raw instanceof String userId && !userId.isBlank()) ? userId : null;
+    }
+    
+    private static String extractUserIdFromToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
+            
+            String payloadJson = new String(
+                java.util.Base64.getUrlDecoder().decode(parts[1]),
+                java.nio.charset.StandardCharsets.UTF_8
+            );
+            
+            int subKey = payloadJson.indexOf("\"sub\"");
+            if (subKey < 0) return null;
+            
+            int colon = payloadJson.indexOf(':', subKey);
+            int firstQuote = payloadJson.indexOf('"', colon + 1);
+            int secondQuote = payloadJson.indexOf('"', firstQuote + 1);
+            if (colon < 0 || firstQuote < 0 || secondQuote < 0) return null;
+            
+            return payloadJson.substring(firstQuote + 1, secondQuote);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

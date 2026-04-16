@@ -2,24 +2,56 @@ spring:
   application:
     name: chat-service
 
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
   data:
     mongodb:
-      host: localhost
-      port: 27017
-      database: unicall_chat_service
+      # host: localhost
+      # port: 27017
+      # database: unicall_chat_service
+      uri: mongodb://localhost:27017/unicall_chat_service
       auto-index-creation: true
 
 server:
   port: 8083
-  servlet:
-    context-path: /chat-service
 
 api:
   prefix: /api/v1
 
 app:
   websocket:
-    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
+  ai-assistant:
+    enabled: ${AI_ASSISTANT_ENABLED:true}
+    base-url: ${AI_ASSISTANT_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+    text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-flash}
+    image-model: ${AI_ASSISTANT_IMAGE_MODEL:gemini-2.5-flash-image}
+    api-key: ${AI_ASSISTANT_API_KEY:}
+    text-system-prompt: ${AI_ASSISTANT_TEXT_SYSTEM_PROMPT:Bạn là UniCall AI, trả lời hữu ích, lịch sự bằng tiếng Việt.}
+    image-system-prompt: ${AI_ASSISTANT_IMAGE_SYSTEM_PROMPT:Bạn là UniCallImage, tạo mô tả ảnh ngắn gọn bằng tiếng Việt.}
+    connect-timeout-ms: ${AI_ASSISTANT_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${AI_ASSISTANT_READ_TIMEOUT_MS:30000}
+
+grpc:
+  client:
+    user-service:
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
+      negotiationType: plaintext
+    friend-service:
+      address: ${FRIEND_SERVICE_GRPC_ADDRESS:static://localhost:9098}
+      negotiationType: plaintext
+    file-service:
+      address: ${FILE_SERVICE_GRPC_ADDRESS:static://localhost:9097}
+      negotiationType: plaintext
+  user-service:
+    deadline-ms: ${USER_SERVICE_GRPC_DEADLINE_MS:5000}
+  friend-service:
+    deadline-ms: ${FRIEND_SERVICE_GRPC_DEADLINE_MS:5000}
+  file-service:
+    deadline-ms: ${FILE_SERVICE_GRPC_DEADLINE_MS:10000}
 
 eureka:
   client:

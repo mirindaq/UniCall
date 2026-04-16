@@ -16,8 +16,8 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
-    @Value("${app.security.cors.allowed-origins:http://localhost:5173}")
-    private String allowedOrigins;
+    @Value("${app.security.cors.allowed-origin-patterns:*}")
+    private String allowedOriginPatterns;
 
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
@@ -26,7 +26,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(auth -> auth
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .pathMatchers("/actuator/health", "/api-gateway/identity-service/api/v1/auth/**").permitAll()
+                        .pathMatchers("/actuator/health", "/api/v1/auth/**").permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .build();
@@ -34,13 +34,13 @@ public class SecurityConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        CorsConfiguration configuration = new CorsConfiguration();  
+        List<String> originPatterns = Arrays.stream(allowedOriginPatterns.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .toList();
 
-        configuration.setAllowedOrigins(origins);
+        configuration.setAllowedOriginPatterns(originPatterns);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Set-Cookie", "X-User-Id", "X-User-Role"));

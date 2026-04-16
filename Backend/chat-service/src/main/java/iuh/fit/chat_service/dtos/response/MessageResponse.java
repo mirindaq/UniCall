@@ -1,6 +1,7 @@
 package iuh.fit.chat_service.dtos.response;
 
 import iuh.fit.chat_service.entities.Attachment;
+import iuh.fit.chat_service.entities.CallMessageInfo;
 import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.enums.MessageEnum;
 import iuh.fit.chat_service.enums.MessageType;
@@ -24,8 +25,14 @@ public class MessageResponse {
     private LocalDateTime timeUpdate;
     private List<Attachment> attachments;
     private Map<String, String> reactions;
+    private Map<String, List<String>> reactionStacks;
     private String replyToMessageId;
     private boolean edited;
+    private boolean recalled;
+    private boolean pinned;
+    private String pinnedByAccountId;
+    private LocalDateTime pinnedAt;
+    private CallMessageInfo callInfo;
 
     public static MessageResponse from(Message entity) {
         if (entity == null) {
@@ -42,8 +49,14 @@ public class MessageResponse {
                 .timeUpdate(entity.getTimeUpdate())
                 .attachments(entity.getAttachments())
                 .reactions(entity.getReactions())
+                .reactionStacks(entity.getReactionStacks())
                 .replyToMessageId(entity.getReplyToMessageId())
                 .edited(entity.isEdited())
+                .recalled(entity.isRecalled())
+                .pinned(entity.isPinned())
+                .pinnedByAccountId(entity.getPinnedByAccountId())
+                .pinnedAt(entity.getPinnedAt())
+                .callInfo(entity.getCallInfo())
                 .build();
     }
 }

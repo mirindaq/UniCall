@@ -2,6 +2,7 @@ package iuh.fit.identity_service.dtos.request.auth;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -24,6 +25,10 @@ public class RegisterRequest {
             message = "Phone number must be valid Vietnam format"
     )
     private String phoneNumber;
+
+    @NotBlank(message = "Email is required")
+    @Size(max = 255, message = "Email cannot exceed 255 characters")
+    private String email;
 
     @NotBlank(message = "First name is required")
     @Size(max = 100, message = "First name cannot exceed 100 characters")

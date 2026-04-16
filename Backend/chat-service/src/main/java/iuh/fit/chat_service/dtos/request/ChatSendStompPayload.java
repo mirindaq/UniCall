@@ -11,4 +11,5 @@ public class ChatSendStompPayload {
     private String content;
     private MessageType type = MessageType.TEXT;
     private List<MessageAttachmentRequest> attachments;
+    private String replyToMessageId;
 }

@@ -2,53 +2,46 @@ import { useEffect, useState, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { Navigate } from "react-router"
 
-import { AUTH_PATH } from "@/constants/auth"
 import { USER_PATH } from "@/constants/user"
+import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
-import { authTokenStore } from "@/stores/auth-token.store"
+import { userService } from "@/services/user/user.service"
 
 interface GuestRouteProps {
   children: ReactNode
 }
 
 export default function GuestRoute({ children }: GuestRouteProps) {
-  const [loading, setLoading] = useState(() => !authTokenStore.get());
-  const [authenticated, setAuthenticated] = useState(() => Boolean(authTokenStore.get()));
+  const { isAuthenticated, setAuthenticated, clearAuthenticated } = useAuth()
+  const [loading, setLoading] = useState(() => !isAuthenticated)
 
   useEffect(() => {
-    let mounted = true;
-    if (authTokenStore.get()) {
-      if (!authenticated) setAuthenticated(true);
-      if (loading) setLoading(false);
-      return;
+    let mounted = true
+
+    if (isAuthenticated) {
+      setLoading(false)
+      return
     }
 
     authService.refreshAccessToken()
-      .then((response) => {
-        const token = response.data.accessToken;
-        if (!token) throw new Error("Missing access token");
-        authTokenStore.set(token);
+      .then(async () => {
+        const profile = await userService.getMyProfile()
+        setAuthenticated(profile.data.identityUserId)
         if (mounted) {
-          setAuthenticated(true);
+          setLoading(false)
         }
       })
       .catch(() => {
-        authTokenStore.clear();
+        clearAuthenticated()
         if (mounted) {
-          setAuthenticated(false);
+          setLoading(false)
         }
       })
-      .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
 
     return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      mounted = false
+    }
+  }, [clearAuthenticated, isAuthenticated, setAuthenticated])
 
   if (loading) {
     return (
@@ -58,12 +51,12 @@ export default function GuestRoute({ children }: GuestRouteProps) {
           Dang kiem tra phien dang nhap...
         </div>
       </main>
-    );
+    )
   }
 
-  if (authenticated) {
-    return <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />;
+  if (isAuthenticated) {
+    return <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />
   }
 
-  return <>{children}</>;
+  return <>{children}</>
 }
