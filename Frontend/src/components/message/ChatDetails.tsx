@@ -26,14 +26,15 @@ export default function ChatDetails() {
 
   const [currentView, setCurrentView] = useState<"main" | "storage">("main")
   const [activeStorageTab, setActiveStorageTab] = useState<"images" | "files" | "links">("images")
+  const [isBlocked, setIsBlocked] = useState(false)
 
   const handleOpenStorage = (tab: "images" | "files" | "links") => {
     setActiveStorageTab(tab)
     setCurrentView("storage")
   }
 
-  if (selectedConversation && detailsView === "search") {
-    return <ChatSearchSidebar />
+  const handleBlockStatusChange = (blocked: boolean) => {
+    setIsBlocked(blocked)
   }
 
   if (currentView === "storage") {
@@ -110,10 +111,8 @@ export default function ChatDetails() {
       title={title}
       avatarSrc={avatarSrc}
       avatarFallback={fallback}
-      isGroup={selectedConversation.type === "GROUP"}
-      canDissolveGroup={canDissolveGroup}
-      onLeaveGroup={handleLeaveGroupFromInfo}
-      onDissolveGroup={handleDissolveGroupFromInfo}
+      peerId={selectedPeerProfile?.identityUserId}
+      onBlockStatusChange={handleBlockStatusChange}
     />
   )
 }

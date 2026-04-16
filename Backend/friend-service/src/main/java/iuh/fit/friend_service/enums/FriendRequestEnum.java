@@ -4,5 +4,5 @@ public enum FriendRequestEnum {
     SENT,
     ACCEPTED,
     REJECTED,
-    CANCELED
+    CANCELLED
 }

@@ -116,8 +116,10 @@ export function SearchUserAccountDialog({
       friendRequestService.createFriendRequest({
         idAccountSent: currentIdentityUserId ?? "",
         idAccountReceive: selectedUser?.identityUserId ?? "",
-        firstName: myFirstName ?? "",
-        lastName: myLastName ?? "",
+        firstNameSender: myFirstName ?? "",
+        lastNameSender: myLastName ?? "",
+        firstNameReceiver: selectedUser?.firstName ?? "",
+        lastNameReceiver: selectedUser?.lastName ?? "",
         content: friendRequestMessage,
       }),
     {

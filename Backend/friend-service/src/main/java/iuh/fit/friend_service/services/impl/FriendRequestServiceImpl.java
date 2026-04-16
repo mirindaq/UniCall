@@ -40,6 +40,7 @@ public class FriendRequestServiceImpl implements FriendRequestService {
         }
         FriendRequest friendRequest = friendRequestMapper.toFriendRequest(friendRequestCreateRequest);
         friendRequest.setStatus(FriendRequestEnum.SENT);
+        System.out.println("friend request: " + friendRequest.toString());
         FriendRequest friendRequestCreated = friendRequestRepository.save(friendRequest);
         return friendRequestCreated.getIdFriendRequest();
     }

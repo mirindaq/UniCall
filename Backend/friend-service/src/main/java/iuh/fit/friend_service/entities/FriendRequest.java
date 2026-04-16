@@ -32,10 +32,12 @@ public class FriendRequest {
     private String pathAvartar = "";
     @NotNull
     @Size(max = 40)
-    private String firstName;
+    private String firstNameSender;
     @NotNull
     @Size(max = 40)
-    private String lastName;
+    private String lastNameSender;
+    private String firstNameReceiver;
+    private String lastNameReceiver;
     private String content = "";
     private LocalDateTime timeRequest;
     @Enumerated(EnumType.STRING)
