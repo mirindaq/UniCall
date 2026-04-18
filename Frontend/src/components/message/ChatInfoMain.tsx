@@ -9,13 +9,11 @@
   EyeOff,
   HelpCircle,
   Link as LinkIcon,
-  Lock,
+  LogOut,
   Pin,
   Trash2,
   Users,
-  Eye,
 } from "lucide-react"
-import { useState, useCallback, useEffect } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
@@ -36,21 +34,26 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
-import { toast } from "sonner"
-import {
-  messageInfoPreviewFiles,
-  messageInfoPreviewLinks,
-} from "@/mock/message-data"
-import { relationshipService } from "@/services/relationship/relationship.service"
-import { userService } from "@/services/user/user.service"
+import { useChatPage } from "@/contexts/ChatPageContext"
+import { useMutation } from "@/hooks/useMutation"
+import { useQuery } from "@/hooks/useQuery"
+import { chatService } from "@/services/chat/chat.service"
+import { fileService, type AttachmentResponse } from "@/services/file/file.service"
+import { formatChatSidebarTime } from "@/utils/chat-display.util"
+import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
+import { extractUrlsFromText, getDomainFromUrl } from "@/utils/link-display.util"
+
+import ImageGalleryViewer, { type ImageViewerItem } from "./ImageGalleryViewer"
 
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
   title: string
   avatarSrc?: string
   avatarFallback: string
-  peerId?: string
-  onBlockStatusChange?: (isBlocked: boolean) => void
+  isGroup?: boolean
+  canDissolveGroup?: boolean
+  onLeaveGroup?: () => Promise<void>
+  onDissolveGroup?: () => Promise<void>
 }
 
 interface SectionProps {
@@ -91,8 +94,9 @@ function CollapsibleSection({
       >
         <h4 className="text-sm font-medium text-foreground">{title}</h4>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""
-            }`}
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
         />
       </button>
 
@@ -106,31 +110,213 @@ export default function ChatInfoMain({
   title,
   avatarSrc,
   avatarFallback,
-  peerId,
-  onBlockStatusChange,
+  isGroup = false,
+  canDissolveGroup = false,
+  onLeaveGroup,
+  onDissolveGroup,
 }: ChatInfoMainProps) {
   const [openSections, setOpenSections] = useState({
     images: true,
     files: true,
     links: true,
     security: true,
-    management: false,
   })
-  const [relationshipTypes, setRelationshipTypes] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false)
+  const [isDissolveDialogOpen, setIsDissolveDialogOpen] = useState(false)
+  const [isLeavingGroup, setIsLeavingGroup] = useState(false)
+  const [isDissolvingGroup, setIsDissolvingGroup] = useState(false)
+  const [imagesPreview, setImagesPreview] = useState<AttachmentResponse[]>([])
+  const [filesPreview, setFilesPreview] = useState<AttachmentResponse[]>([])
+  const [linksPreview, setLinksPreview] = useState<LinkPreviewItem[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [allImageAttachments, setAllImageAttachments] = useState<AttachmentResponse[]>([])
+  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
+  const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false)
+  const [nicknameDraft, setNicknameDraft] = useState("")
+  const [isSavingNickname, setIsSavingNickname] = useState(false)
+  const [isPinningConversation, setIsPinningConversation] = useState(false)
 
-  // Load current user ID on mount
+  const { selectedConversationId, selectedConversation, currentUserId, refetchConversations } = useChatPage()
+
+  const directPeer = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId) ?? null
+    )
+  }, [currentUserId, selectedConversation])
+
+  const canManageBlockMessaging = Boolean(selectedConversationId) && selectedConversation?.type === "DOUBLE"
+  const {
+    data: blockStatusResponse,
+    isLoading: isLoadingBlockStatus,
+    refetch: refetchBlockStatus,
+  } = useQuery(
+    () => chatService.getConversationBlockStatus(selectedConversationId as string),
+    {
+      enabled: canManageBlockMessaging,
+      deps: [selectedConversationId, selectedConversation?.type],
+      onError: () => {
+        toast.error("Không thể tải trạng thái chặn nhắn tin.")
+      },
+    },
+  )
+  const blockStatus = blockStatusResponse?.data ?? null
+
+  const { mutate: mutateBlockMessaging, isLoading: isTogglingBlock } = useMutation(
+    () => {
+      if (!selectedConversationId) {
+        throw new Error("Missing conversation id")
+      }
+      return blockStatus?.blockedByMe
+        ? chatService.unblockConversation(selectedConversationId)
+        : chatService.blockConversation(selectedConversationId)
+    },
+    {
+      onSuccess: () => {
+        void refetchBlockStatus()
+        if (selectedConversationId) {
+          window.dispatchEvent(
+            new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
+              detail: { conversationId: selectedConversationId },
+            }),
+          )
+        }
+        toast.success(blockStatus?.blockedByMe ? "Đã bỏ chặn nhắn tin." : "Đã chặn nhắn tin.")
+      },
+      onError: (error: unknown) => {
+        const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        toast.error(backendMessage || "Cập nhật trạng thái chặn thất bại.")
+      },
+    },
+  )
+
   useEffect(() => {
-    const loadCurrentUser = async () => {
+    if (!isNicknameDialogOpen) {
+      return
+    }
+    setNicknameDraft(directPeer?.nickname?.trim() ?? "")
+  }, [directPeer, isNicknameDialogOpen])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setImagesPreview([])
+      setAllImageAttachments([])
+      setFilesPreview([])
+      setLinksPreview([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadPreviews = async () => {
+      setPreviewLoading(true)
       try {
-        const res = await userService.getMyProfile()
-        setCurrentUserId(res.data.identityUserId)
+        const [imagesRes, filesRes, linksRes] = await Promise.all([
+          fileService.getAttachments(selectedConversationId, "images"),
+          fileService.getAttachments(selectedConversationId, "files"),
+          fileService.getAttachments(selectedConversationId, "links"),
+        ])
+
+        let linksCollected: LinkPreviewItem[] = (linksRes.data ?? [])
+          .filter((attachment) => attachment.type === "LINK" && !!attachment.url)
+          .map((attachment) => ({
+            id: attachment.idAttachment,
+            url: attachment.url,
+            domain: getDomainFromUrl(attachment.url),
+            timeSent: attachment.timeUpload,
+          }))
+
+        if (linksCollected.length === 0) {
+          linksCollected = []
+          let page = 1
+          let totalPage = 1
+
+          do {
+            const messagesRes = await chatService.listMessages(selectedConversationId, page, LINK_PAGE_LIMIT)
+            const paged = messagesRes.data
+            const items = paged.items ?? []
+            totalPage = paged.totalPage ?? page
+
+            for (const message of items) {
+              if (message.recalled) {
+                continue
+              }
+              const urls = extractUrlsFromText(message.content)
+              urls.forEach((url, index) => {
+                linksCollected.push({
+                  id: `${message.idMessage}-${index}`,
+                  url,
+                  domain: getDomainFromUrl(url),
+                  timeSent: message.timeSent,
+                })
+              })
+            }
+
+            page += 1
+          } while (page <= totalPage && page <= LINK_MAX_PAGES)
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
+
+        const sortedImages = (imagesRes.data ?? []).slice().sort((a, b) => {
+          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+          return right - left
+        })
+        const onlyImages = sortedImages.filter((item) => item.type === "IMAGE")
+
+        setAllImageAttachments(onlyImages)
+        setImagesPreview(sortedImages.slice(0, PREVIEW_LIMIT))
+        setFilesPreview((filesRes.data ?? []).slice(0, PREVIEW_LIMIT))
+        setLinksPreview(linksCollected.slice(0, PREVIEW_LIMIT))
       } catch (error) {
-        console.error("Error loading current user:", error)
+        console.error("Failed to load chat info previews", error)
+        if (!cancelled) {
+          toast.error("Không thể tải dữ liệu kho lưu trữ")
+        }
+      } finally {
+        if (!cancelled) {
+          setPreviewLoading(false)
+        }
       }
     }
-    void loadCurrentUser()
+
+    void loadPreviews()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedConversationId])
+
+  const imageIndexById = useMemo(
+    () => new Map(allImageAttachments.map((item, index) => [item.idAttachment, index])),
+    [allImageAttachments],
+  )
+
+  const getFileExtension = useMemo(() => {
+    return (url: string): string => {
+      const parts = url.split(".")
+      const ext = parts[parts.length - 1]?.toLowerCase() || "file"
+      return ext.substring(0, 4).toUpperCase()
+    }
+  }, [])
+
+  const getExtensionColor = useMemo(() => {
+    return (ext: string): string => {
+      const lowerExt = ext.toLowerCase()
+      if (lowerExt.includes("pdf")) return "bg-red-500"
+      if (lowerExt.includes("doc")) return "bg-blue-500"
+      if (lowerExt.includes("xls")) return "bg-green-500"
+      if (lowerExt.includes("ppt")) return "bg-orange-500"
+      if (lowerExt.includes("zip") || lowerExt.includes("rar")) return "bg-yellow-600"
+      if (lowerExt.includes("mp3") || lowerExt.includes("wav")) return "bg-purple-500"
+      return "bg-gray-500"
+    }
   }, [])
 
   const toggleSection = (key: keyof typeof openSections) => {
@@ -140,64 +326,77 @@ export default function ChatInfoMain({
     }))
   }
 
-  const updateRelationship = useCallback(
-    async (newTypes: string[]) => {
-      if (!currentUserId || !peerId) {
-        toast.error("Không thể cập nhật")
-        return
+  const handleConfirmLeaveGroup = async () => {
+    if (!onLeaveGroup || isLeavingGroup) {
+      return
+    }
+    setIsLeavingGroup(true)
+    try {
+      await onLeaveGroup()
+      setIsLeaveDialogOpen(false)
+    } finally {
+      setIsLeavingGroup(false)
+    }
+  }
+
+  const handleConfirmDissolveGroup = async () => {
+    if (!onDissolveGroup || isDissolvingGroup) {
+      return
+    }
+    setIsDissolvingGroup(true)
+    try {
+      await onDissolveGroup()
+      setIsDissolveDialogOpen(false)
+    } finally {
+      setIsDissolvingGroup(false)
+    }
+  }
+
+  const handleSaveNickname = async () => {
+    if (!selectedConversationId || !directPeer || isSavingNickname) {
+      return
+    }
+    setIsSavingNickname(true)
+    try {
+      await chatService.updateMemberNickname(selectedConversationId, directPeer.idAccount, {
+        nickname: nicknameDraft.trim(),
+      })
+      toast.success("Đã cập nhật biệt danh.")
+      setIsNicknameDialogOpen(false)
+      await refetchConversations()
+    } catch {
+      toast.error("Cập nhật biệt danh thất bại, vui lòng thử lại.")
+    } finally {
+      setIsSavingNickname(false)
+    }
+  }
+
+  const handleToggleConversationPin = async () => {
+    if (!selectedConversationId || !selectedConversation || isPinningConversation) {
+      return
+    }
+    setIsPinningConversation(true)
+    try {
+      if (selectedConversation.pinned) {
+        await chatService.unpinConversation(selectedConversationId)
+      } else {
+        await chatService.pinConversation(selectedConversationId)
       }
+      await refetchConversations()
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Cập nhật ghim hội thoại thất bại.")
+    } finally {
+      setIsPinningConversation(false)
+    }
+  }
 
-      setIsLoading(true)
-      try {
-        let res = await relationshipService.updateRelationship({
-          actorId: currentUserId,
-          targetId: peerId,
-          relationshipType: newTypes,
-        })
-        console.log('res update: ', res);
-
-        setRelationshipTypes(newTypes)
-
-        // Check if blocked
-        const isBlocked = newTypes.includes("BLOCK_ALL") || newTypes.includes("BLOCK_MESSAGE")
-        onBlockStatusChange?.(isBlocked)
-      } catch (error) {
-        console.error("Error updating relationship:", error)
-        toast.error("Lỗi cập nhật")
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [currentUserId, peerId, onBlockStatusChange],
-  )
-
-  const handleTogglePin = useCallback(() => {
-    const newTypes = relationshipTypes.includes("PIN")
-      ? relationshipTypes.filter((t) => t !== "PIN")
-      : [...relationshipTypes, "PIN"]
-    void updateRelationship(newTypes)
-    const pinned = newTypes.includes("PIN")
-    toast.success(pinned ? "Đã ghim cuộc trò chuyện" : "Bỏ ghim cuộc trò chuyện")
-  }, [relationshipTypes, updateRelationship])
-
-  const handleToggleHide = useCallback(() => {
-    const newTypes = relationshipTypes.includes("HIDE")
-      ? relationshipTypes.filter((t) => t !== "HIDE")
-      : [...relationshipTypes, "HIDE"]
-    void updateRelationship(newTypes)
-    const hidden = newTypes.includes("HIDE")
-    toast.success(hidden ? "Đã ẩn cuộc trò chuyện" : "Bỏ ẩn cuộc trò chuyện")
-  }, [relationshipTypes, updateRelationship])
-
-  const handleToggleBlock = useCallback(() => {
-    const isCurrentlyBlocked = relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
-    const newTypes = isCurrentlyBlocked
-      ? relationshipTypes.filter((t) => t !== "BLOCK_ALL" && t !== "BLOCK_MESSAGE")
-      : [...relationshipTypes, "BLOCK_ALL"]
-    void updateRelationship(newTypes)
-    const blocked = newTypes.includes("BLOCK_ALL") || newTypes.includes("BLOCK_MESSAGE")
-    toast.success(blocked ? "Đã chặn người này" : "Đã bỏ chặn người này")
-  }, [relationshipTypes, updateRelationship])
+  const handleToggleBlockMessaging = () => {
+    if (!canManageBlockMessaging || isTogglingBlock) {
+      return
+    }
+    void mutateBlockMessaging(null)
+  }
 
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
@@ -419,64 +618,6 @@ export default function ChatInfoMain({
               >
                 Xem tất cả
               </Button>
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              title="Quản lý cuộc trò chuyện"
-              open={openSections.management}
-              onToggle={() => toggleSection("management")}
-            >
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleTogglePin}
-                  disabled={isLoading}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
-                >
-                  <Pin className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 text-sm text-foreground">
-                    {relationshipTypes.includes("PIN") ? "Bỏ ghim" : "Ghim cuộc trò chuyện"}
-                  </span>
-                  {relationshipTypes.includes("PIN") && (
-                    <div className="h-2 w-2 rounded-full bg-blue-500" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleHide}
-                  disabled={isLoading}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
-                >
-                  <Eye className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 text-sm text-foreground">
-                    {relationshipTypes.includes("HIDE") ? "Bỏ ẩn" : "Ẩn cuộc trò chuyện"}
-                  </span>
-                  {relationshipTypes.includes("HIDE") && (
-                    <div className="h-2 w-2 rounded-full bg-blue-500" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleBlock}
-                  disabled={isLoading}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-red-50 disabled:opacity-50"
-                >
-                  <Lock className="h-5 w-5 shrink-0 text-red-500" />
-                  <span className={`flex-1 text-sm ${relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
-                    ? "text-red-600 font-medium"
-                    : "text-foreground"
-                    }`}>
-                    {relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")
-                      ? "Bỏ chặn"
-                      : "Chặn người này"}
-                  </span>
-                  {(relationshipTypes.includes("BLOCK_ALL") || relationshipTypes.includes("BLOCK_MESSAGE")) && (
-                    <div className="h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </button>
-              </div>
             </CollapsibleSection>
 
             <CollapsibleSection

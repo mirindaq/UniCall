@@ -55,8 +55,6 @@ export function FriendsListTab() {
   )
 
   const currentUserId = (myProfileResponse as any)?.data?.identityUserId
-  const myFirstName = (myProfileResponse as any)?.data?.firstName
-  const myLastName = (myProfileResponse as any)?.data?.lastName
 
   const [friendsData, setFriendsData] = useState<any[]>([])
   const [friendProfiles, setFriendProfiles] = useState<
@@ -76,29 +74,111 @@ export function FriendsListTab() {
         })
     }
   }, [currentUserId])
-  console.log('response friends: ', friendsData);
-  console.log('my profile: ', myProfileResponse);
 
+  useEffect(() => {
+    if (!currentUserId || friendsData.length === 0) {
+      setFriendProfiles({})
+      return
+    }
+
+    const peerIds = Array.from(
+      new Set(
+        friendsData
+          .map((friend: any) =>
+            friend.idAccountSent === currentUserId
+              ? friend.idAccountReceive
+              : friend.idAccountSent
+          )
+          .filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+      )
+    )
+
+    if (peerIds.length === 0) {
+      setFriendProfiles({})
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      peerIds.map(async (peerId) => {
+        try {
+          const response = await userService.getProfileByIdentityUserId(peerId)
+          const profile = response.data
+          return {
+            id: peerId,
+            firstName: profile.firstName ?? "",
+            lastName: profile.lastName ?? "",
+            avatar: profile.avatar ?? null,
+          }
+        } catch {
+          return {
+            id: peerId,
+            firstName: "",
+            lastName: "",
+            avatar: null,
+          }
+        }
+      })
+    ).then((profiles) => {
+      if (cancelled) {
+        return
+      }
+      const nextMap: Record<string, { firstName: string; lastName: string; avatar?: string | null }> = {}
+      for (const item of profiles) {
+        nextMap[item.id] = {
+          firstName: item.firstName,
+          lastName: item.lastName,
+          avatar: item.avatar,
+        }
+      }
+      setFriendProfiles(nextMap)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, friendsData])
 
   const friends = friendsData.map((friend: any) => {
-    // Determine if current user is the sender or receiver
-    const isMeSender = friend.idAccountSent === currentUserId
-    const friendFirstName = isMeSender ? friend.firstNameReceiver : friend.firstNameSender
-    const friendLastName = isMeSender ? friend.lastNameReceiver : friend.lastNameSender
-
+    const peerIdentityUserId =
+      friend.idAccountSent === currentUserId
+        ? friend.idAccountReceive
+        : friend.idAccountSent
+    const profile = friendProfiles[peerIdentityUserId]
+    const firstName = profile?.firstName || friend.firstName || ""
+    const lastName = profile?.lastName || friend.lastName || ""
+    const displayName = `${lastName} ${firstName}`.trim() || peerIdentityUserId
     return {
       id: friend.idFriend,
-      name: `${friendFirstName} ${friendLastName}`.trim(),
-      firstName: friendFirstName,
-      lastName: friendLastName,
-      fallback: `${friendFirstName?.[0] ?? ""}${friendLastName?.[0] ?? ""}`.toUpperCase(),
+      name: displayName,
+      firstName,
+      lastName,
+      fallback: `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "U",
       tone: "base",
-      avatar: friend.pathAvartar,
+      avatar: profile?.avatar || friend.pathAvartar,
       label: null,
       friendType: friend.friendType || "NORMAL_FRIEND",
       recentOrder: 0,
     }
   })
+
+  const handleConfirmRemoveFriend = async () => {
+    if (!removeTarget || isRemovingFriend) {
+      return
+    }
+    setIsRemovingFriend(true)
+    try {
+      await friendService.deleteFriend(removeTarget.id)
+      setFriendsData((prev) => prev.filter((item: any) => item.idFriend !== removeTarget.id))
+      toast.success("Đã hủy kết bạn.")
+      setRemoveTarget(null)
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Hủy kết bạn thất bại.")
+    } finally {
+      setIsRemovingFriend(false)
+    }
+  }
 
   const filteredFriends = useMemo(() => {
     let result: any[] = friends

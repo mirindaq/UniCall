@@ -4,9 +4,7 @@ import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import iuh.fit.friend_service.dtos.response.FriendshipResponse;
 import iuh.fit.friend_service.services.FriendRequestService;
 import iuh.fit.friend_service.services.FriendService;
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,10 +12,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/friends")
 @RequiredArgsConstructor
-@FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 public class FriendController {
- FriendService friendService;
- FriendRequestService friendRequestService;
+    private final FriendService friendService;
+    private final FriendRequestService friendRequestService;
 
     @GetMapping("/idAccount/{idAccount}")
     public ResponseEntity<ResponseSuccess<?>> getFriendByIdAccount(
