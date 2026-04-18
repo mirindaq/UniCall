@@ -9,5 +9,7 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface FriendRequestMapper {
     FriendRequest toFriendRequest(FriendRequestCreateRequest friendRequestCreateRequest);
+    FriendRequest toFriendRequest(FriendRequest friendRequest);
+
     FriendRequestResponse toFriendRequestResponse(FriendRequest friendRequest);
 }

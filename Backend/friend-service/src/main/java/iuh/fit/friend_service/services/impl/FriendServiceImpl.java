@@ -30,8 +30,8 @@ public class FriendServiceImpl implements FriendService {
 
     @Override
     public List<FriendResponse> getAllFriendByIdAccount(String idAccount) {
-        Sort sort = Sort.by("firstNameSender").ascending()
-                .and(Sort.by("lastNameSender").ascending());
+        Sort sort = Sort.by("firstName").ascending()
+                .and(Sort.by("lastName").ascending());
 
         SpecificationBuildQuery<Friend> specBuilder = new SpecificationBuildQuery<>();
         specBuilder.withCustom((root, query, cb) -> cb.or(
