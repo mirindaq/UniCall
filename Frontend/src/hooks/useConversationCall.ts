@@ -35,6 +35,7 @@ type UseConversationCallOptions = {
   conversationType?: ConversationType
   currentUserId?: string | null
   peerUserId?: string | null
+  isBlocked?: boolean
 }
 
 const getMediaErrorMessage = (audioOnly: boolean, error: unknown): string => {
@@ -79,6 +80,7 @@ export function useConversationCall({
   conversationType,
   currentUserId,
   peerUserId,
+  isBlocked = false,
 }: UseConversationCallOptions) {
   const { isAuthenticated } = useAuth()
   const [phase, setPhase] = useState<CallPhase>("idle")
@@ -108,7 +110,8 @@ export function useConversationCall({
     conversationId &&
     currentUserId &&
     peerUserId &&
-    conversationType === "DOUBLE"
+    conversationType === "DOUBLE" &&
+    !isBlocked
   )
   const canStartVideoCall = canStartAudioCall
 
@@ -850,7 +853,7 @@ export function useConversationCall({
         void video.play().catch(() => undefined)
       }
     }
-  }, [activeCall?.audioOnly, remoteStream])
+  }, [activeCall?.audioOnly, phase, remoteStream])
 
   useEffect(() => {
     const localVideo = localVideoRef.current

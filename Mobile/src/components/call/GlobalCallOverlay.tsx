@@ -24,6 +24,7 @@ export function GlobalCallOverlay() {
     canToggleCamera,
     localStreamURL,
     remoteStreamURL,
+    remoteStreamRenderKey,
     acceptIncomingCall,
     acceptIncomingCallWithoutCamera,
     rejectIncomingCall,
@@ -71,7 +72,15 @@ export function GlobalCallOverlay() {
         {!activeCall.audioOnly && RTCView ? (
           <View className="relative h-full w-full max-w-3xl">
             {remoteStreamURL ? (
-              <RTCView streamURL={remoteStreamURL} objectFit="cover" className="h-full w-full rounded-2xl bg-black" />
+              <RTCView
+                key={`${remoteStreamRenderKey}-${remoteStreamURL}`}
+                streamURL={remoteStreamURL}
+                objectFit="cover"
+                mirror={false}
+                zOrder={0}
+                surfaceView={false}
+                style={{ height: '100%', width: '100%', borderRadius: 16, backgroundColor: '#000' }}
+              />
             ) : (
               <View className="h-full w-full items-center justify-center rounded-2xl bg-slate-900">
                 <Text className="text-sm text-slate-200">Đang chờ video đối phương...</Text>
@@ -80,7 +89,14 @@ export function GlobalCallOverlay() {
 
             {localStreamURL ? (
               <View className="absolute bottom-24 right-4 h-40 w-28 overflow-hidden rounded-xl border border-white/40 bg-black">
-                <RTCView streamURL={localStreamURL} objectFit="cover" className="h-full w-full" mirror />
+                <RTCView
+                  streamURL={localStreamURL}
+                  objectFit="cover"
+                  mirror
+                  zOrder={1}
+                  surfaceView={false}
+                  style={{ height: '100%', width: '100%' }}
+                />
               </View>
             ) : null}
           </View>
