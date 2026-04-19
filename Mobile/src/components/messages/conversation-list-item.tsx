@@ -7,14 +7,18 @@ import type { MockConversation } from '@/mock/chat-conversations';
 import { ConversationAvatar } from './conversation-avatar';
 
 interface ConversationListItemProps {
-  conversation: MockConversation;
+  conversation: MockConversation & { avatarUrl?: string | null };
   onPress?: () => void;
 }
 
 export function ConversationListItem({ conversation, onPress }: ConversationListItemProps) {
   return (
     <Pressable className="flex-row items-center border-b border-slate-200 bg-[#f3f4f6] px-5 py-3.5" onPress={onPress}>
-      <ConversationAvatar avatar={conversation.avatar} isVerified={conversation.isVerified} />
+      <ConversationAvatar
+        avatar={conversation.avatar}
+        avatarUrl={conversation.avatarUrl}
+        isVerified={conversation.isVerified}
+      />
 
       <View className="ml-3.5 flex-1">
         <View className="flex-row items-start justify-between gap-3">

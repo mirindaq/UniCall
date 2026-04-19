@@ -1,29 +1,64 @@
 import {
+  Bot,
+  Check,
+  CalendarDays,
+  ChevronDown,
+  Copy,
+  FileText,
+  Forward,
   Image as ImageIcon,
+  ListChecks,
+  MoreHorizontal,
   PanelRight,
   Paperclip,
   Phone,
+  Pin,
+  Quote,
   Search,
   Send,
   Smile,
   Sticker,
+  Trash2,
+  Undo2,
+  UserRound,
+  Users,
   Video,
   Tag,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
+import IncomingCallPopup from "@/components/message/IncomingCallPopup"
+import ImageGalleryViewer, { type ImageViewerItem } from "@/components/message/ImageGalleryViewer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/contexts/auth-context"
 import { useChatPage } from "@/contexts/ChatPageContext"
+import { useConversationCall } from "@/hooks/useConversationCall"
 import { useChatSocket } from "@/hooks/useChatSocket"
 import { cn } from "@/lib/utils"
-import { chatApiService } from "@/services/chat/chat-api.service"
+import { chatService } from "@/services/chat/chat.service"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import type { ChatAttachment, ChatMessageResponse } from "@/types/chat"
 import { displayNameFromProfile, formatChatMessageTime } from "@/utils/chat-display.util"
@@ -55,15 +90,212 @@ const GIFS = [
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26ufdipQqU2lhNA4g/giphy.gif",
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYjV2Nm9nYzNod2VwM2lydjI5dGVvMWhqb3U3ZGpmMmlyMW5ib2hkZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7aD2saalBwwftBIY/giphy.gif",
 ]
+const SEARCH_PAGE_SIZE = 12
+const SEARCH_DEBOUNCE_MS = 500
+const SEARCH_FILES_PREVIEW_LIMIT = 8
+const MESSAGE_REACTIONS = ["👍", "❤️", "😆", "😮", "😭", "😡"] as const
+const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
+
+type ForwardTab = "recent" | "groups" | "friends"
+
+type ForwardTargetOption = {
+  key: string
+  mode: "conversation" | "user"
+  conversationId?: string
+  userId?: string
+  label: string
+  subtitle?: string
+  avatar?: string
+}
+
+type PendingImageUpload = {
+  id: string
+  file: File
+  previewUrl: string
+}
+
+type MentionCommand = {
+  token: "@Unicall" | "@UnicallImage"
+  description: string
+}
+
+type MentionSuggestionState = {
+  replaceStart: number
+  replaceEnd: number
+  query: string
+  highlightedIndex: number
+}
+
+const AI_MENTION_COMMANDS: MentionCommand[] = [
+  {
+    token: "@Unicall",
+    description: "Hỏi UniCall AI trả lời văn bản.",
+  },
+  {
+    token: "@UnicallImage",
+    description: "Yêu cầu UniCall AI tạo hình ảnh.",
+  },
+]
+
+function renderHighlightedSearchText(content: string, keyword: string): ReactNode {
+  const normalizedKeyword = keyword.trim()
+  if (!normalizedKeyword) {
+    return content
+  }
+
+  const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const regex = new RegExp(`(${escapedKeyword})`, "ig")
+  const chunks = content.split(regex)
+
+  return chunks.map((chunk, index) => {
+    if (!chunk) {
+      return null
+    }
+    if (chunk.toLowerCase() === normalizedKeyword.toLowerCase()) {
+      return (
+        <span key={`highlight-${index}-${chunk}`} className="font-semibold text-blue-600">
+          {chunk}
+        </span>
+      )
+    }
+    return <span key={`plain-${index}`}>{chunk}</span>
+  })
+}
+
+function messagePlainTextForCopy(msg: ChatMessageResponse): string {
+  const normalizedContent = normalizeFileMessageContent(msg.content)
+
+  if (msg.recalled) {
+    return normalizedContent
+  }
+  if (msg.type === "CALL") {
+    return "Cuộc gọi thoại"
+  }
+  if (msg.type === "TEXT") {
+    return normalizedContent
+  }
+  const a = msg.attachments?.[0]
+  if (a?.type === "STICKER") {
+    return "[Sticker]"
+  }
+  if (a?.type === "GIF") {
+    return "[GIF]"
+  }
+  if (a?.type === "LINK") {
+    return a.url || normalizedContent || "[Link]"
+  }
+  return normalizedContent
+}
+
+function renderMessageRichText(content: string): ReactNode {
+  const parts = splitTextWithUrls(content)
+  if (parts.length === 0) {
+    return content
+  }
+
+  return parts.map((part, index) => {
+    if (part.type === "url") {
+      return (
+        <a
+          key={`url-${index}-${part.value}`}
+          href={part.value}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="break-all text-blue-600 underline hover:text-blue-700"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {part.value}
+        </a>
+      )
+    }
+    return <span key={`text-${index}`}>{part.value}</span>
+  })
+}
+
+const formatCallDuration = (seconds?: number) => {
+  if (!seconds || seconds <= 0) {
+    return "0 phút 0 giây"
+  }
+  const minute = Math.floor(seconds / 60)
+  const second = seconds % 60
+  return `${minute} phút ${second} giây`
+}
+
+function buildCallMessageCard(
+  msg: ChatMessageResponse,
+  currentUserId: string | null
+): {
+  title: string
+  subtitle: string
+  tone: "danger" | "neutral" | "success"
+} {
+  const info = msg.callInfo
+  if (!info || !currentUserId) {
+    return {
+      title: "Cuộc gọi",
+      subtitle: "Gọi lại",
+      tone: "neutral",
+    }
+  }
+  const callKind = info.audioOnly ? "thoại" : "video"
+  const isCaller = info.callerUserId === currentUserId
+  if (info.outcome === "COMPLETED") {
+    return {
+      title: isCaller ? `Cuộc gọi ${callKind} đi` : `Cuộc gọi ${callKind} đến`,
+      subtitle: formatCallDuration(info.durationSeconds),
+      tone: "success",
+    }
+  }
+  if (info.outcome === "NO_ANSWER") {
+    return {
+      title: isCaller ? "Bạn đã hủy" : "Bạn bị nhỡ",
+      subtitle: `Cuộc gọi ${callKind}`,
+      tone: "danger",
+    }
+  }
+  if (info.outcome === "REJECTED") {
+    return {
+      title: isCaller ? "Cuộc gọi bị từ chối" : "Bạn đã từ chối",
+      subtitle: `Cuộc gọi ${callKind}`,
+      tone: "danger",
+    }
+  }
+  return {
+    title: "Cuộc gọi đã kết thúc",
+    subtitle: `Cuộc gọi ${callKind}`,
+    tone: "neutral",
+  }
+}
+
+function getDirectPeerId(conversation: ConversationResponse, currentUserId: string | null): string | null {
+  if (conversation.type !== "DOUBLE" || !currentUserId) {
+    return null
+  }
+
+  return (
+    conversation.participantInfos.find((participant) => participant.idAccount !== currentUserId)?.idAccount ?? null
+  )
+}
 
 export default function ChatWindow() {
+  const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const draftCaretRef = useRef({ start: 0, end: 0 })
   const bottomRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLElement | null>(null)
   const prependAnchorRef = useRef<{ prevTop: number; prevHeight: number } | null>(null)
   const pendingScrollToBottomRef = useRef(false)
+  const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const highlightTimeoutRef = useRef<number | null>(null)
+  const loadingMissingMessageIdsRef = useRef<Set<string>>(new Set())
+  const failedMissingMessageIdsRef = useRef<Set<string>>(new Set())
+  const pendingFocusMessageIdRef = useRef<string | null>(null)
+  const suppressAutoLoadMoreUntilRef = useRef(0)
+  const pendingImageUploadsRef = useRef<PendingImageUpload[]>([])
 
   const {
     selectedConversationId,
@@ -71,7 +303,17 @@ export default function ChatWindow() {
     currentUserId,
     conversationTitle,
     conversationAvatar,
+    onRealtimeMessage,
     selectedPeerProfile,
+    detailsView,
+    setDetailsView,
+    isDetailsPanelOpen,
+    setDetailsPanelOpen,
+    toggleDetailsPanel,
+    messageFocusRequestId,
+    clearMessageFocusRequest,
+    conversations,
+    refetchConversations,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -79,6 +321,22 @@ export default function ChatWindow() {
   const headerTitle = selectedConversation ? conversationTitle(selectedConversation) : ""
   const headerAvatar = selectedConversation ? conversationAvatar(selectedConversation) : undefined
   const peerFallback = displayNameFromProfile(selectedPeerProfile)
+  const peerUserId = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId)
+        ?.idAccount ?? null
+    )
+  }, [currentUserId, selectedConversation])
+
+  const conversationCall = useConversationCall({
+    conversationId: selectedConversationId ?? undefined,
+    conversationType: selectedConversation?.type,
+    currentUserId,
+    peerUserId,
+  })
 
   const [apiMessages, setApiMessages] = useState<ChatMessageResponse[]>([])
   const [page, setPage] = useState(1)
@@ -156,7 +414,7 @@ export default function ChatWindow() {
       }
       setMessagesLoading(true)
       try {
-        const res = await chatApiService.listMessages(selectedConversationId, 1, MESSAGE_PAGE_SIZE)
+        const res = await chatService.listMessages(selectedConversationId, 1, MESSAGE_PAGE_SIZE)
         if (cancelled) {
           return
         }
@@ -177,6 +435,7 @@ export default function ChatWindow() {
 
     void loadInitialMessages()
     setSocketExtras([])
+    setReplyTargetCache({})
     prependAnchorRef.current = null
     return () => {
       cancelled = true
@@ -227,7 +486,7 @@ export default function ChatWindow() {
     setIsLoadingMore(true)
     try {
       const nextPage = page + 1
-      const res = await chatApiService.listMessages(selectedConversationId, nextPage, MESSAGE_PAGE_SIZE)
+      const res = await chatService.listMessages(selectedConversationId, nextPage, MESSAGE_PAGE_SIZE)
       const moreItems = res.data.items ?? []
       setApiMessages((prev) => [...prev, ...moreItems])
       setPage(nextPage)
@@ -252,6 +511,9 @@ export default function ChatWindow() {
     }
 
     const onScroll = () => {
+      if (Date.now() < suppressAutoLoadMoreUntilRef.current) {
+        return
+      }
       if (viewport.scrollTop <= LOAD_MORE_THRESHOLD_PX) {
         void loadMoreMessages()
       }
@@ -262,20 +524,44 @@ export default function ChatWindow() {
     }
   }, [loadMoreMessages])
 
-  useChatSocket({
-    autoConnect: Boolean(selectedConversationId),
-    conversationId: selectedConversationId ?? undefined,
-    onMessage: (msg) => {
-      if (msg.idConversation !== selectedIdRef.current) {
-        return
+  const mergeIncomingOrUpdatedMessage = useCallback((msg: ChatMessageResponse) => {
+    onRealtimeMessage(msg)
+    if (msg.idConversation !== selectedIdRef.current) {
+      return
+    }
+    const existsInApi = apiMessages.some((item) => item.idMessage === msg.idMessage)
+
+    setApiMessages((prev) => {
+      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
+      if (i < 0) {
+        return prev
       }
-      setSocketExtras((prev) => {
-        if (prev.some((x) => x.idMessage === msg.idMessage)) {
-          return prev
-        }
-        pendingScrollToBottomRef.current = true
-        return [...prev, msg]
-      })
+      const next = [...prev]
+      next[i] = msg
+      return next
+    })
+
+    setSocketExtras((prev) => {
+      const i = prev.findIndex((x) => x.idMessage === msg.idMessage)
+      if (i >= 0) {
+        const next = [...prev]
+        next[i] = msg
+        return next
+      }
+      if (existsInApi) {
+        return prev
+      }
+      pendingScrollToBottomRef.current = true
+      return [...prev, msg]
+    })
+  }, [apiMessages, onRealtimeMessage])
+
+  useChatSocket({
+    autoConnect: true,
+    onUserEvent: (event: UserRealtimeEvent) => {
+      if (event.eventType === "MESSAGE_UPSERT" && event.message) {
+        mergeIncomingOrUpdatedMessage(event.message)
+      }
     },
   })
 
@@ -294,19 +580,32 @@ export default function ChatWindow() {
     )
   }, [apiMessages, socketExtras])
 
+  const messageById = useMemo(() => {
+    const m = new Map<string, ChatMessageResponse>()
+    for (const x of displayMessages) {
+      m.set(x.idMessage, x)
+    }
+    return m
+  }, [displayMessages])
+
+  const pinnedMessagesSorted = useMemo(() => {
+    return displayMessages
+      .filter((message) => !!message.pinned)
+      .sort((left, right) => {
+        const rightTime = new Date(right.pinnedAt ?? right.timeSent).getTime()
+        const leftTime = new Date(left.pinnedAt ?? left.timeSent).getTime()
+        return rightTime - leftTime
+      })
+  }, [displayMessages])
+
   useEffect(() => {
-    const viewport = viewportRef.current
-    const prependAnchor = prependAnchorRef.current
-    if (viewport && prependAnchor) {
-      const heightDiff = viewport.scrollHeight - prependAnchor.prevHeight
-      viewport.scrollTop = prependAnchor.prevTop + heightDiff
-      prependAnchorRef.current = null
+    if (!selectedPinnedMessageId) {
       return
     }
 
-    if (pendingScrollToBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" })
-      pendingScrollToBottomRef.current = false
+    const stillPinned = pinnedMessagesSorted.some((message) => message.idMessage === selectedPinnedMessageId)
+    if (!stillPinned) {
+      setSelectedPinnedMessageId(null)
     }
   }, [displayMessages])
 
@@ -350,24 +649,23 @@ export default function ChatWindow() {
 
   const currentTagColor = currentTag ? getTagColor(currentTag) : "bg-blue-600"
 
-  const handleInput = () => {
-    const textarea = textareaRef.current
-    if (!textarea) {
+  useEffect(() => {
+    if (!selectedReplyTargetMessageId) {
       return
     }
 
-    textarea.style.height = "auto"
-    textarea.style.height = `${textarea.scrollHeight}px`
-  }
+    const stillExistsInView = displayMessages.some((message) => message.idMessage === selectedReplyTargetMessageId)
+    if (!stillExistsInView && pendingFocusMessageIdRef.current !== selectedReplyTargetMessageId) {
+      setSelectedReplyTargetMessageId(null)
+    }
+  }, [displayMessages, selectedReplyTargetMessageId])
 
-  const sendMessage = async (
-    content: string,
-    type: ChatMessageResponse["type"] = "TEXT",
-    attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
-  ) => {
-    const normalized = content.trim()
-    if (!normalized || !selectedConversationId || !currentUserId) {
-      return
+  const normalizedForwardKeyword = useMemo(() => forwardKeyword.trim().toLowerCase(), [forwardKeyword])
+
+  const directConversationIdByPeerId = useMemo(() => {
+    const directMap = new Map<string, string>()
+    if (!currentUserId) {
+      return directMap
     }
 
     // Check if blocked by peer
@@ -391,45 +689,71 @@ export default function ChatWindow() {
         })
         pendingScrollToBottomRef.current = true
       }
-    } catch {
-      toast.error("Gửi tin nhắn thất bại")
-    } finally {
-      setIsSending(false)
+
+      const peerId = getDirectPeerId(conversation, currentUserId)
+      if (!peerId) {
+        continue
+      }
+      directMap.set(peerId, conversation.idConversation)
     }
-  }
 
-  const sendText = async () => {
-    await sendMessage(draft, "TEXT")
-    setDraft("")
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
+    return directMap
+  }, [conversations, currentUserId])
+
+  const recentForwardOptions = useMemo<ForwardTargetOption[]>(() => {
+    return conversations
+      .filter((conversation) => conversation.idConversation !== selectedConversationId)
+      .map((conversation) => ({
+        key: `conversation:${conversation.idConversation}`,
+        mode: "conversation",
+        conversationId: conversation.idConversation,
+        label: conversationTitle(conversation),
+        subtitle:
+          conversation.type === "GROUP"
+            ? `${conversation.numberMember} thành viên`
+            : conversation.lastMessageContent || "Trò chuyện trực tiếp",
+        avatar: conversationAvatar(conversation),
+      }))
+  }, [conversationAvatar, conversationTitle, conversations, selectedConversationId])
+
+  const groupForwardOptions = useMemo<ForwardTargetOption[]>(() => {
+    return recentForwardOptions.filter((option) => {
+      const conversation = conversations.find((item) => item.idConversation === option.conversationId)
+      return conversation?.type === "GROUP"
+    })
+  }, [conversations, recentForwardOptions])
+
+  useEffect(() => {
+    if (!forwardTarget || !currentUserId) {
+      setForwardFriendOptions([])
+      setIsLoadingForwardFriends(false)
+      return
     }
-  }
 
-  const sendEmoji = async (emoji: string) => {
-    await sendMessage(emoji, "TEXT")
-    setEmojiOpen(false)
-  }
+    let cancelled = false
+    setIsLoadingForwardFriends(true)
 
-  const sendSticker = async (stickerUrl: string) => {
-    await sendMessage("Đã gửi sticker", "NONTEXT", [{ type: "STICKER", url: stickerUrl, order: 0 }])
-    setStickerOpen(false)
-  }
+    void friendService
+      .getAllFriends(currentUserId)
+      .then(async (response) => {
+        if (cancelled) {
+          return
+        }
 
-  const sendGif = async (gifUrl: string) => {
-    await sendMessage("Đã gửi GIF", "NONTEXT", [{ type: "GIF", url: gifUrl, order: 0 }])
-    setGifOpen(false)
-  }
+        const peers = Array.from(
+          new Set(
+            (response.data ?? [])
+              .map((friend) =>
+                friend.idAccountSent === currentUserId ? friend.idAccountReceive : friend.idAccountSent,
+              )
+              .filter((peerId): peerId is string => !!peerId && peerId.trim().length > 0),
+          ),
+        )
 
-  if (!selectedConversationId || !selectedConversation) {
-    return (
-      <div className="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-muted/20 px-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Chọn một cuộc trò chuyện ở cột bên trái để xem tin nhắn, hoặc tìm người để bắt đầu nhắn tin.
-        </p>
-      </div>
-    )
-  }
+        if (peers.length === 0) {
+          setForwardFriendOptions([])
+          return
+        }
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-muted/20">
@@ -581,6 +905,81 @@ export default function ChatWindow() {
           </div>
         </ScrollArea>
       </div>
+
+      {multiSelectActive ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            <strong className="text-foreground">{selectedMessageIds.size}</strong> Đã chọn
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={selectedMessages.length === 0}
+              onClick={() => void handleCopySelectedMessages()}
+            >
+              <Copy className="mr-1.5 size-3.5" />
+              Sao chép
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={!canForwardSelectedMessages || isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={handleForwardSelectedMessages}
+            >
+              <Forward className="mr-1.5 size-3.5" />
+              Chia sẻ
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title={
+                canRecallSelectedMessages
+                  ? "Thu hồi các tin nhắn đã chọn"
+                  : "Chỉ thu hồi được khi tất cả tin đã chọn là tin nhắn của bạn"
+              }
+              className={cn(
+                "h-8 rounded-full",
+                canRecallSelectedMessages && "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700",
+              )}
+              disabled={!canRecallSelectedMessages || isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={() => void handleRecallSelectedMessages()}
+            >
+              <Undo2 className="mr-1.5 size-3.5" />
+              {isRecallingSelectedMessages ? "Đang thu hồi..." : "Thu hồi"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full text-red-600 hover:text-red-700"
+              disabled={selectedMessages.length === 0 || isDeletingSelectedMessages || isRecallingSelectedMessages}
+              onClick={() => void handleHideSelectedMessages()}
+            >
+              <Trash2 className="mr-1.5 size-3.5" />
+              {isDeletingSelectedMessages ? "Đang xóa..." : "Xóa"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={isRecallingSelectedMessages || isDeletingSelectedMessages}
+              onClick={() => {
+                setMultiSelectActive(false)
+                setSelectedMessageIds(new Set())
+              }}
+            >
+              Hủy
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="shrink-0 border-t bg-background p-3">
         {isBlocked ? (

@@ -2,8 +2,10 @@ package iuh.fit.identity_service.clients;
 
 import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
+import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
@@ -30,6 +32,7 @@ public class GrpcUserServiceClient {
         CreateUserProfileRequest grpcRequest = CreateUserProfileRequest.newBuilder()
                 .setIdentityUserId(identityUserId)
                 .setPhoneNumber(request.getPhoneNumber())
+                .setEmail(request.getEmail())
                 .setFirstName(request.getFirstName())
                 .setLastName(request.getLastName())
                 .setGender(request.getGender())
@@ -48,12 +51,26 @@ public class GrpcUserServiceClient {
             return RegisterResponse.builder()
                     .userId(persistedIdentityUserId)
                     .phoneNumber(request.getPhoneNumber())
+                    .email(request.getEmail())
                     .firstName(request.getFirstName())
                     .lastName(request.getLastName())
                     .gender(request.getGender())
                     .dateOfBirth(request.getDateOfBirth())
                     .message("Registration successful")
                     .build();
+        } catch (StatusRuntimeException ex) {
+            throw mapException(ex);
+        }
+    }
+
+    public void cancelDeletionRequest(String identityUserId) {
+        CancelAccountDeletionByIdentityRequest grpcRequest = CancelAccountDeletionByIdentityRequest.newBuilder()
+                .setIdentityUserId(identityUserId)
+                .build();
+        try {
+            userStub
+                    .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                    .cancelAccountDeletionRequest(grpcRequest);
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
         }
@@ -72,6 +89,10 @@ public class GrpcUserServiceClient {
 
         if (code == Status.Code.INVALID_ARGUMENT) {
             return new InvalidParamException(message);
+        }
+
+        if (code == Status.Code.NOT_FOUND) {
+            return new ResourceNotFoundException(message);
         }
 
         return new RuntimeException(message, ex);

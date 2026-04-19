@@ -3,8 +3,6 @@ spring:
     name: identity-service
 
 server:
-  servlet:
-    context-path: /identity-service
   port: 8082
 
 app:
@@ -20,8 +18,11 @@ app:
       client-secret: ${KEYCLOAK_CLIENT_SECRET:BnaPyiYRiG0LP8sGdQNuCp1eZ32IFIya}
       admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:unicall-admin-client}
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:qEtqS9STfjKuzU99109MTtlZfCcL8UBi}
+      activation-email-lifespan-seconds: ${KEYCLOAK_ACTIVATION_EMAIL_LIFESPAN_SECONDS:86400}
 
 grpc:
+  server:
+    port: ${IDENTITY_SERVICE_GRPC_PORT:9092}
   client:
     user-service:
       address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}

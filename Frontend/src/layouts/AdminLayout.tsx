@@ -31,9 +31,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { AUTH_PATH } from "@/constants/auth"
+import { useAuth } from "@/contexts/auth-context"
 import { adminNavGroups, isAdminNavItemActive, type AdminNavItem } from "@/constants/admin-navigation"
 import { authService } from "@/services/auth/auth.service"
-import { authTokenStore } from "@/stores/auth-token.store"
 
 function SidebarLogo() {
   const { state } = useSidebar()
@@ -60,6 +60,7 @@ function SidebarLogo() {
 }
 
 export function AdminLayout() {
+  const { clearAuthenticated } = useAuth()
   const [isBusy, setIsBusy] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
@@ -82,7 +83,7 @@ export function AdminLayout() {
     } catch {
       // ignore and clear local session
     } finally {
-      authTokenStore.clear()
+      clearAuthenticated()
       toast.success("Đăng xuất thành công")
       navigate(AUTH_PATH.LOGIN, { replace: true })
       setIsBusy(false)

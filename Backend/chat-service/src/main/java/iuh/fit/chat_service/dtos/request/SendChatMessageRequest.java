@@ -12,4 +12,5 @@ public class SendChatMessageRequest {
     private MessageType type = MessageType.TEXT;
     @Valid
     private List<MessageAttachmentRequest> attachments;
+    private String replyToMessageId;
 }
