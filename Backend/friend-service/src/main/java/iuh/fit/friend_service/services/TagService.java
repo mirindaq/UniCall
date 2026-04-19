@@ -12,6 +12,7 @@ public interface TagService {
     void createTag(TagRequest tagRequest);
     List<TagResponse> getTags(String type);
     // chua ro co nen de getUsersByTag o day hay o UserService
+    TagResponse tagByUser(String userId);
     void updateTag(TagRequest tagRequest);
     void deleteTag(String tagId);
 }

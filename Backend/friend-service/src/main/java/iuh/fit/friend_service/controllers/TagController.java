@@ -26,7 +26,13 @@ public class TagController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ResponseSuccess<>(HttpStatus.CREATED, "DANH TAG THANH CONG"));
     }
-    @GetMapping("/{type}")
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ResponseSuccess<?>> getTagsByUserId(@PathVariable String userId){
+        TagResponse tag = tagService.tagByUser(userId);
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Lay tag theo userId", tag));
+    }
+
+    @GetMapping("/type/{type}")
     public ResponseEntity<ResponseSuccess<?>> getTagsByType(@PathVariable String type){
         List<TagResponse> tagResponseList = tagService.getTags(type);
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Lay danh sach tag", tagResponseList));

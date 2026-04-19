@@ -6,6 +6,8 @@ import jakarta.persistence.Enumerated;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.util.Set;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -13,5 +15,5 @@ import lombok.experimental.FieldDefaults;
 public class RelationshipResponse {
     String actorId;
     String targetId;
-    RelationshipType relationshipType;
+    Set<RelationshipType> relationshipTypes;
 }

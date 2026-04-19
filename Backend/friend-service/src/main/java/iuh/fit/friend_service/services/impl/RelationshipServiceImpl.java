@@ -12,6 +12,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.HashSet;
 import java.util.Optional;
 
 @Service
@@ -23,10 +24,19 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Override
     public boolean createRelationship(RelationshipRequest relationshipRequest) {
         try {
-            Relationship relationship = findOrCreateRelationship(
-                    relationshipRequest.getActorId(),
-                    relationshipRequest.getTargetId());
-            relationship.getRelationshipTypes().add(relationshipRequest.getRelationshipType());
+            Relationship relationship = relationshipRepository.findOne(
+                            byActorAndTarget(
+                                    relationshipRequest.getActorId(),
+                                    relationshipRequest.getTargetId()))
+                    .orElseGet(() -> Relationship.builder()
+                            .actorId(relationshipRequest.getActorId())
+                            .targetId(relationshipRequest.getTargetId())
+                            .build());
+
+            if (relationshipRequest.getRelationshipType() != null) {
+                relationship.getRelationshipTypes().addAll(relationshipRequest.getRelationshipType());
+            }
+
             relationshipRepository.save(relationship);
             return true;
         } catch (Exception e) {
@@ -38,7 +48,7 @@ public class RelationshipServiceImpl implements RelationshipService {
     public RelationshipResponse getRelationshipBetweenUsers(String userId1, String userId2) {
         Optional<Relationship> relationship = relationshipRepository.findOne(
                 Specification.where(byActorAndTarget(userId1, userId2))
-                        .or(byActorAndTarget(userId2, userId1)));
+                       );
         return relationship.map(relationshipMapper::toRelationshipResponse).orElse(null);
     }
 
@@ -59,18 +69,26 @@ public class RelationshipServiceImpl implements RelationshipService {
     @Override
     public boolean updateRelationship(RelationshipRequest relationshipRequest) {
         try {
-            Optional<Relationship> existingRelationship = relationshipRepository.findOne(
-                    byActorAndTarget(
-                            relationshipRequest.getActorId(),
-                            relationshipRequest.getTargetId()));
+            // Upsert by EXACT (actorId, targetId) direction (do NOT search both directions)
+            Relationship relationship = relationshipRepository.findOne(
+                            byActorAndTarget(
+                                    relationshipRequest.getActorId(),
+                                    relationshipRequest.getTargetId()))
+                    .orElseGet(() -> Relationship.builder()
+                            .actorId(relationshipRequest.getActorId())
+                            .targetId(relationshipRequest.getTargetId())
+                            .relationshipTypes(new HashSet<>())
+                            .build());
 
-            if (existingRelationship.isPresent()) {
-                Relationship relationship = existingRelationship.get();
-                relationship.getRelationshipTypes().add(relationshipRequest.getRelationshipType());
-                relationshipRepository.save(relationship);
-                return true;
+
+
+            // Add relationship types (do not remove existing).
+            if (relationshipRequest.getRelationshipType() != null) {
+                relationship.getRelationshipTypes().addAll(relationshipRequest.getRelationshipType());
             }
-            return false;
+            System.out.println("Relationship: " + relationship);
+            relationshipRepository.save(relationship);
+            return true;
         } catch (Exception e) {
             return false;
         }
@@ -87,17 +105,11 @@ public class RelationshipServiceImpl implements RelationshipService {
     }
 
     private Relationship findOrCreateRelationship(String actorId, String targetId) {
-        Optional<Relationship> existing = relationshipRepository.findOne(
-                byActorAndTarget(actorId, targetId));
-
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        return Relationship.builder()
-                .actorId(actorId)
-                .targetId(targetId)
-                .build();
+        return relationshipRepository.findOne(byActorAndTarget(actorId, targetId))
+                .orElseGet(() -> Relationship.builder()
+                        .actorId(actorId)
+                        .targetId(targetId)
+                        .build());
     }
 
     private Specification<Relationship> byActorAndTarget(String actorId, String targetId) {

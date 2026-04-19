@@ -8,5 +8,6 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface RelationshipMapper {
     Relationship toRelationship(RelationshipRequest relationshipRequest);
+
     RelationshipResponse toRelationshipResponse(Relationship relationship);
 }
