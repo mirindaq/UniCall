@@ -11,6 +11,7 @@ interface ChatMessageRowProps {
   otherAvatar: MockAvatar;
   otherAvatarUrl?: string | null;
   onOpenImageGallery?: (targetUrl: string) => void;
+  onLongPressMessage?: (message: MockChatMessage) => void;
 }
 
 function StickerBlock({ url }: { url?: string }) {
@@ -21,7 +22,7 @@ function StickerBlock({ url }: { url?: string }) {
       ) : (
         <>
           <Text allowFontScaling={false} className="text-[36px]">
-            🐱
+            :)
           </Text>
           <Text allowFontScaling={false} className="-mt-2 text-[30px] font-semibold text-[#2f0d04]">
             ok
@@ -34,14 +35,15 @@ function StickerBlock({ url }: { url?: string }) {
 
 const getDisplayFileName = (url?: string) => {
   if (!url) {
-    return 'Tệp';
+    return 'Tep';
   }
   const decoded = decodeURIComponent(url.split('?')[0] ?? '');
-  const base = decoded.split('/').pop() || 'Tệp';
+  const base = decoded.split('/').pop() || 'Tep';
   return base.replace(/^[0-9a-f]{8}-[0-9a-f-]{27,}[_-]?/i, '');
 };
 
-const getFileExt = (fileName: string) => fileName.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE';
+const getFileExt = (fileName: string) =>
+  fileName.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE';
 
 const openAttachmentUrl = async (url?: string) => {
   if (!url) {
@@ -53,13 +55,36 @@ const openAttachmentUrl = async (url?: string) => {
   }
 };
 
-export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenImageGallery }: ChatMessageRowProps) {
+function ReplyPreview({ text }: { text?: string }) {
+  if (!text) {
+    return null;
+  }
+  return (
+    <View className="mb-1 rounded-md border-l-2 border-sky-300 bg-sky-50 px-2 py-1.5">
+      <Text allowFontScaling={false} numberOfLines={2} className="text-[11px] text-slate-600">
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+export function ChatMessageRow({
+  message,
+  otherAvatar,
+  otherAvatarUrl,
+  onOpenImageGallery,
+  onLongPressMessage,
+}: ChatMessageRowProps) {
   const isMine = message.sender === 'me';
   const attachments = message.attachments ?? [];
-  const stickerAttachment = attachments.find((attachment) => attachment.type === 'STICKER' || attachment.type === 'GIF');
+  const stickerAttachment = attachments.find(
+    (attachment) => attachment.type === 'STICKER' || attachment.type === 'GIF'
+  );
   const imageAttachments = attachments.filter((attachment) => attachment.type === 'IMAGE');
   const videoAttachment = attachments.find((attachment) => attachment.type === 'VIDEO');
-  const fileAttachment = attachments.find((attachment) => attachment.type === 'FILE' || attachment.type === 'AUDIO');
+  const fileAttachment = attachments.find(
+    (attachment) => attachment.type === 'FILE' || attachment.type === 'AUDIO'
+  );
   const hasAttachment = message.kind === 'attachment' || attachments.length > 0;
   let messageBody: React.ReactNode = null;
 
@@ -67,14 +92,14 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
     messageBody = (
       <View className="w-[210px] rounded-[16px] border border-sky-100 bg-sky-50 px-3 py-2.5">
         <Text allowFontScaling={false} className="text-[12px] font-semibold text-slate-700">
-          {message.content || 'Cuộc gọi tài liệu'}
+          {message.content || 'Cuoc goi'}
         </Text>
         <Text allowFontScaling={false} className="mt-0.5 text-[11px] text-slate-500">
           {message.timeLabel || ''}
         </Text>
         <Pressable className="mt-2 self-start rounded-full bg-sky-100 px-3 py-1">
           <Text allowFontScaling={false} className="text-[11px] font-semibold text-sky-700">
-            GỌI LẠI
+            GOI LAI
           </Text>
         </Pressable>
       </View>
@@ -85,8 +110,9 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
         className={`rounded-[16px] px-3.5 py-2.5 ${
           isMine ? 'bg-[#c8ebfb] rounded-br-[8px]' : 'bg-white rounded-bl-[8px]'
         }`}>
+        <ReplyPreview text={message.replyPreviewText} />
         <Text allowFontScaling={false} className="text-[13px] text-slate-900">
-          {message.recalled ? 'Tin nhắn đã thu hồi' : message.content}
+          {message.recalled ? 'Tin nhan da thu hoi' : message.content}
         </Text>
         {message.timeLabel ? (
           <Text allowFontScaling={false} className="mt-1 text-[10px] text-slate-400">
@@ -109,6 +135,8 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
   } else {
     messageBody = (
       <View className="max-w-[280px]">
+        <ReplyPreview text={message.replyPreviewText} />
+
         {imageAttachments.length === 1 ? (
           <Pressable
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
@@ -121,7 +149,11 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
               }
               void openAttachmentUrl(url);
             }}>
-            <Image source={{ uri: imageAttachments[0]?.url }} className="h-[220px] w-[260px]" resizeMode="cover" />
+            <Image
+              source={{ uri: imageAttachments[0]?.url }}
+              className="h-[220px] w-[260px]"
+              resizeMode="cover"
+            />
           </Pressable>
         ) : null}
 
@@ -130,7 +162,11 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
             {imageAttachments.slice(0, 4).map((attachment, index) => (
               <Pressable
                 key={`${attachment.url}-${index}`}
-                className={imageAttachments.length === 3 && index === 0 ? 'h-[110px] w-full overflow-hidden rounded-md' : 'h-[110px] w-[126px] overflow-hidden rounded-md'}
+                className={
+                  imageAttachments.length === 3 && index === 0
+                    ? 'h-[110px] w-full overflow-hidden rounded-md'
+                    : 'h-[110px] w-[126px] overflow-hidden rounded-md'
+                }
                 onPress={() => {
                   if (onOpenImageGallery) {
                     onOpenImageGallery(attachment.url);
@@ -174,11 +210,14 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
               </Text>
             </View>
             <View className="min-w-0 flex-1">
-              <Text allowFontScaling={false} className="text-[13px] font-medium text-slate-900" numberOfLines={2}>
+              <Text
+                allowFontScaling={false}
+                className="text-[13px] font-medium text-slate-900"
+                numberOfLines={2}>
                 {getDisplayFileName(fileAttachment.url)}
               </Text>
               <Text allowFontScaling={false} className="mt-0.5 text-[11px] text-slate-500">
-                {fileAttachment.size || 'Nhấn để mở'}
+                {fileAttachment.size || 'Nhan de mo'}
               </Text>
             </View>
           </Pressable>
@@ -209,7 +248,9 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
       <View className={`flex-row items-end ${isMine ? 'justify-end' : 'justify-start'}`}>
         {!isMine && (
           <View className="mr-2 w-[30px] items-center">
-            {message.showAvatar ? <ConversationAvatar avatar={otherAvatar} avatarUrl={otherAvatarUrl} size={30} /> : null}
+            {message.showAvatar ? (
+              <ConversationAvatar avatar={otherAvatar} avatarUrl={otherAvatarUrl} size={30} />
+            ) : null}
           </View>
         )}
 
@@ -220,7 +261,12 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
             </Text>
           ) : null}
 
-          {messageBody}
+          <Pressable
+            disabled={!onLongPressMessage}
+            onLongPress={() => onLongPressMessage?.(message)}
+            delayLongPress={280}>
+            {messageBody}
+          </Pressable>
 
           {message.reaction ? (
             <View className="-mt-2 ml-2 h-8 w-8 items-center justify-center rounded-full bg-white">
@@ -250,7 +296,7 @@ export function ChatMessageRow({ message, otherAvatar, otherAvatarUrl, onOpenIma
               {message.statusText ? (
                 <View className="mt-1 rounded-full bg-slate-300 px-3 py-[1px]">
                   <Text allowFontScaling={false} className="text-[12px] text-white">
-                    ✓✓ {message.statusText}
+                    {message.statusText}
                   </Text>
                 </View>
               ) : null}

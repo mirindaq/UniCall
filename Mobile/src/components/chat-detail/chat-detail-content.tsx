@@ -15,10 +15,16 @@ interface ChatDetailContentProps {
   galleryImages?: { url: string }[];
   inputPlaceholder?: string;
   isSending?: boolean;
+  isInputBlocked?: boolean;
+  blockedReasonText?: string;
   isLoadingMore?: boolean;
   hasMore?: boolean;
   shouldScrollToBottom?: boolean;
   onSend?: (content: string) => Promise<void> | void;
+  onSendImages?: (imageUris: string[], mixedText?: string) => Promise<void> | void;
+  replyPreviewText?: string | null;
+  onCancelReply?: () => void;
+  onLongPressMessage?: (message: MockChatMessage) => void;
   onLoadMore?: () => void;
   onScrolledToBottom?: () => void;
 }
@@ -30,10 +36,16 @@ export function ChatDetailContent({
   galleryImages = [],
   inputPlaceholder,
   isSending = false,
+  isInputBlocked = false,
+  blockedReasonText,
   isLoadingMore = false,
   hasMore = false,
   shouldScrollToBottom = false,
   onSend,
+  onSendImages,
+  replyPreviewText,
+  onCancelReply,
+  onLongPressMessage,
   onLoadMore,
   onScrolledToBottom,
 }: ChatDetailContentProps) {
@@ -107,6 +119,7 @@ export function ChatDetailContent({
         otherAvatar={otherAvatar}
         otherAvatarUrl={otherAvatarUrl}
         onOpenImageGallery={openImageViewer}
+        onLongPressMessage={onLongPressMessage}
       />
     </View>
   );
@@ -139,12 +152,30 @@ export function ChatDetailContent({
       />
 
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: inputBottom }}>
-        <ChatInputBar
-          placeholder={inputPlaceholder}
-          isSending={isSending}
-          onSend={onSend}
-          onHeightChange={(height) => setInputAreaHeight(height)}
-        />
+        {isInputBlocked ? (
+          <View
+            className="border-t border-amber-200 bg-amber-50 px-4 py-3"
+            onLayout={(event) => {
+              setInputAreaHeight(event.nativeEvent.layout.height);
+            }}>
+            <Text className="text-sm font-medium text-amber-900">
+              Nhap tin nhan da bi khoa
+            </Text>
+            <Text className="mt-1 text-xs text-amber-800">
+              {blockedReasonText ?? 'Khong the nhan tin trong cuoc tro chuyen nay.'}
+            </Text>
+          </View>
+        ) : (
+          <ChatInputBar
+            placeholder={inputPlaceholder}
+            isSending={isSending}
+            replyPreviewText={replyPreviewText}
+            onCancelReply={onCancelReply}
+            onSend={onSend}
+            onSendImages={onSendImages}
+            onHeightChange={(height) => setInputAreaHeight(height)}
+          />
+        )}
       </View>
 
       <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>

@@ -27,12 +27,10 @@ public class Friend {
     private String pathAvartar = "";
     @NotNull
     @Size(max = 40)
-    private String firstNameSender;
+    private String firstName;
     @NotNull
     @Size(max = 40)
-    private String lastNameSender;
-    private String firstNameReceiver;
-    private String lastNameReceiver;
+    private String lastName;
     @NotNull
     private String idAccountReceive;
     @Enumerated(EnumType.STRING)

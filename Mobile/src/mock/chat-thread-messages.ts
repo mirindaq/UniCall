@@ -12,6 +12,7 @@ export interface MockChatMessage {
   rawType?: MessageType;
   attachments?: ChatAttachment[];
   recalled?: boolean;
+  replyPreviewText?: string;
   senderName?: string;
   timeLabel?: string;
   showAvatar?: boolean;

@@ -5,10 +5,13 @@ import type {
   AddGroupMembersRequest,
   ChatAttachment,
   ChatMessageResponse,
+  ConversationBlockStatusResponse,
   ConversationResponse,
   CreateGroupConversationRequest,
   CreateGroupConversationResponse,
   DissolveGroupConversationResponse,
+  ForwardMessageRequest,
+  ForwardMessageResponse,
   ManageGroupParticipantsResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
@@ -71,6 +74,27 @@ export const chatService = {
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(
         messageId
       )}/self`
+    );
+    return data;
+  },
+  forwardMessage: async (
+    conversationId: string,
+    messageId: string,
+    payload: ForwardMessageRequest
+  ): Promise<ResponseSuccess<ForwardMessageResponse>> => {
+    const { data } = await axiosClient.post<ResponseSuccess<ForwardMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(
+        messageId
+      )}/forward`,
+      payload
+    );
+    return data;
+  },
+  getConversationBlockStatus: async (
+    conversationId: string
+  ): Promise<ResponseSuccess<ConversationBlockStatusResponse>> => {
+    const { data } = await axiosClient.get<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block-status`
     );
     return data;
   },

@@ -26,6 +26,17 @@ export interface ChatAttachment {
   order?: number;
 }
 
+export type ForwardMessageRequest = {
+  targetConversationIds?: string[];
+  targetUserIds?: string[];
+  note?: string;
+};
+
+export type ForwardMessageResponse = {
+  forwardedConversationCount: number;
+  targetConversationIds: string[];
+};
+
 export type CallSignalType = 'OFFER' | 'ACCEPT' | 'REJECT' | 'END' | 'ICE_CANDIDATE';
 
 export interface ConversationCallSignalResponse {
@@ -71,6 +82,15 @@ export interface ConversationResponse {
   lastMessageContent?: string;
   numberMember: number;
   participantInfos: ChatParticipantInfo[];
+}
+
+export interface ConversationBlockStatusResponse {
+  conversationId: string;
+  directPeerId?: string;
+  blocked: boolean;
+  blockedByMe: boolean;
+  blockedByOther: boolean;
+  blockedAt?: string;
 }
 
 export type CreateGroupConversationRequest = {
