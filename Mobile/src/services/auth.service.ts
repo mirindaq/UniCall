@@ -7,6 +7,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   RegisterResponse,
+  ResetPasswordWithOtpRequest,
   ResendVerificationEmailRequest,
 } from '@/types/auth';
 
@@ -40,6 +41,11 @@ export const authService = {
 
   changePassword: async (payload: ChangePasswordRequest): Promise<ResponseSuccess<void>> => {
     const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/change-password`, payload);
+    return response.data;
+  },
+
+  resetPasswordWithOtp: async (payload: ResetPasswordWithOtpRequest): Promise<ResponseSuccess<void>> => {
+    const response = await axiosClient.post<ResponseSuccess<void>>(`${AUTH_API_PREFIX}/reset-password-with-otp`, payload);
     return response.data;
   },
 };

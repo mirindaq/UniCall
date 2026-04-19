@@ -30,13 +30,17 @@ import {
 } from "@/services/auth/firebase-phone-auth.service"
 import type { ResponseError } from "@/types/api-response"
 import type {
-  ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
 } from "@/types/auth"
 
 type AuthTab = "login" | "register"
 type CountryOption = { code: string; label: string }
+type ForgotPasswordFormData = {
+  phoneNumber: string
+  newPassword: string
+  confirmNewPassword: string
+}
 
 const PHONE_COUNTRY_OPTIONS: CountryOption[] = [
   { code: "+84", label: "VN (+84)" },
@@ -55,6 +59,14 @@ function normalizePhoneInput(value: string) {
 
 function normalizeEmailLocalPart(value: string) {
   return value.replace(/\s/g, "").replace(/@.*/, "")
+}
+
+function normalizeEmailDomain(value: string) {
+  const raw = value.trim().replace(/\s/g, "")
+  if (!raw) {
+    return ""
+  }
+  return raw.startsWith("@") ? raw : `@${raw}`
 }
 
 function toInternationalPhone(countryCode: string, localPhone: string) {
@@ -102,9 +114,10 @@ export function AuthPage() {
   const [isSubmittingForgotPassword, setIsSubmittingForgotPassword] =
     useState(false)
   const [forgotPasswordData, setForgotPasswordData] =
-    useState<ForgotPasswordRequest>({
+    useState<ForgotPasswordFormData>({
       phoneNumber: "",
-      email: "",
+      newPassword: "",
+      confirmNewPassword: "",
     })
   const [registerData, setRegisterData] = useState<RegisterRequest>({
     phoneNumber: "",
@@ -118,6 +131,8 @@ export function AuthPage() {
   })
   const [confirmPassword, setConfirmPassword] = useState("")
   const [registerEmailLocalPart, setRegisterEmailLocalPart] = useState("")
+  const [registerEmailDomain, setRegisterEmailDomain] =
+    useState(REGISTER_EMAIL_DOMAIN)
   const [loginCountryCode, setLoginCountryCode] = useState("+84")
   const [registerCountryCode, setRegisterCountryCode] = useState("+84")
   const [loginLocalPhone, setLoginLocalPhone] = useState("")
@@ -125,7 +140,7 @@ export function AuthPage() {
   const [showOtpDialog, setShowOtpDialog] = useState(false)
   const [otpCode, setOtpCode] = useState("")
   const [otpPhoneNumber, setOtpPhoneNumber] = useState("")
-  const [otpPurpose, setOtpPurpose] = useState<"register" | null>(null)
+  const [otpPurpose, setOtpPurpose] = useState<"register" | "forgot-password" | null>(null)
   const [hasAutoSentOtp, setHasAutoSentOtp] = useState(false)
   const [confirmationResult, setConfirmationResult] =
     useState<ConfirmationResult | null>(null)
@@ -133,6 +148,8 @@ export function AuthPage() {
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
   const [pendingRegisterPayload, setPendingRegisterPayload] =
     useState<RegisterRequest | null>(null)
+  const [pendingForgotPasswordPayload, setPendingForgotPasswordPayload] =
+    useState<{ phoneNumber: string; newPassword: string } | null>(null)
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
   const [recaptchaVerifier, setRecaptchaVerifier] =
     useState<RecaptchaVerifier | null>(null)
@@ -189,6 +206,7 @@ export function AuthPage() {
     setHasAutoSentOtp(false)
     setConfirmationResult(null)
     setPendingRegisterPayload(null)
+    setPendingForgotPasswordPayload(null)
 
     if (recaptchaVerifier) {
       recaptchaVerifier.clear()
@@ -209,18 +227,28 @@ export function AuthPage() {
     return verifier
   }
 
-  const openOtpDialog = (phoneNumber: string, payload: RegisterRequest) => {
+  const openOtpDialog = (
+    purpose: "register" | "forgot-password",
+    phoneNumber: string,
+    payload: RegisterRequest | { phoneNumber: string; newPassword: string }
+  ) => {
     resetOtpFlow()
-    setOtpPurpose("register")
+    setOtpPurpose(purpose)
     setOtpPhoneNumber(phoneNumber)
-    setPendingRegisterPayload(payload)
+    if (purpose === "register") {
+      setPendingRegisterPayload(payload as RegisterRequest)
+    } else {
+      setPendingForgotPasswordPayload(
+        payload as { phoneNumber: string; newPassword: string }
+      )
+    }
 
     setShowOtpDialog(true)
     toast.info(`Vui lòng xác thực OTP gửi đến số ${phoneNumber}.`)
   }
 
   useEffect(() => {
-    if (!showOtpDialog || otpPurpose !== "register" || hasAutoSentOtp) {
+    if (!showOtpDialog || hasAutoSentOtp || !otpPurpose) {
       return
     }
 
@@ -286,6 +314,27 @@ export function AuthPage() {
     navigate(AUTH_PATH.LOGIN)
   }
 
+  const doResetPasswordAfterOtp = async (
+    firebaseIdToken: string,
+    payload: { phoneNumber: string; newPassword: string }
+  ) => {
+    const response = await authService.resetPasswordWithOtp({
+      phoneNumber: payload.phoneNumber,
+      newPassword: payload.newPassword,
+      firebaseIdToken,
+    })
+
+    toast.success(response.message || "Đặt lại mật khẩu thành công.")
+    setShowOtpDialog(false)
+    setShowForgotPassword(false)
+    setForgotPasswordData({
+      phoneNumber: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    })
+    resetOtpFlow()
+  }
+
   const handleVerifyOtp = async () => {
     if (!confirmationResult) {
       toast.error("Vui lòng gửi OTP trước.")
@@ -323,6 +372,14 @@ export function AuthPage() {
       try {
         if (otpPurpose === "register" && pendingRegisterPayload) {
           await doRegisterAfterOtp(firebaseIdToken, pendingRegisterPayload)
+          return
+        }
+
+        if (otpPurpose === "forgot-password" && pendingForgotPasswordPayload) {
+          await doResetPasswordAfterOtp(
+            firebaseIdToken,
+            pendingForgotPasswordPayload
+          )
           return
         }
 
@@ -383,7 +440,7 @@ export function AuthPage() {
       firebaseIdToken: "",
     }
 
-    openOtpDialog(payload.phoneNumber, payload)
+    openOtpDialog("register", payload.phoneNumber, payload)
   }
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -468,29 +525,30 @@ export function AuthPage() {
       return
     }
 
-    if (!forgotPasswordData.email.trim()) {
-      toast.error("Vui lòng nhập email đã đăng ký.")
+    const normalizedPhone = toBackendVietnamPhone(forgotPasswordData.phoneNumber)
+    if (!isValidVietnamPhoneForBackend(normalizedPhone)) {
+      toast.error("Số điện thoại không hợp lệ.")
+      return
+    }
+
+    if (!STRONG_PASSWORD_REGEX.test(forgotPasswordData.newPassword)) {
+      toast.error(
+        "Mật khẩu tối thiểu 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt."
+      )
+      return
+    }
+
+    if (forgotPasswordData.newPassword !== forgotPasswordData.confirmNewPassword) {
+      toast.error("Mật khẩu xác nhận không khớp.")
       return
     }
 
     setIsSubmittingForgotPassword(true)
-
-    try {
-      const response = await authService.forgotPassword({
-        phoneNumber: forgotPasswordData.phoneNumber.trim(),
-        email: forgotPasswordData.email.trim(),
-      })
-
-      toast.success(response.message || "Đã gửi email đặt lại mật khẩu.")
-      setShowForgotPassword(false)
-      setForgotPasswordData((prev) => ({ ...prev, email: "" }))
-    } catch (error) {
-      toast.error(
-        extractErrorMessage(error, "Không thể gửi email đặt lại mật khẩu.")
-      )
-    } finally {
-      setIsSubmittingForgotPassword(false)
-    }
+    openOtpDialog("forgot-password", normalizedPhone, {
+      phoneNumber: normalizedPhone,
+      newPassword: forgotPasswordData.newPassword,
+    })
+    setIsSubmittingForgotPassword(false)
   }
 
   return (
@@ -715,7 +773,7 @@ export function AuthPage() {
                         setRegisterData((prev) => ({
                           ...prev,
                           email: localPart
-                            ? `${localPart}${REGISTER_EMAIL_DOMAIN}`
+                            ? `${localPart}${registerEmailDomain}`
                             : "",
                         }))
                       }}
@@ -725,10 +783,20 @@ export function AuthPage() {
 
                     <Input
                       type="text"
-                      value={REGISTER_EMAIL_DOMAIN}
-                      readOnly
-                      tabIndex={-1}
-                      className="h-11 w-[150px] border-slate-300 bg-slate-100 text-slate-600"
+                      value={registerEmailDomain}
+                      onChange={(event) => {
+                        const nextDomain = normalizeEmailDomain(
+                          event.target.value
+                        )
+                        setRegisterEmailDomain(nextDomain || "@")
+                        setRegisterData((prev) => ({
+                          ...prev,
+                          email: registerEmailLocalPart
+                            ? `${registerEmailLocalPart}${nextDomain}`
+                            : "",
+                        }))
+                      }}
+                      className="h-11 w-[150px] border-slate-300 text-slate-600"
                     />
                   </div>
                 </div>
@@ -982,8 +1050,8 @@ export function AuthPage() {
 
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
-              Nhập số điện thoại và email đã đăng ký. UniCall sẽ gửi email để
-              bạn đặt lại mật khẩu.
+              Nhập số điện thoại và mật khẩu mới. UniCall sẽ gửi OTP để xác thực
+              trước khi đổi mật khẩu.
             </p>
 
             <Input
@@ -1000,13 +1068,26 @@ export function AuthPage() {
             />
 
             <Input
-              type="email"
-              placeholder="Email đã đăng ký"
-              value={forgotPasswordData.email}
+              type="password"
+              placeholder="Mật khẩu mới"
+              value={forgotPasswordData.newPassword}
               onChange={(event) =>
                 setForgotPasswordData((prev) => ({
                   ...prev,
-                  email: event.target.value,
+                  newPassword: event.target.value,
+                }))
+              }
+              className="h-10 border-slate-300 bg-white focus-visible:ring-sky-500"
+            />
+
+            <Input
+              type="password"
+              placeholder="Xác nhận mật khẩu mới"
+              value={forgotPasswordData.confirmNewPassword}
+              onChange={(event) =>
+                setForgotPasswordData((prev) => ({
+                  ...prev,
+                  confirmNewPassword: event.target.value,
                 }))
               }
               className="h-10 border-slate-300 bg-white focus-visible:ring-sky-500"
@@ -1027,7 +1108,7 @@ export function AuthPage() {
                 disabled={isSubmittingForgotPassword}
                 className="bg-sky-500 text-white hover:bg-sky-600"
               >
-                {isSubmittingForgotPassword ? "Đang gửi..." : "Gửi email"}
+                {isSubmittingForgotPassword ? "Đang xử lý..." : "Gửi OTP"}
               </Button>
             </div>
           </div>

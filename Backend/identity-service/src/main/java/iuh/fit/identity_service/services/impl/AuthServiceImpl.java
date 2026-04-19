@@ -6,6 +6,7 @@ import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResetPasswordWithOtpRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
@@ -74,6 +75,12 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthenticatedException("Password verification failed");
         }
         keycloakAuthService.verifyPassword(normalizedPhoneNumber, password.trim());
+    }
+
+    @Override
+    public void resetPasswordWithOtp(ResetPasswordWithOtpRequest request) {
+        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
+        keycloakAuthService.resetPasswordWithOtp(request.getPhoneNumber(), request.getNewPassword());
     }
 
     @Override

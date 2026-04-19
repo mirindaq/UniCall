@@ -11,6 +11,8 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.unicall.mobile",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

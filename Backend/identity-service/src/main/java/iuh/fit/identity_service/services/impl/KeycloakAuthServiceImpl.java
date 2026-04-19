@@ -57,6 +57,11 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     }
 
     @Override
+    public void resetPasswordWithOtp(String phoneNumber, String newPassword) {
+        keycloakIdentityClient.resetPasswordWithOtp(phoneNumber, newPassword);
+    }
+
+    @Override
     public AuthTokenResponse login(String phoneNumber, String password) {
         return keycloakIdentityClient.login(phoneNumber, password);
     }

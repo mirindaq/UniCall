@@ -25,6 +25,12 @@ export interface ForgotPasswordRequest {
   email: string
 }
 
+export interface ResetPasswordWithOtpRequest {
+  phoneNumber: string
+  firebaseIdToken: string
+  newPassword: string
+}
+
 export interface ChangePasswordRequest {
   phoneNumber: string
   currentPassword: string

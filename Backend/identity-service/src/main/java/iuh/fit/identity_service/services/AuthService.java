@@ -4,6 +4,7 @@ import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResetPasswordWithOtpRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
@@ -22,6 +23,8 @@ public interface AuthService {
     void changePassword(ChangePasswordRequest request);
 
     void verifyPassword(String identityUserId, String phoneNumber, String password);
+
+    void resetPasswordWithOtp(ResetPasswordWithOtpRequest request);
 
     LoginResult login(LoginRequest request);
 

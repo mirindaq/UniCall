@@ -228,6 +228,37 @@ public class KeycloakIdentityClient {
         return userId;
     }
 
+    public void resetPasswordWithOtp(String phoneNumber, String newPassword) {
+        if (phoneNumber == null || phoneNumber.isBlank()
+                || newPassword == null || newPassword.isBlank()) {
+            throw new InvalidParamException("Phone number and new password are required");
+        }
+
+        String adminToken = getAdminToken();
+        Map<String, Object> user = findUserByUsername(phoneNumber, adminToken);
+        if (user == null) {
+            throw new InvalidParamException("User account is invalid");
+        }
+        String userId = asString(user.get("id"));
+        if (userId == null || userId.isBlank()) {
+            throw new InvalidParamException("User account is invalid");
+        }
+
+        Map<String, Object> credential = new HashMap<>();
+        credential.put("type", "password");
+        credential.put("value", newPassword);
+        credential.put("temporary", false);
+
+        keycloakWebClient.put()
+                .uri("/admin/realms/{realm}/users/{id}/reset-password", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(credential)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
     public void deleteUser(String userId) {
         if (userId == null || userId.isBlank()) {
             return;
