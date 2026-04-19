@@ -20,6 +20,8 @@ public class ConversationResponse {
     private LocalDateTime dateUpdateMessage;
     private String lastMessageContent;
     private String lastMessageSenderId;
+    private int unreadCount;
+    private boolean pinned;
     private int numberMember;
     private List<ParticipantInfo> participantInfos;
 
@@ -35,6 +37,8 @@ public class ConversationResponse {
                 .dateCreate(entity.getDateCreate())
                 .dateUpdateMessage(entity.getDateUpdateMessage())
                 .lastMessageContent(entity.getLastMessageContent())
+                .unreadCount(0)
+                .pinned(false)
                 .numberMember(entity.getNumberMember())
                 .participantInfos(entity.getParticipantInfos())
                 .build();

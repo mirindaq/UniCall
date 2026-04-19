@@ -8,6 +8,19 @@ import Toast from 'react-native-toast-message';
 import { GlobalCallOverlay } from '@/components/call/GlobalCallOverlay';
 import { CallProvider } from '@/contexts/call-context';
 
+const globalRef = globalThis as typeof globalThis & {
+  TextEncoder?: typeof TextEncoder;
+  TextDecoder?: typeof TextDecoder;
+};
+
+if (!globalRef.TextEncoder && typeof TextEncoder !== 'undefined') {
+  globalRef.TextEncoder = TextEncoder;
+}
+
+if (!globalRef.TextDecoder && typeof TextDecoder !== 'undefined') {
+  globalRef.TextDecoder = TextDecoder;
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 

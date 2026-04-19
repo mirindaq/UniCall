@@ -1,8 +1,11 @@
 package iuh.fit.chat_service.services;
 
 import iuh.fit.chat_service.dtos.request.ChatSendStompPayload;
+import iuh.fit.chat_service.dtos.request.ForwardMessageRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
+import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
+import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 
@@ -21,6 +24,24 @@ public interface ChatMessageService {
     void sendFromStomp(String identityUserId, ChatSendStompPayload payload);
 
     MessageResponse recallMessage(String identityUserId, String conversationId, String messageId);
+
+    MessageResponse pinMessage(String identityUserId, String conversationId, String messageId);
+
+    MessageResponse unpinMessage(String identityUserId, String conversationId, String messageId);
+    MessageResponse reactMessage(
+            String identityUserId,
+            String conversationId,
+            String messageId,
+            UpdateMessageReactionRequest request
+    );
+    MessageResponse clearReaction(String identityUserId, String conversationId, String messageId);
+
+    ForwardMessageResponse forwardMessage(
+            String identityUserId,
+            String conversationId,
+            String messageId,
+            ForwardMessageRequest request
+    );
 
     void hideMessageForMe(String identityUserId, String conversationId, String messageId);
 

@@ -1,5 +1,8 @@
 export type MessageType = "TEXT" | "NONTEXT" | "MIX" | "CALL"
 export type AttachmentType = "IMAGE" | "VIDEO" | "AUDIO" | "FILE" | "GIF" | "STICKER" | "EMOJI" | "LINK"
+export const UNICALL_AI_BOT_ID = "unicall-ai-bot"
+export const UNICALL_IMAGE_BOT_ID = "unicall-image-bot"
+export const UNICALL_AI_BOT_IDS = [UNICALL_AI_BOT_ID, UNICALL_IMAGE_BOT_ID] as const
 
 export type MessageEnum = "SENT" | "RECEIVED" | "DELETED" | "FAILED"
 
@@ -15,6 +18,11 @@ export interface ChatMessageResponse {
   replyToMessageId?: string
   edited: boolean
   recalled?: boolean
+  reactions?: Record<string, string>
+  reactionStacks?: Record<string, string[]>
+  pinned?: boolean
+  pinnedByAccountId?: string
+  pinnedAt?: string
   attachments?: ChatAttachment[]
   callInfo?: ChatCallInfo
 }
@@ -64,6 +72,17 @@ export interface ChatAttachment {
   order?: number
 }
 
+export type ForwardMessageRequest = {
+  targetConversationIds?: string[]
+  targetUserIds?: string[]
+  note?: string
+}
+
+export type ForwardMessageResponse = {
+  forwardedConversationCount: number
+  targetConversationIds: string[]
+}
+
 export type ConversationType = "DOUBLE" | "GROUP"
 export type GroupParticipantRole = "ADMIN" | "DEPUTY" | "USER"
 
@@ -83,8 +102,19 @@ export interface ConversationResponse {
   dateUpdateMessage: string
   lastMessageContent?: string
   lastMessageSenderId?: string
+  unreadCount?: number
+  pinned?: boolean
   numberMember: number
   participantInfos: ChatParticipantInfo[]
+}
+
+export interface ConversationBlockStatusResponse {
+  conversationId: string
+  directPeerId?: string
+  blocked: boolean
+  blockedByMe: boolean
+  blockedByOther: boolean
+  blockedAt?: string
 }
 
 export type CreateGroupConversationRequest = {
@@ -120,6 +150,10 @@ export type AddGroupMembersRequest = {
 
 export type UpdateGroupMemberRoleRequest = {
   role: GroupParticipantRole
+}
+
+export type UpdateMemberNicknameRequest = {
+  nickname?: string
 }
 
 export type TransferGroupAdminRequest = {

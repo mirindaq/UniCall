@@ -1,18 +1,33 @@
 import type { MockAvatar } from './chat-conversations';
+import type { ChatAttachment, MessageType } from '@/types/chat';
+import type {
+  MessagePreviewData,
+  MessageReactionSummaryItem,
+} from '@/utils/chat-message-preview';
 
 export type MockMessageSender = 'me' | 'other';
-export type MockMessageKind = 'text' | 'sticker';
+export type MockMessageKind = 'text' | 'sticker' | 'attachment';
 
 export interface MockChatMessage {
   id: string;
   sender: MockMessageSender;
   kind: MockMessageKind;
   content: string;
+  rawType?: MessageType;
+  attachments?: ChatAttachment[];
+  recalled?: boolean;
+  replyPreview?: MessagePreviewData;
+  replyPreviewText?: string;
   senderName?: string;
+  senderAvatarUrl?: string | null;
+  senderAvatarText?: string;
   timeLabel?: string;
   showAvatar?: boolean;
+  reactionSummary?: MessageReactionSummaryItem[];
+  reactionTotal?: number;
   reaction?: string;
   showDownloadButton?: boolean;
+  pinned?: boolean;
   statusText?: string;
 }
 

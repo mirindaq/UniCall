@@ -5,13 +5,17 @@ import type {
   AddGroupMembersRequest,
   ChatAttachment,
   ChatMessageResponse,
+  ConversationBlockStatusResponse,
   ConversationResponse,
   CreateGroupConversationRequest,
   CreateGroupConversationResponse,
   DissolveGroupConversationResponse,
   ManageGroupParticipantsResponse,
+  ForwardMessageRequest,
+  ForwardMessageResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
+  UpdateMemberNicknameRequest,
 } from "@/types/chat"
 
 const CHAT_API_PREFIX = API_PREFIXES.conversations
@@ -28,6 +32,12 @@ export const chatService = {
     const { data } = await axiosClient.post<ResponseSuccess<ConversationResponse>>(
       `${CHAT_PREFIX}/conversations/direct`,
       { otherUserId }
+    )
+    return data
+  },
+  markConversationAsRead: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<void>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/read`
     )
     return data
   },
@@ -67,6 +77,72 @@ export const chatService = {
   recallMessage: async (conversationId: string, messageId: string) => {
     const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/recall`
+    )
+    return data
+  },
+  pinMessage: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`
+    )
+    return data
+  },
+  unpinMessage: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`
+    )
+    return data
+  },
+  reactMessage: async (conversationId: string, messageId: string, reaction: string) => {
+    const { data } = await axiosClient.patch<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reaction`,
+      { reaction },
+    )
+    return data
+  },
+  clearReaction: async (conversationId: string, messageId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ChatMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reaction`,
+    )
+    return data
+  },
+  pinConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ConversationResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/pin`,
+    )
+    return data
+  },
+  unpinConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ConversationResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/pin`,
+    )
+    return data
+  },
+  getConversationBlockStatus: async (conversationId: string) => {
+    const { data } = await axiosClient.get<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block-status`,
+    )
+    return data
+  },
+  blockConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block`,
+    )
+    return data
+  },
+  unblockConversation: async (conversationId: string) => {
+    const { data } = await axiosClient.delete<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block`,
+    )
+    return data
+  },
+  forwardMessage: async (
+    conversationId: string,
+    messageId: string,
+    payload: ForwardMessageRequest
+  ) => {
+    const { data } = await axiosClient.post<ResponseSuccess<ForwardMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/forward`,
+      payload
     )
     return data
   },
@@ -116,6 +192,19 @@ export const chatService = {
       ResponseSuccess<ManageGroupParticipantsResponse>
     >(
       `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(memberIdentityUserId)}/role`,
+      payload
+    )
+    return response.data
+  },
+  updateMemberNickname: async (
+    conversationId: string,
+    memberIdentityUserId: string,
+    payload: UpdateMemberNicknameRequest
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.patch<
+      ResponseSuccess<ManageGroupParticipantsResponse>
+    >(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(memberIdentityUserId)}/nickname`,
       payload
     )
     return response.data

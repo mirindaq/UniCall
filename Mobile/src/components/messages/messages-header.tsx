@@ -4,9 +4,10 @@ import { Pressable, Text, View } from 'react-native';
 
 interface MessagesHeaderProps {
   onPressSearch: () => void;
+  onPressCreateGroup?: () => void;
 }
 
-export function MessagesHeader({ onPressSearch }: MessagesHeaderProps) {
+export function MessagesHeader({ onPressSearch, onPressCreateGroup }: MessagesHeaderProps) {
   return (
     <View className="bg-[#1e98f3] px-5 pb-2.5 pt-2.5">
       <View className="flex-row items-center">
@@ -20,7 +21,9 @@ export function MessagesHeader({ onPressSearch }: MessagesHeaderProps) {
         <Pressable className="h-10 w-10 items-center justify-center rounded-full">
           <Ionicons name="qr-code-outline" size={24} color="#ffffff" />
         </Pressable>
-        <Pressable className="ml-1 h-10 w-10 items-center justify-center rounded-full">
+        <Pressable
+          className="ml-1 h-10 w-10 items-center justify-center rounded-full"
+          onPress={onPressCreateGroup}>
           <Ionicons name="add" size={32} color="#ffffff" />
         </Pressable>
       </View>

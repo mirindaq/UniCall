@@ -16,6 +16,7 @@ public class AttachmentResponse {
     private String idAttachment;
     private AttachmentType type;
     private String url;
+    private String fileName;
     private String size;
     private LocalDateTime timeUpload;
     private LocalDateTime timeSent;

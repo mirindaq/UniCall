@@ -1,5 +1,6 @@
 ﻿import {
   AlertTriangle,
+  Ban,
   BellOff,
   ChevronDown,
   Clock,
@@ -10,8 +11,9 @@
   Link as LinkIcon,
   LogOut,
   Pin,
+  Settings,
   Trash2,
-  Users,
+  UserPlus,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -28,15 +30,21 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { useChatPage } from "@/contexts/ChatPageContext"
+import { useMutation } from "@/hooks/useMutation"
+import { useQuery } from "@/hooks/useQuery"
 import { chatService } from "@/services/chat/chat.service"
 import { fileService, type AttachmentResponse } from "@/services/file/file.service"
 import { formatChatSidebarTime } from "@/utils/chat-display.util"
 import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
 import { extractUrlsFromText, getDomainFromUrl } from "@/utils/link-display.util"
+
+import ImageGalleryViewer, { type ImageViewerItem } from "./ImageGalleryViewer"
 
 interface ChatInfoMainProps {
   openStorage: (tab: "images" | "files" | "links") => void
@@ -44,6 +52,7 @@ interface ChatInfoMainProps {
   avatarSrc?: string
   avatarFallback: string
   isGroup?: boolean
+  onOpenGroupMembers?: () => void
   canDissolveGroup?: boolean
   onLeaveGroup?: () => Promise<void>
   onDissolveGroup?: () => Promise<void>
@@ -67,6 +76,7 @@ type LinkPreviewItem = {
 const PREVIEW_LIMIT = 3
 const LINK_PAGE_LIMIT = 100
 const LINK_MAX_PAGES = 8
+const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
 
 function CollapsibleSection({
   title,
@@ -103,6 +113,7 @@ export default function ChatInfoMain({
   avatarSrc,
   avatarFallback,
   isGroup = false,
+  onOpenGroupMembers,
   canDissolveGroup = false,
   onLeaveGroup,
   onDissolveGroup,
@@ -121,12 +132,80 @@ export default function ChatInfoMain({
   const [filesPreview, setFilesPreview] = useState<AttachmentResponse[]>([])
   const [linksPreview, setLinksPreview] = useState<LinkPreviewItem[]>([])
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [allImageAttachments, setAllImageAttachments] = useState<AttachmentResponse[]>([])
+  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
+  const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false)
+  const [nicknameDraft, setNicknameDraft] = useState("")
+  const [isSavingNickname, setIsSavingNickname] = useState(false)
+  const [isPinningConversation, setIsPinningConversation] = useState(false)
 
-  const { selectedConversationId } = useChatPage()
+  const { selectedConversationId, selectedConversation, currentUserId, refetchConversations } = useChatPage()
+
+  const directPeer = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId) ?? null
+    )
+  }, [currentUserId, selectedConversation])
+
+  const canManageBlockMessaging = Boolean(selectedConversationId) && selectedConversation?.type === "DOUBLE"
+  const {
+    data: blockStatusResponse,
+    isLoading: isLoadingBlockStatus,
+    refetch: refetchBlockStatus,
+  } = useQuery(
+    () => chatService.getConversationBlockStatus(selectedConversationId as string),
+    {
+      enabled: canManageBlockMessaging,
+      deps: [selectedConversationId, selectedConversation?.type],
+      onError: () => {
+        toast.error("Không thể tải trạng thái chặn nhắn tin.")
+      },
+    },
+  )
+  const blockStatus = blockStatusResponse?.data ?? null
+
+  const { mutate: mutateBlockMessaging, isLoading: isTogglingBlock } = useMutation(
+    () => {
+      if (!selectedConversationId) {
+        throw new Error("Missing conversation id")
+      }
+      return blockStatus?.blockedByMe
+        ? chatService.unblockConversation(selectedConversationId)
+        : chatService.blockConversation(selectedConversationId)
+    },
+    {
+      onSuccess: () => {
+        void refetchBlockStatus()
+        if (selectedConversationId) {
+          window.dispatchEvent(
+            new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
+              detail: { conversationId: selectedConversationId },
+            }),
+          )
+        }
+        toast.success(blockStatus?.blockedByMe ? "Đã bỏ chặn nhắn tin." : "Đã chặn nhắn tin.")
+      },
+      onError: (error: unknown) => {
+        const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        toast.error(backendMessage || "Cập nhật trạng thái chặn thất bại.")
+      },
+    },
+  )
+
+  useEffect(() => {
+    if (!isNicknameDialogOpen) {
+      return
+    }
+    setNicknameDraft(directPeer?.nickname?.trim() ?? "")
+  }, [directPeer, isNicknameDialogOpen])
 
   useEffect(() => {
     if (!selectedConversationId) {
       setImagesPreview([])
+      setAllImageAttachments([])
       setFilesPreview([])
       setLinksPreview([])
       return
@@ -188,7 +267,15 @@ export default function ChatInfoMain({
 
         linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
 
-        setImagesPreview((imagesRes.data ?? []).slice(0, PREVIEW_LIMIT))
+        const sortedImages = (imagesRes.data ?? []).slice().sort((a, b) => {
+          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+          return right - left
+        })
+        const onlyImages = sortedImages.filter((item) => item.type === "IMAGE")
+
+        setAllImageAttachments(onlyImages)
+        setImagesPreview(sortedImages.slice(0, PREVIEW_LIMIT))
         setFilesPreview((filesRes.data ?? []).slice(0, PREVIEW_LIMIT))
         setLinksPreview(linksCollected.slice(0, PREVIEW_LIMIT))
       } catch (error) {
@@ -208,6 +295,11 @@ export default function ChatInfoMain({
       cancelled = true
     }
   }, [selectedConversationId])
+
+  const imageIndexById = useMemo(
+    () => new Map(allImageAttachments.map((item, index) => [item.idAttachment, index])),
+    [allImageAttachments],
+  )
 
   const getFileExtension = useMemo(() => {
     return (url: string): string => {
@@ -263,6 +355,52 @@ export default function ChatInfoMain({
     }
   }
 
+  const handleSaveNickname = async () => {
+    if (!selectedConversationId || !directPeer || isSavingNickname) {
+      return
+    }
+    setIsSavingNickname(true)
+    try {
+      await chatService.updateMemberNickname(selectedConversationId, directPeer.idAccount, {
+        nickname: nicknameDraft.trim(),
+      })
+      toast.success("Đã cập nhật biệt danh.")
+      setIsNicknameDialogOpen(false)
+      await refetchConversations()
+    } catch {
+      toast.error("Cập nhật biệt danh thất bại, vui lòng thử lại.")
+    } finally {
+      setIsSavingNickname(false)
+    }
+  }
+
+  const handleToggleConversationPin = async () => {
+    if (!selectedConversationId || !selectedConversation || isPinningConversation) {
+      return
+    }
+    setIsPinningConversation(true)
+    try {
+      if (selectedConversation.pinned) {
+        await chatService.unpinConversation(selectedConversationId)
+      } else {
+        await chatService.pinConversation(selectedConversationId)
+      }
+      await refetchConversations()
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Cập nhật ghim hội thoại thất bại.")
+    } finally {
+      setIsPinningConversation(false)
+    }
+  }
+
+  const handleToggleBlockMessaging = () => {
+    if (!canManageBlockMessaging || isTogglingBlock) {
+      return
+    }
+    void mutateBlockMessaging(null)
+  }
+
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
       <div className="flex shrink-0 items-center justify-center border-b px-4 py-5">
@@ -283,12 +421,23 @@ export default function ChatInfoMain({
               <h4 className="ml-6 max-w-[220px] truncate text-base font-medium">
                 {title}
               </h4>
-              <Button variant="secondary" size="icon-xs" title="Sửa biệt danh">
-                <Edit2 className="h-3.5 w-3.5" />
-              </Button>
+              {directPeer ? (
+                <Button
+                  variant="secondary"
+                  size="icon-xs"
+                  title="Sửa biệt danh"
+                  onClick={() => setIsNicknameDialogOpen(true)}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
             </div>
 
-            <div className="mt-4 grid w-full min-w-0 grid-cols-3 gap-2">
+            <div
+              className={`mt-4 grid w-full min-w-0 gap-2 ${
+                isGroup ? "grid-cols-4" : "grid-cols-3"
+              }`}
+            >
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
                 <Button variant="secondary" size="icon">
                   <BellOff className="h-4 w-4" />
@@ -299,22 +448,59 @@ export default function ChatInfoMain({
               </div>
 
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
-                <Button variant="secondary" size="icon">
+                <Button
+                  variant={selectedConversation?.pinned ? "default" : "secondary"}
+                  size="icon"
+                  disabled={isPinningConversation || !selectedConversationId}
+                  onClick={() => void handleToggleConversationPin()}
+                >
                   <Pin className="h-4 w-4" />
                 </Button>
                 <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                  Ghim hội thoại
+                  {selectedConversation?.pinned ? "Bỏ ghim hội thoại" : "Ghim hội thoại"}
                 </span>
               </div>
 
-              <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
-                <Button variant="secondary" size="icon">
-                  <Users className="h-4 w-4" />
-                </Button>
-                <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                  Tạo nhóm
-                </span>
-              </div>
+              {isGroup ? (
+                <>
+                  <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => onOpenGroupMembers?.()}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                      Thêm thành viên
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() =>
+                        toast.info("Mục quản lý nhóm sẽ được cập nhật sớm.")
+                      }
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                    <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                      Quản lý nhóm
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                  <Button variant="secondary" size="icon">
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                    Tạo nhóm
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -349,7 +535,14 @@ export default function ChatInfoMain({
                           <img
                             src={item.url}
                             alt="attachment"
-                            className="aspect-square h-full w-full object-cover"
+                            className="aspect-square h-full w-full cursor-pointer object-cover"
+                            onClick={() => {
+                              const index = imageIndexById.get(item.idAttachment) ?? 0
+                              setImagePreview({
+                                images: allImageAttachments.map((attachment) => ({ url: attachment.url, alt: "Image" })),
+                                initialIndex: index,
+                              })
+                            }}
                           />
                         )}
                       </div>
@@ -494,6 +687,35 @@ export default function ChatInfoMain({
                   </div>
                   <Switch />
                 </div>
+
+                {selectedConversation?.type === "DOUBLE" ? (
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Ban className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="text-sm text-foreground">
+                          {blockStatus?.blockedByMe ? "Đã chặn nhắn tin" : "Chặn nhắn tin"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {blockStatus?.blockedByMe
+                            ? "Bạn đã chặn người này trong hội thoại 1-1."
+                            : blockStatus?.blockedByOther
+                              ? "Bạn đang bị người này chặn nhắn tin."
+                              : "Chặn người này nhắn tin cho bạn trong hội thoại này."}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={blockStatus?.blockedByMe ? "outline" : "destructive"}
+                      size="sm"
+                      disabled={isLoadingBlockStatus || isTogglingBlock}
+                      onClick={() => void handleToggleBlockMessaging()}
+                    >
+                      {isTogglingBlock ? "Đang xử lý..." : blockStatus?.blockedByMe ? "Bỏ chặn" : "Chặn"}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </CollapsibleSection>
           </div>
@@ -576,6 +798,48 @@ export default function ChatInfoMain({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Đổi biệt danh</DialogTitle>
+            <DialogDescription>
+              Biệt danh sẽ được dùng để hiển thị hội thoại 1-1 này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Nhập biệt danh"
+              value={nicknameDraft}
+              maxLength={50}
+              onChange={(event) => setNicknameDraft(event.target.value)}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={isSavingNickname}
+                onClick={() => setIsNicknameDialogOpen(false)}
+              >
+                Hủy
+              </Button>
+              <Button disabled={isSavingNickname} onClick={() => void handleSaveNickname()}>
+                {isSavingNickname ? "Đang lưu..." : "Lưu"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ImageGalleryViewer
+        open={imagePreview != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImagePreview(null)
+          }
+        }}
+        images={imagePreview?.images ?? []}
+        initialIndex={imagePreview?.initialIndex ?? 0}
+      />
     </div>
   )
 }

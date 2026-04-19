@@ -16,6 +16,7 @@ export interface AttachmentResponse {
   idAttachment: string
   type: AttachmentType
   url: string
+  fileName?: string
   size?: string
   timeUpload: string
   timeSent?: string

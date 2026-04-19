@@ -12,6 +12,7 @@ import { extractUrlsFromText } from "@/utils/link-display.util"
 type ChatPageContextValue = {
   currentUserId: string | null
   conversations: ConversationResponse[]
+  unreadCountByConversationId: Record<string, number>
   conversationsLoading: boolean
   conversationsError: unknown
   refetchConversations: () => Promise<unknown>
@@ -23,11 +24,14 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
-  detailsView: "main" | "storage" | "group-members"
-  setDetailsView: (view: "main" | "storage" | "group-members") => void
+  detailsView: "main" | "storage" | "group-members" | "search"
+  setDetailsView: (view: "main" | "storage" | "group-members" | "search") => void
   isDetailsPanelOpen: boolean
   setDetailsPanelOpen: (open: boolean) => void
   toggleDetailsPanel: () => void
+  messageFocusRequestId: string | null
+  requestMessageFocus: (messageId: string) => void
+  clearMessageFocusRequest: () => void
   onRealtimeMessage: (message: ChatMessageResponse) => void
 }
 
@@ -79,13 +83,28 @@ const buildConversationPreview = (message: ChatMessageResponse): string => {
   return normalizeConversationPreviewContent(normalizedContent)
 }
 
+const sortConversationsByPinnedAndTime = (items: ConversationResponse[]): ConversationResponse[] => {
+  return [...items].sort((left, right) => {
+    const leftPinned = Boolean(left.pinned)
+    const rightPinned = Boolean(right.pinned)
+    if (leftPinned !== rightPinned) {
+      return leftPinned ? -1 : 1
+    }
+    const leftTime = left.dateUpdateMessage ? new Date(left.dateUpdateMessage).getTime() : 0
+    const rightTime = right.dateUpdateMessage ? new Date(right.dateUpdateMessage).getTime() : 0
+    return rightTime - leftTime
+  })
+}
+
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
-  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members">("main")
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "search">("main")
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
+  const [messageFocusRequestId, setMessageFocusRequestId] = useState<string | null>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
+  const [unreadCountByConversationId, setUnreadCountByConversationId] = useState<Record<string, number>>({})
 
   const { data: profileResponse } = useQuery(() => userService.getMyProfile(), {
     onError: () => undefined,
@@ -115,14 +134,65 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
         prev.map((conversation) => [conversation.idConversation, conversation.lastMessageSenderId]),
       )
 
-      return incoming.map((conversation) => ({
+      const normalized = incoming.map((conversation) => ({
         ...conversation,
         lastMessageContent: normalizeConversationPreviewContent(conversation.lastMessageContent),
         lastMessageSenderId:
           conversation.lastMessageSenderId ?? senderByConversationId.get(conversation.idConversation),
       }))
+      return sortConversationsByPinnedAndTime(normalized)
+    })
+
+    setUnreadCountByConversationId((prev) => {
+      const next: Record<string, number> = {}
+      for (const conversation of incoming) {
+        const backendUnreadCount = conversation.unreadCount
+        const fallbackUnreadCount = prev[conversation.idConversation] ?? 0
+        next[conversation.idConversation] = Math.max(0, backendUnreadCount ?? fallbackUnreadCount)
+      }
+      return next
     })
   }, [conversationsResponse?.data])
+
+  const markConversationAsReadLocal = useCallback((conversationId: string | null) => {
+    if (!conversationId) {
+      return
+    }
+    setUnreadCountByConversationId((prev) => {
+      const previousCount = prev[conversationId] ?? 0
+      if (previousCount === 0 && conversationId in prev) {
+        return prev
+      }
+      return {
+        ...prev,
+        [conversationId]: 0,
+      }
+    })
+  }, [])
+
+  const markConversationAsRead = useCallback(async (conversationId: string | null) => {
+    if (!conversationId) {
+      return
+    }
+
+    markConversationAsReadLocal(conversationId)
+    if (!currentUserId) {
+      return
+    }
+
+    try {
+      await chatService.markConversationAsRead(conversationId)
+    } catch {
+      // keep UI responsive even if sync call fails
+    }
+  }, [currentUserId, markConversationAsReadLocal])
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return
+    }
+    void markConversationAsRead(selectedConversationId)
+  }, [markConversationAsRead, selectedConversationId])
 
   const conversationTitle = useCallback(
     (c: ConversationResponse) => {
@@ -177,19 +247,48 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
         lastMessageSenderId: message.idAccountSent,
         dateUpdateMessage: updateAt,
       }
-      next.splice(index, 1)
-      next.unshift(updated)
-      return next
+      next[index] = updated
+      return sortConversationsByPinnedAndTime(next)
     })
 
     if (!found) {
       void refetchConversationsSafely()
     }
-  }, [refetchConversationsSafely])
+
+    if (!currentUserId) {
+      return
+    }
+
+    const isIncomingFromOther = message.idAccountSent !== currentUserId
+    if (!isIncomingFromOther) {
+      return
+    }
+
+    const isActiveConversation = selectedConversationId === message.idConversation
+    if (isActiveConversation) {
+      void markConversationAsRead(message.idConversation)
+      return
+    }
+
+    setUnreadCountByConversationId((prev) => {
+      const previousCount = prev[message.idConversation] ?? 0
+      const nextCount = previousCount + 1
+
+      if (nextCount === previousCount && message.idConversation in prev) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        [message.idConversation]: nextCount,
+      }
+    })
+  }, [currentUserId, markConversationAsRead, refetchConversationsSafely, selectedConversationId])
 
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
     setDetailsView("main")
+    setMessageFocusRequestId(null)
   }, [])
 
   const setDetailsPanelOpen = useCallback((open: boolean) => {
@@ -198,6 +297,14 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
 
   const toggleDetailsPanel = useCallback(() => {
     setIsDetailsPanelOpen((prev) => !prev)
+  }, [])
+
+  const requestMessageFocus = useCallback((messageId: string) => {
+    setMessageFocusRequestId(messageId)
+  }, [])
+
+  const clearMessageFocusRequest = useCallback(() => {
+    setMessageFocusRequestId(null)
   }, [])
 
   const startChatWithUser = useCallback(
@@ -223,6 +330,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     () => ({
       currentUserId,
       conversations,
+      unreadCountByConversationId,
       conversationsLoading,
       conversationsError,
       refetchConversations,
@@ -239,6 +347,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       isDetailsPanelOpen,
       setDetailsPanelOpen,
       toggleDetailsPanel,
+      messageFocusRequestId,
+      requestMessageFocus,
+      clearMessageFocusRequest,
       onRealtimeMessage,
     }),
     [
@@ -248,6 +359,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       conversationsError,
       conversationsLoading,
       currentUserId,
+      unreadCountByConversationId,
       isStartingChat,
       refetchConversations,
       selectConversation,
@@ -257,6 +369,9 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       isDetailsPanelOpen,
       setDetailsPanelOpen,
       toggleDetailsPanel,
+      messageFocusRequestId,
+      requestMessageFocus,
+      clearMessageFocusRequest,
       onRealtimeMessage,
       selectedConversationId,
       startChatWithUser,
