@@ -22,6 +22,8 @@ interface ChatDetailContentProps {
   shouldScrollToBottom?: boolean;
   onSend?: (content: string) => Promise<void> | void;
   onSendImages?: (imageUris: string[], mixedText?: string) => Promise<void> | void;
+  prefillDraftText?: string | null;
+  prefillDraftRequestId?: string | null;
   replyPreviewText?: string | null;
   onCancelReply?: () => void;
   onLongPressMessage?: (message: MockChatMessage) => void;
@@ -43,6 +45,8 @@ export function ChatDetailContent({
   shouldScrollToBottom = false,
   onSend,
   onSendImages,
+  prefillDraftText,
+  prefillDraftRequestId,
   replyPreviewText,
   onCancelReply,
   onLongPressMessage,
@@ -169,6 +173,8 @@ export function ChatDetailContent({
           <ChatInputBar
             placeholder={inputPlaceholder}
             isSending={isSending}
+            prefillDraftText={prefillDraftText}
+            prefillDraftRequestId={prefillDraftRequestId}
             replyPreviewText={replyPreviewText}
             onCancelReply={onCancelReply}
             onSend={onSend}

@@ -9,13 +9,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { userService } from "@/services/user/user.service"
 import type { ResponseError } from "@/types/api-response"
-import type { ForgotPasswordRequest, LoginRequest, RegisterRequest } from "@/types/auth"
+import type {
+  ForgotPasswordRequest,
+  LoginRequest,
+  RegisterRequest,
+} from "@/types/auth"
 
 type AuthTab = "login" | "register"
 
@@ -33,11 +42,13 @@ export function AuthPage() {
   const [showResendVerification, setShowResendVerification] = useState(false)
   const [isResendingVerification, setIsResendingVerification] = useState(false)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
-  const [isSubmittingForgotPassword, setIsSubmittingForgotPassword] = useState(false)
-  const [forgotPasswordData, setForgotPasswordData] = useState<ForgotPasswordRequest>({
-    phoneNumber: "",
-    email: "",
-  })
+  const [isSubmittingForgotPassword, setIsSubmittingForgotPassword] =
+    useState(false)
+  const [forgotPasswordData, setForgotPasswordData] =
+    useState<ForgotPasswordRequest>({
+      phoneNumber: "",
+      email: "",
+    })
   const [registerData, setRegisterData] = useState<RegisterRequest>({
     phoneNumber: "",
     email: "",
@@ -59,7 +70,10 @@ export function AuthPage() {
 
   const isEmailNotVerifiedError = (message: string) => {
     const normalized = message.toLowerCase()
-    return normalized.includes("not activated") || normalized.includes("verify your email")
+    return (
+      normalized.includes("not activated") ||
+      normalized.includes("verify your email")
+    )
   }
 
   useEffect(() => {
@@ -92,10 +106,15 @@ export function AuthPage() {
     setIsSubmitting(true)
     try {
       const response = await authService.register(registerData)
-      toast.success(response.message || "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.")
+      toast.success(
+        response.message ||
+          "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản."
+      )
       navigate(AUTH_PATH.LOGIN)
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Đăng ký thất bại, vui lòng thử lại."))
+      toast.error(
+        extractErrorMessage(error, "Đăng ký thất bại, vui lòng thử lại.")
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -113,10 +132,15 @@ export function AuthPage() {
       navigate(AUTH_PATH.HOME)
     } catch (error) {
       clearAuthenticated()
-      const message = extractErrorMessage(error, "Đăng nhập thất bại, vui lòng kiểm tra số điện thoại và mật khẩu.")
+      const message = extractErrorMessage(
+        error,
+        "Đăng nhập thất bại, vui lòng kiểm tra số điện thoại và mật khẩu."
+      )
       if (isEmailNotVerifiedError(message)) {
         setShowResendVerification(true)
-        toast.error("Tài khoản chưa kích hoạt. Vui lòng xác nhận email trước khi đăng nhập.")
+        toast.error(
+          "Tài khoản chưa kích hoạt. Vui lòng xác nhận email trước khi đăng nhập."
+        )
       } else {
         setShowResendVerification(false)
         toast.error(message)
@@ -144,7 +168,9 @@ export function AuthPage() {
       })
       toast.success(response.message || "Đã gửi lại email xác thực.")
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Không thể gửi lại email xác thực."))
+      toast.error(
+        extractErrorMessage(error, "Không thể gửi lại email xác thực.")
+      )
     } finally {
       setIsResendingVerification(false)
     }
@@ -170,7 +196,9 @@ export function AuthPage() {
       setShowForgotPassword(false)
       setForgotPasswordData((prev) => ({ ...prev, email: "" }))
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Không thể gửi email đặt lại mật khẩu."))
+      toast.error(
+        extractErrorMessage(error, "Không thể gửi email đặt lại mật khẩu.")
+      )
     } finally {
       setIsSubmittingForgotPassword(false)
     }
@@ -193,7 +221,7 @@ export function AuthPage() {
           </p>
         </div>
 
-        <Card className="overflow-hidden border border-slate-200 bg-white shadow-xl py-0!">
+        <Card className="overflow-hidden border border-slate-200 bg-white py-0! shadow-xl">
           <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-100">
             <Button
               type="button"
@@ -240,7 +268,12 @@ export function AuthPage() {
                     type="tel"
                     placeholder="VD: 0987654321"
                     value={loginData.phoneNumber}
-                    onChange={(event) => setLoginData({ ...loginData, phoneNumber: event.target.value })}
+                    onChange={(event) =>
+                      setLoginData({
+                        ...loginData,
+                        phoneNumber: event.target.value,
+                      })
+                    }
                     required
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
@@ -252,7 +285,12 @@ export function AuthPage() {
                     type="password"
                     placeholder="Nhập mật khẩu"
                     value={loginData.password}
-                    onChange={(event) => setLoginData({ ...loginData, password: event.target.value })}
+                    onChange={(event) =>
+                      setLoginData({
+                        ...loginData,
+                        password: event.target.value,
+                      })
+                    }
                     required
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
@@ -275,13 +313,20 @@ export function AuthPage() {
             ) : (
               <form className="space-y-4" onSubmit={handleRegister}>
                 <div className="space-y-2">
-                  <Label htmlFor="register-phone">Số điện thoại (username)</Label>
+                  <Label htmlFor="register-phone">
+                    Số điện thoại (username)
+                  </Label>
                   <Input
                     id="register-phone"
                     type="tel"
                     placeholder="VD: 0987654321"
                     value={registerData.phoneNumber}
-                    onChange={(event) => setRegisterData({ ...registerData, phoneNumber: event.target.value })}
+                    onChange={(event) =>
+                      setRegisterData({
+                        ...registerData,
+                        phoneNumber: event.target.value,
+                      })
+                    }
                     required
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
@@ -293,7 +338,12 @@ export function AuthPage() {
                     type="email"
                     placeholder="VD: example@domain.com"
                     value={registerData.email}
-                    onChange={(event) => setRegisterData({ ...registerData, email: event.target.value })}
+                    onChange={(event) =>
+                      setRegisterData({
+                        ...registerData,
+                        email: event.target.value,
+                      })
+                    }
                     required
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
                   />
@@ -306,7 +356,12 @@ export function AuthPage() {
                       id="register-first-name"
                       placeholder="Viet Hoang"
                       value={registerData.firstName}
-                      onChange={(event) => setRegisterData({ ...registerData, firstName: event.target.value })}
+                      onChange={(event) =>
+                        setRegisterData({
+                          ...registerData,
+                          firstName: event.target.value,
+                        })
+                      }
                       required
                       className="h-11 border-slate-300 focus-visible:ring-sky-500"
                     />
@@ -317,7 +372,12 @@ export function AuthPage() {
                       id="register-last-name"
                       placeholder="Giap"
                       value={registerData.lastName}
-                      onChange={(event) => setRegisterData({ ...registerData, lastName: event.target.value })}
+                      onChange={(event) =>
+                        setRegisterData({
+                          ...registerData,
+                          lastName: event.target.value,
+                        })
+                      }
                       required
                       className="h-11 border-slate-300 focus-visible:ring-sky-500"
                     />
@@ -333,10 +393,11 @@ export function AuthPage() {
                       onChange={(event) =>
                         setRegisterData({
                           ...registerData,
-                          gender: event.target.value as RegisterRequest["gender"],
+                          gender: event.target
+                            .value as RegisterRequest["gender"],
                         })
                       }
-                      className="h-11 w-full rounded-md border border-slate-300 bg-background px-2.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="h-11 w-full rounded-md border border-slate-300 bg-background px-2.5 py-1 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none"
                       required
                     >
                       <option value="MALE">Nam</option>
@@ -369,7 +430,12 @@ export function AuthPage() {
                     type="password"
                     placeholder="Tối thiểu 6 ký tự"
                     value={registerData.password}
-                    onChange={(event) => setRegisterData({ ...registerData, password: event.target.value })}
+                    onChange={(event) =>
+                      setRegisterData({
+                        ...registerData,
+                        password: event.target.value,
+                      })
+                    }
                     required
                     minLength={6}
                     className="h-11 border-slate-300 focus-visible:ring-sky-500"
@@ -389,14 +455,20 @@ export function AuthPage() {
         </Card>
       </div>
 
-      <Dialog open={showResendVerification} onOpenChange={setShowResendVerification}>
+      <Dialog
+        open={showResendVerification}
+        onOpenChange={setShowResendVerification}
+      >
         <DialogContent className="max-w-md rounded-xl border border-slate-200 bg-white">
           <DialogHeader>
-            <DialogTitle className="text-lg text-slate-900">Xác thực email tài khoản</DialogTitle>
+            <DialogTitle className="text-lg text-slate-900">
+              Xác thực email tài khoản
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
-              Tài khoản chưa xác thực email. Vui lòng nhập đúng email đã đăng ký để gửi lại link kích hoạt.
+              Tài khoản chưa xác thực email. Vui lòng nhập đúng email đã đăng ký
+              để gửi lại link kích hoạt.
             </p>
             <Input
               type="email"
@@ -429,11 +501,14 @@ export function AuthPage() {
       <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
         <DialogContent className="max-w-md rounded-xl border border-slate-200 bg-white">
           <DialogHeader>
-            <DialogTitle className="text-lg text-slate-900">Quên mật khẩu</DialogTitle>
+            <DialogTitle className="text-lg text-slate-900">
+              Quên mật khẩu
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
-              Nhập số điện thoại và email đã đăng ký. UniCall sẽ gửi email để bạn đặt lại mật khẩu.
+              Nhập số điện thoại và email đã đăng ký. UniCall sẽ gửi email để
+              bạn đặt lại mật khẩu.
             </p>
             <Input
               type="tel"

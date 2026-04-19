@@ -59,6 +59,7 @@ const waitForSocketConnected = async (timeoutMs = 5000) => {
 };
 
 const MESSAGE_PAGE_SIZE = 20;
+const UNICALL_AI_BOT_IDS = ['unicall-ai-bot', 'unicall-image-bot'] as const;
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
@@ -77,6 +78,7 @@ export default function ConversationDetailScreen() {
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
   const [blockStatus, setBlockStatus] = useState<ConversationBlockStatusResponse | null>(null);
   const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
+  const [prefillDraftRequestId, setPrefillDraftRequestId] = useState<string | null>(null);
   const [forwardSourceMessage, setForwardSourceMessage] = useState<UiMessage | null>(null);
   const [forwardPickerOpen, setForwardPickerOpen] = useState(false);
 
@@ -312,7 +314,11 @@ export default function ConversationDetailScreen() {
 
   const handleStartReply = useCallback((messageId: string) => {
     setReplyingToMessageId(messageId);
-  }, []);
+    const sourceMessage = messages.find((item) => item.idMessage === messageId);
+    if (sourceMessage && UNICALL_AI_BOT_IDS.includes(sourceMessage.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number])) {
+      setPrefillDraftRequestId(`${Date.now()}-${messageId}`);
+    }
+  }, [messages]);
 
   const handleOpenForwardPicker = useCallback((message: UiMessage) => {
     setForwardSourceMessage(message);
@@ -609,6 +615,8 @@ export default function ConversationDetailScreen() {
         shouldScrollToBottom={shouldScrollToBottom}
         isInputBlocked={isMessageBlocked}
         blockedReasonText={blockedComposerReasonText}
+        prefillDraftText="@Unicall "
+        prefillDraftRequestId={prefillDraftRequestId}
         replyPreviewText={replyingToMessage ? getMessagePreviewText(replyingToMessage) : null}
         onCancelReply={() => setReplyingToMessageId(null)}
         onSend={handleSendMessage}
