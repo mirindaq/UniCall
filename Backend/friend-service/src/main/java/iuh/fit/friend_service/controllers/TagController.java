@@ -20,7 +20,7 @@ import java.util.List;
 @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
 public class TagController {
     TagService tagService;
-    @PostMapping
+    @PostMapping("/")
     public ResponseEntity<ResponseSuccess<?>> createTag(@Valid @RequestBody TagRequest tagRequest){
         tagService.createTag(tagRequest);
         return ResponseEntity.status(HttpStatus.CREATED)

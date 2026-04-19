@@ -15,8 +15,10 @@ public class FriendResponse {
     private String idAccountSent;
     private String idAccountReceive;
     private String pathAvartar;
-    private String firstName;
-    private String lastName;
+    private String firstNameSender;
+    private String lastNameSender;
+    private String firstNameReceiver;
+    private String lastNameReceiver;
     private LocalDateTime timeCreate;
     private FriendTypeEnum friendType;
 }

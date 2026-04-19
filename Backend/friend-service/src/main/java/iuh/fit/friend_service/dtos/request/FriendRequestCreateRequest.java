@@ -20,16 +20,17 @@ public class FriendRequestCreateRequest {
     private String idAccountReceive;
 
 
-    @Length(max = 120, message = "Đường dẫn avatar không được quá 120 ký tự")
     private String pathAvartar = "";
 
     @NotNull
     @Size(max = 40, message = "First name không được dài hơn 40 ký tự")
-    private String firstName;
+    private String firstNameSender;
 
     @NotNull
     @Size(max = 40, message = "Last name không được dài hơn 40 ký tự")
-    private String lastName;
+    private String lastNameSender;
+    private String firstNameReceiver;
+    private String lastNameReceiver;
 
     @Size(max = 200, message = "Nội dung không được dài quá 120 ký tự")
     private String content = "";
