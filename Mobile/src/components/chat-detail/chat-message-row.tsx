@@ -37,18 +37,156 @@ function StickerBlock({ url }: { url?: string }) {
   );
 }
 
+const UUID_FILE_PREFIX_REGEX =
+  /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}[-_]+(.+)$/i;
+const UUID_FILE_PREFIX_ANYWHERE_REGEX =
+  /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}[-_]+(.+)$/i;
+const UUID_AT_START_REGEX =
+  /^([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(.*)$/i;
+const LONG_HASH_PREFIX_REGEX = /^[0-9a-f]{20,}[-_]+(.+)$/i;
+const ID_ONLY_FILENAME_REGEX = /^[0-9a-f-]{24,}(\.[a-z0-9]{1,8})?$/i;
+
+const stripUuidPrefixFromFileName = (fileName: string) => {
+  const normalized = fileName.trim();
+  const directMatch = normalized.match(UUID_FILE_PREFIX_REGEX);
+  if (directMatch?.[1]) {
+    return directMatch[1].trim();
+  }
+
+  const anywhereMatch = normalized.match(UUID_FILE_PREFIX_ANYWHERE_REGEX);
+  if (anywhereMatch?.[1]) {
+    return anywhereMatch[1].trim();
+  }
+
+  const startsWithUuidMatch = normalized.match(UUID_AT_START_REGEX);
+  if (startsWithUuidMatch) {
+    const remainder = (startsWithUuidMatch[2] ?? '').replace(/^[-_]+/, '').trim();
+    if (remainder) {
+      return remainder;
+    }
+  }
+
+  const longHashPrefixMatch = normalized.match(LONG_HASH_PREFIX_REGEX);
+  if (longHashPrefixMatch?.[1]) {
+    return longHashPrefixMatch[1].trim();
+  }
+
+  if (normalized.length > 37 && (normalized.charAt(36) === '-' || normalized.charAt(36) === '_')) {
+    return normalized.substring(37).trim();
+  }
+
+  if (ID_ONLY_FILENAME_REGEX.test(normalized)) {
+    const extensionMatch = normalized.match(/\.[a-z0-9]{1,8}$/i);
+    return extensionMatch ? `file${extensionMatch[0]}` : 'file';
+  }
+
+  return normalized;
+};
+
 const getDisplayFileName = (url?: string) => {
   if (!url) {
     return 'Tệp đính kèm';
   }
-  const decoded = decodeURIComponent(url.split('?')[0] ?? '');
-  const base = decoded.split('/').pop() || 'Tệp đính kèm';
-  const stripped = base.replace(/^[0-9a-f]{8}-[0-9a-f-]{27,}[_-]?/i, '').trim();
-  return stripped || base || 'Tệp đính kèm';
+  const withoutQuery = (url || '').split('?')[0].split('#')[0];
+  const rawName = withoutQuery.split('/').pop() || 'file';
+  let decoded = rawName;
+  try {
+    decoded = decodeURIComponent(rawName);
+  } catch {
+    decoded = rawName;
+  }
+  return stripUuidPrefixFromFileName(decoded);
 };
 
-const getFileExt = (fileName: string) =>
-  fileName.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE';
+const getFileExt = (fileName: string) => fileName.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE';
+
+const normalizeCompareText = (value?: string) =>
+  (value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const extractFileNameFromFileMessage = (messageContent?: string) => {
+  const original = (messageContent || '').trim();
+  if (!original) {
+    return null;
+  }
+  const normalized = normalizeCompareText(original);
+  if (!(normalized.startsWith('da gui file:') || normalized.startsWith('da gui tep:'))) {
+    return null;
+  }
+  const colonIndex = original.indexOf(':');
+  if (colonIndex < 0 || colonIndex === original.length - 1) {
+    return null;
+  }
+  const fileName = original.slice(colonIndex + 1).trim();
+  return fileName ? stripUuidPrefixFromFileName(fileName) : null;
+};
+
+const isFilePlaceholderContent = (value?: string) => {
+  const normalized = normalizeCompareText(value);
+  if (!normalized) {
+    return true;
+  }
+  if (normalized === '[tep]' || normalized === '[file]' || normalized === '[tap tin]') {
+    return true;
+  }
+  if (normalized === 'da gui file' || normalized === 'da gui tep') {
+    return true;
+  }
+  if (normalized.startsWith('da gui file:') || normalized.startsWith('da gui tep:')) {
+    return true;
+  }
+  return false;
+};
+
+const isExtensionOnlyName = (value: string) => /^\.[a-z0-9]{1,8}$/i.test(value.trim());
+
+type FileNameAwareAttachment = {
+  url?: string;
+  fileName?: string;
+  filename?: string;
+  originalName?: string;
+  name?: string;
+};
+
+const getAttachmentNameHint = (attachment?: FileNameAwareAttachment | null) => {
+  if (!attachment) {
+    return '';
+  }
+  const candidate =
+    attachment.fileName ||
+    attachment.filename ||
+    attachment.originalName ||
+    attachment.name ||
+    '';
+  return candidate.trim() ? stripUuidPrefixFromFileName(candidate) : '';
+};
+
+const fallbackNameFromExtension = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.trim();
+  if (!ext) {
+    return 'Tệp đính kèm';
+  }
+  return `Tệp ${ext.toUpperCase()}`;
+};
+
+const resolveFileDisplayName = (
+  attachment: FileNameAwareAttachment | undefined,
+  messageContent?: string
+) => {
+  const fromMessage = extractFileNameFromFileMessage(messageContent);
+  const fromAttachmentMeta = getAttachmentNameHint(attachment);
+  const fromUrl = getDisplayFileName(attachment?.url);
+
+  const candidate = fromMessage || fromAttachmentMeta || fromUrl || 'Tệp đính kèm';
+  if (isExtensionOnlyName(candidate)) {
+    return fallbackNameFromExtension(candidate);
+  }
+  return candidate;
+};
 
 const toFallback = (fullName?: string) => {
   const text = (fullName || '').trim();
@@ -89,7 +227,7 @@ function ReplyPreview({ preview }: { preview?: MessagePreviewData | null }) {
       : 'image-outline';
 
   return (
-    <View className="mb-1 min-w-[170px] max-w-[250px] rounded-md border-l-2 border-sky-300 bg-sky-50 px-2 py-1.5">
+    <View className="mb-1 min-w-[190px] max-w-[280px] rounded-md border-l-2 border-sky-300 bg-sky-50 px-2 py-1.5">
       <Text allowFontScaling={false} numberOfLines={1} className="text-[10.5px] font-semibold text-sky-700">
         {preview.senderName || 'Tin nhắn'}
       </Text>
@@ -139,6 +277,11 @@ export function ChatMessageRow({
     (attachment) => attachment.type === 'FILE' || attachment.type === 'AUDIO'
   );
   const hasAttachment = message.kind === 'attachment' || attachments.length > 0;
+  const fileDisplayName = fileAttachment ? resolveFileDisplayName(fileAttachment, message.content) : undefined;
+  const trimmedContent = message.content?.trim() || '';
+  const shouldRenderCaption = fileAttachment
+    ? Boolean(trimmedContent) && !isFilePlaceholderContent(trimmedContent)
+    : Boolean(trimmedContent);
   const attachmentLongPressRef = React.useRef(false);
   const handleAttachmentLongPress = () => {
     onLongPressMessage?.(message);
@@ -159,7 +302,7 @@ export function ChatMessageRow({
 
   if (message.rawType === 'CALL') {
     messageBody = (
-      <View className="w-[210px] rounded-[16px] border border-sky-100 bg-sky-50 px-3 py-2.5">
+      <View className="w-[230px] rounded-[16px] border border-sky-100 bg-sky-50 px-3 py-2.5">
         <Text allowFontScaling={false} className="text-[12px] font-semibold text-slate-700">
           {message.content || 'Cuộc gọi'}
         </Text>
@@ -176,7 +319,7 @@ export function ChatMessageRow({
   } else if (message.kind === 'text' && !hasAttachment) {
     messageBody = (
       <View
-        className={`rounded-[16px] px-3.5 py-2.5 ${
+        className={`min-w-[110px] rounded-[16px] px-3.5 py-2.5 ${
           message.replyPreview ? 'min-w-[180px]' : ''
         } ${isMine ? 'rounded-br-[8px] bg-[#c8ebfb]' : 'rounded-bl-[8px] bg-white'}`}>
         <ReplyPreview preview={message.replyPreview} />
@@ -203,7 +346,7 @@ export function ChatMessageRow({
     );
   } else {
     messageBody = (
-      <View className="max-w-[290px]">
+      <View className="max-w-[320px]">
         <ReplyPreview preview={message.replyPreview} />
 
         {imageAttachments.length === 1 ? (
@@ -226,7 +369,7 @@ export function ChatMessageRow({
             }>
             <Image
               source={{ uri: imageAttachments[0]?.url }}
-              className="h-[220px] w-[260px]"
+              className="h-[230px] w-[280px]"
               resizeMode="cover"
             />
           </Pressable>
@@ -239,8 +382,8 @@ export function ChatMessageRow({
                 key={`${attachment.url}-${index}`}
                 className={
                   imageAttachments.length === 3 && index === 0
-                    ? 'h-[110px] w-full overflow-hidden rounded-md'
-                    : 'h-[110px] w-[126px] overflow-hidden rounded-md'
+                    ? 'h-[118px] w-full overflow-hidden rounded-md'
+                    : 'h-[118px] w-[136px] overflow-hidden rounded-md'
                 }
                 onLongPress={beginAttachmentLongPress}
                 delayLongPress={260}
@@ -272,7 +415,7 @@ export function ChatMessageRow({
             onLongPress={beginAttachmentLongPress}
             delayLongPress={260}
             onPress={() => guardAttachmentPress(() => void openAttachmentUrl(videoAttachment.url))}>
-            <View className="h-[180px] w-[260px] items-center justify-center">
+            <View className="h-[190px] w-[280px] items-center justify-center">
               <Ionicons name="play-circle" size={44} color="#fff" />
               <Text allowFontScaling={false} className="mt-2 text-sm text-white">
                 Video
@@ -283,21 +426,21 @@ export function ChatMessageRow({
 
         {fileAttachment ? (
           <Pressable
-            className="mt-1 min-w-[220px] max-w-[280px] flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
+            className="mt-1 w-[268px] flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
             onLongPress={beginAttachmentLongPress}
             delayLongPress={260}
             onPress={() => guardAttachmentPress(() => void openAttachmentUrl(fileAttachment.url))}>
-            <View className="mr-3 h-11 w-11 items-center justify-center rounded-lg bg-blue-500">
+            <View className="mr-3 h-12 w-12 items-center justify-center rounded-xl bg-blue-500">
               <Text allowFontScaling={false} className="text-[10px] font-bold text-white">
-                {getFileExt(getDisplayFileName(fileAttachment.url))}
+                {getFileExt(fileDisplayName || getDisplayFileName(fileAttachment.url))}
               </Text>
             </View>
             <View className="min-w-0 flex-1">
               <Text
                 allowFontScaling={false}
-                className="text-[13px] font-medium text-slate-900"
+                className="text-[13px] font-semibold text-slate-900"
                 numberOfLines={2}>
-                {getDisplayFileName(fileAttachment.url)}
+                {fileDisplayName || getDisplayFileName(fileAttachment.url)}
               </Text>
               <Text allowFontScaling={false} className="mt-0.5 text-[11px] text-slate-500">
                 {fileAttachment.size || 'Nhấn để mở tệp'}
@@ -306,13 +449,13 @@ export function ChatMessageRow({
           </Pressable>
         ) : null}
 
-        {message.content?.trim() ? (
+        {shouldRenderCaption ? (
           <View
-            className={`mt-1 rounded-[16px] px-3.5 py-2.5 ${
+            className={`mt-1 min-w-[110px] rounded-[16px] px-3.5 py-2.5 ${
               isMine ? 'rounded-br-[8px] bg-[#c8ebfb]' : 'rounded-bl-[8px] bg-white'
             }`}>
             <Text allowFontScaling={false} className="text-[13px] text-slate-900">
-              {message.content}
+              {trimmedContent}
             </Text>
           </View>
         ) : null}
@@ -337,7 +480,7 @@ export function ChatMessageRow({
           </View>
         )}
 
-        <View className={`max-w-[80%] ${isMine ? 'items-end' : 'items-start'}`}>
+        <View className={`max-w-[86%] ${isMine ? 'items-end' : 'items-start'}`}>
           {!isMine && message.senderName ? (
             <Text allowFontScaling={false} className="mb-1 ml-1 text-[11px] font-medium text-slate-500">
               {message.senderName}

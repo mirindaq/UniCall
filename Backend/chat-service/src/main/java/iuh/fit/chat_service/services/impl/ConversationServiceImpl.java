@@ -4,8 +4,12 @@ import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
+import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
 import iuh.fit.chat_service.entities.Conversation;
+import iuh.fit.chat_service.entities.GroupManagementSettings;
+import iuh.fit.chat_service.entities.GroupMemberJoinRequest;
 import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.ConversationType;
 import iuh.fit.chat_service.enums.ParicipantRole;
@@ -23,6 +27,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -70,31 +76,31 @@ public class ConversationServiceImpl implements ConversationService {
             ));
         }
 
-        Conversation conversation = new Conversation(
-                null,
-                ConversationType.GROUP,
-                groupName,
-                "",
-                now,
-                now,
-                "",
-                participantInfos.size(),
-                participantInfos,
-                new ArrayList<>()
-        );
+        Conversation conversation = new Conversation();
+        conversation.setType(ConversationType.GROUP);
+        conversation.setName(groupName);
+        conversation.setAvatar("");
+        conversation.setDateCreate(now);
+        conversation.setDateUpdateMessage(now);
+        conversation.setLastMessageContent("");
+        conversation.setNumberMember(participantInfos.size());
+        conversation.setParticipantInfos(participantInfos);
+        conversation.setPinnedByAccountIds(new ArrayList<>());
+        conversation.setGroupManagementSettings(GroupManagementSettings.defaults());
+        conversation.setPendingMemberRequests(new ArrayList<>());
 
         return conversationRepository.save(conversation);
     }
 
     @Override
-    public Conversation addGroupMembers(
+    public ManageGroupParticipantsResponse addGroupMembers(
             String currentIdentityUserId,
             String conversationId,
             AddGroupMembersRequest request
     ) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
-        assertAdminActor(conversation, actorId);
+        GroupManagementSettings groupManagementSettings = ensureGroupManagementSettings(conversation);
 
         List<String> normalizedMembers = request.getMemberIdentityUserIds() == null
                 ? List.of()
@@ -112,30 +118,66 @@ public class ConversationServiceImpl implements ConversationService {
         List<ParticipantInfo> participantInfos = conversation.getParticipantInfos() == null
                 ? new ArrayList<>()
                 : new ArrayList<>(conversation.getParticipantInfos());
+        ParticipantInfo actorParticipant = findParticipant(participantInfos, actorId);
+        if (actorParticipant == null) {
+            throw new InvalidParamException("Current user is not in this group");
+        }
         Set<String> existingIdentityUserIds = participantInfos.stream()
                 .map(ParticipantInfo::getIdAccount)
                 .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
+        List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
 
         LocalDateTime now = LocalDateTime.now();
         int addedCount = 0;
+        int createdPendingCount = 0;
+        boolean memberApprovalEnabled = Boolean.TRUE.equals(groupManagementSettings.getMemberApprovalEnabled());
+        boolean canAddDirectly = !memberApprovalEnabled || isAdminOrDeputy(actorParticipant);
+
         for (String memberId : normalizedMembers) {
             if (existingIdentityUserIds.contains(memberId)) {
                 continue;
             }
-            participantInfos.add(new ParticipantInfo(memberId, ParicipantRole.USER, "", now));
-            existingIdentityUserIds.add(memberId);
-            addedCount++;
+
+            if (canAddDirectly) {
+                participantInfos.add(new ParticipantInfo(memberId, ParicipantRole.USER, "", now));
+                existingIdentityUserIds.add(memberId);
+                addedCount++;
+                continue;
+            }
+
+            boolean existedPending = pendingMemberRequests.stream()
+                    .anyMatch(item -> memberId.equals(item.getTargetIdentityUserId()));
+            if (existedPending) {
+                continue;
+            }
+
+            pendingMemberRequests.add(new GroupMemberJoinRequest(
+                    UUID.randomUUID().toString(),
+                    actorId,
+                    memberId,
+                    now
+            ));
+            createdPendingCount++;
         }
 
-        if (addedCount == 0) {
+        if (addedCount == 0 && createdPendingCount == 0) {
+            if (memberApprovalEnabled && !canAddDirectly) {
+                throw new InvalidParamException("All provided members already exist or are pending approval");
+            }
             throw new InvalidParamException("All provided members already exist in group");
+        }
+
+        if (addedCount > 0 && !pendingMemberRequests.isEmpty()) {
+            pendingMemberRequests.removeIf(item -> existingIdentityUserIds.contains(item.getTargetIdentityUserId()));
         }
 
         conversation.setParticipantInfos(participantInfos);
         conversation.setNumberMember(participantInfos.size());
+        conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(now);
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        return ManageGroupParticipantsResponse.from(saved, addedCount, createdPendingCount);
     }
 
     @Override
@@ -150,16 +192,20 @@ public class ConversationServiceImpl implements ConversationService {
             throw new InvalidParamException("Cannot remove yourself from this API. Please use leave group");
         }
         Conversation conversation = getGroupConversationOrThrow(conversationId);
-        assertAdminActor(conversation, actorId);
 
         List<ParticipantInfo> participantInfos = conversation.getParticipantInfos() == null
                 ? new ArrayList<>()
                 : new ArrayList<>(conversation.getParticipantInfos());
 
+        ParticipantInfo actorParticipant = findParticipant(participantInfos, actorId);
+        if (actorParticipant == null) {
+            throw new InvalidParamException("Current user is not in this group");
+        }
         ParticipantInfo targetParticipant = findParticipant(participantInfos, targetId);
         if (targetParticipant == null) {
             throw new ResourceNotFoundException("Member does not exist in this group");
         }
+        assertCanRemoveGroupMember(actorParticipant, targetParticipant);
 
         if (targetParticipant.getRole() == ParicipantRole.ADMIN && countAdmin(participantInfos) == 1) {
             throw new InvalidParamException("Group must have at least one admin");
@@ -171,8 +217,12 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
+        pendingMemberRequests.removeIf(request -> targetId.equals(request.getTargetIdentityUserId())
+                || targetId.equals(request.getRequesterIdentityUserId()));
         conversation.setParticipantInfos(participantInfos);
         conversation.setNumberMember(participantInfos.size());
+        conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(now);
         return conversationRepository.save(conversation);
     }
@@ -253,7 +303,87 @@ public class ConversationServiceImpl implements ConversationService {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
         assertMemberActor(conversation, actorId);
+        ensureGroupManagementSettings(conversation);
+        normalizePendingMemberRequests(conversation);
         return conversation;
+    }
+
+    @Override
+    public Conversation updateGroupManagementSettings(
+            String currentIdentityUserId,
+            String conversationId,
+            UpdateGroupManagementSettingsRequest request
+    ) {
+        String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
+        Conversation conversation = getGroupConversationOrThrow(conversationId);
+        assertAdminOrDeputyActor(conversation, actorId);
+
+        GroupManagementSettings settings = new GroupManagementSettings(
+                request.getAllowMemberSendMessage(),
+                request.getAllowMemberPinMessage(),
+                request.getAllowMemberChangeAvatar(),
+                request.getMemberApprovalEnabled()
+        );
+
+        conversation.setGroupManagementSettings(settings);
+        conversation.setDateUpdateMessage(LocalDateTime.now());
+        return conversationRepository.save(conversation);
+    }
+
+    @Override
+    public Conversation approveGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId) {
+        String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
+        String normalizedRequestId = normalizeIdentityUserId(requestId, "Request id is required");
+        Conversation conversation = getGroupConversationOrThrow(conversationId);
+        assertAdminOrDeputyActor(conversation, actorId);
+
+        List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
+        GroupMemberJoinRequest targetRequest = pendingMemberRequests.stream()
+                .filter(item -> normalizedRequestId.equals(item.getIdRequest()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Pending member request not found"));
+
+        List<ParticipantInfo> participantInfos = conversation.getParticipantInfos() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(conversation.getParticipantInfos());
+
+        String targetIdentityUserId = targetRequest.getTargetIdentityUserId();
+        ParticipantInfo existedParticipant = findParticipant(participantInfos, targetIdentityUserId);
+        if (existedParticipant == null) {
+            participantInfos.add(new ParticipantInfo(
+                    targetIdentityUserId,
+                    ParicipantRole.USER,
+                    "",
+                    LocalDateTime.now()
+            ));
+        }
+
+        pendingMemberRequests.removeIf(item -> normalizedRequestId.equals(item.getIdRequest())
+                || targetIdentityUserId.equals(item.getTargetIdentityUserId()));
+
+        conversation.setParticipantInfos(participantInfos);
+        conversation.setNumberMember(participantInfos.size());
+        conversation.setPendingMemberRequests(pendingMemberRequests);
+        conversation.setDateUpdateMessage(LocalDateTime.now());
+        return conversationRepository.save(conversation);
+    }
+
+    @Override
+    public Conversation rejectGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId) {
+        String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
+        String normalizedRequestId = normalizeIdentityUserId(requestId, "Request id is required");
+        Conversation conversation = getGroupConversationOrThrow(conversationId);
+        assertAdminOrDeputyActor(conversation, actorId);
+
+        List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
+        boolean removed = pendingMemberRequests.removeIf(item -> normalizedRequestId.equals(item.getIdRequest()));
+        if (!removed) {
+            throw new ResourceNotFoundException("Pending member request not found");
+        }
+
+        conversation.setPendingMemberRequests(pendingMemberRequests);
+        conversation.setDateUpdateMessage(LocalDateTime.now());
+        return conversationRepository.save(conversation);
     }
 
     @Override
@@ -317,8 +447,12 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         participantInfos.removeIf(participant -> actorId.equals(participant.getIdAccount()));
+        List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
+        pendingMemberRequests.removeIf(request -> actorId.equals(request.getTargetIdentityUserId())
+                || actorId.equals(request.getRequesterIdentityUserId()));
         conversation.setParticipantInfos(participantInfos);
         conversation.setNumberMember(participantInfos.size());
+        conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(LocalDateTime.now());
         return conversationRepository.save(conversation);
     }
@@ -359,6 +493,52 @@ public class ConversationServiceImpl implements ConversationService {
         return value.trim();
     }
 
+    private GroupManagementSettings ensureGroupManagementSettings(Conversation conversation) {
+        GroupManagementSettings settings = conversation.getGroupManagementSettings();
+        if (settings == null) {
+            settings = GroupManagementSettings.defaults();
+            conversation.setGroupManagementSettings(settings);
+            return settings;
+        }
+
+        if (settings.getAllowMemberSendMessage() == null) {
+            settings.setAllowMemberSendMessage(true);
+        }
+        if (settings.getAllowMemberPinMessage() == null) {
+            settings.setAllowMemberPinMessage(true);
+        }
+        if (settings.getAllowMemberChangeAvatar() == null) {
+            settings.setAllowMemberChangeAvatar(true);
+        }
+        if (settings.getMemberApprovalEnabled() == null) {
+            settings.setMemberApprovalEnabled(false);
+        }
+
+        conversation.setGroupManagementSettings(settings);
+        return settings;
+    }
+
+    private List<GroupMemberJoinRequest> normalizePendingMemberRequests(Conversation conversation) {
+        List<GroupMemberJoinRequest> pendingMemberRequests = conversation.getPendingMemberRequests() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(conversation.getPendingMemberRequests());
+
+        pendingMemberRequests.removeIf(item -> item == null
+                || item.getIdRequest() == null || item.getIdRequest().isBlank()
+                || item.getRequesterIdentityUserId() == null || item.getRequesterIdentityUserId().isBlank()
+                || item.getTargetIdentityUserId() == null || item.getTargetIdentityUserId().isBlank());
+
+        conversation.setPendingMemberRequests(pendingMemberRequests);
+        return pendingMemberRequests;
+    }
+
+    private boolean isAdminOrDeputy(ParticipantInfo participantInfo) {
+        if (participantInfo == null || participantInfo.getRole() == null) {
+            return false;
+        }
+        return participantInfo.getRole() == ParicipantRole.ADMIN || participantInfo.getRole() == ParicipantRole.DEPUTY;
+    }
+
     private void assertAdminActor(Conversation conversation, String actorId) {
         ParticipantInfo actor = findParticipant(conversation.getParticipantInfos(), actorId);
         if (actor == null) {
@@ -369,11 +549,38 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
+    private void assertAdminOrDeputyActor(Conversation conversation, String actorId) {
+        ParticipantInfo actor = findParticipant(conversation.getParticipantInfos(), actorId);
+        if (actor == null) {
+            throw new InvalidParamException("Current user is not in this group");
+        }
+        if (!isAdminOrDeputy(actor)) {
+            throw new InvalidParamException("Only group admin or deputy can perform this action");
+        }
+    }
+
     private void assertMemberActor(Conversation conversation, String actorId) {
         ParticipantInfo actor = findParticipant(conversation.getParticipantInfos(), actorId);
         if (actor == null) {
             throw new InvalidParamException("Current user is not in this group");
         }
+    }
+
+    private void assertCanRemoveGroupMember(ParticipantInfo actor, ParticipantInfo target) {
+        ParicipantRole actorRole = actor.getRole() == null ? ParicipantRole.USER : actor.getRole();
+        ParicipantRole targetRole = target.getRole() == null ? ParicipantRole.USER : target.getRole();
+
+        if (actorRole == ParicipantRole.ADMIN) {
+            return;
+        }
+        if (actorRole == ParicipantRole.DEPUTY && targetRole == ParicipantRole.USER) {
+            return;
+        }
+
+        if (actorRole == ParicipantRole.DEPUTY) {
+            throw new InvalidParamException("Deputy can only remove regular members");
+        }
+        throw new InvalidParamException("Only group admin or deputy can remove members");
     }
 
     private ParticipantInfo findParticipant(List<ParticipantInfo> participantInfos, String identityUserId) {

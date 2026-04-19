@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -28,6 +28,7 @@ import {
   messagePreviewSnippetText,
   QUICK_MESSAGE_REACTIONS,
   summarizeMessageReactions,
+  type MessagePreviewData,
 } from '@/utils/chat-message-preview';
 
 type UiMessage = {
@@ -50,6 +51,10 @@ type UiMessage = {
 };
 
 const MESSAGE_PAGE_SIZE = 20;
+const GROUP_MANAGER_ONLY_SEND_MESSAGE =
+  'Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m \u0111\u01B0\u1EE3c g\u1EEDi tin nh\u1EAFn v\u00E0o nh\u00F3m.';
+const GROUP_MANAGER_ONLY_PIN_MESSAGE =
+  'Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m m\u1EDBi c\u00F3 th\u1EC3 ghim tin nh\u1EAFn.';
 
 const toUiMessage = (message: ChatMessageResponse): UiMessage => ({
   idMessage: message.idMessage,
@@ -130,16 +135,17 @@ const dedupeMessagesById = (items: UiMessage[]) => {
   return next;
 };
 
-const waitForSocketConnected = async (timeoutMs = 5000) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const client = chatSocketService.getClient();
-    if (client?.connected) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 80));
+const getBackendErrorMessage = (error: unknown): string | undefined =>
+  (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+
+const isGroupPinPermissionError = (message?: string): boolean => {
+  if (!message) {
+    return false;
   }
-  return false;
+  const normalized = message.toLowerCase();
+  const hasPinKeyword = /ghim|pin/.test(normalized);
+  const hasRoleKeyword = /truong nhom|pho nhom|deputy|admin|group admin/.test(normalized);
+  return hasPinKeyword && hasRoleKeyword;
 };
 
 type MessageActionItemProps = {
@@ -171,6 +177,64 @@ function MessageActionItem({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+const previewKindToIcon = (
+  kind: MessagePreviewData['kind']
+): keyof typeof Ionicons.glyphMap => {
+  switch (kind) {
+    case 'file':
+      return 'document-text-outline';
+    case 'audio':
+      return 'musical-notes-outline';
+    case 'link':
+      return 'link-outline';
+    case 'call':
+      return 'call-outline';
+    case 'video':
+      return 'videocam-outline';
+    default:
+      return 'image-outline';
+  }
+};
+
+function PinnedPreviewMedia({
+  preview,
+  size = 28,
+}: {
+  preview: MessagePreviewData;
+  size?: number;
+}) {
+  if (preview.kind === 'text' && !preview.thumbnailUrl) {
+    return null;
+  }
+
+  const sizeClass = size <= 24 ? 'h-6 w-6' : 'h-7 w-7';
+  const iconSize = size <= 24 ? 12 : 14;
+
+  if (preview.thumbnailUrl) {
+    return (
+      <Image
+        source={{ uri: preview.thumbnailUrl }}
+        className={`${sizeClass} rounded-md bg-amber-100`}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (preview.kind === 'file') {
+    return (
+      <View className={`${sizeClass} items-center justify-center rounded-md border border-amber-300 bg-white`}>
+        <Text className="text-[9px] font-bold uppercase text-amber-700">{preview.fileExt || 'FILE'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className={`${sizeClass} items-center justify-center rounded-md border border-amber-300 bg-white`}>
+      <Ionicons name={previewKindToIcon(preview.kind)} size={iconSize} color="#92400e" />
+    </View>
   );
 }
 
@@ -218,14 +282,43 @@ export default function ConversationDetailScreen() {
   }, [conversation, myIdentityId, myAccountNumericId]);
 
   const peerUserId = peerInfo?.idAccount ?? null;
+  const isGroupConversation = conversation?.type === 'GROUP';
+  const currentGroupRole = useMemo(() => {
+    if (!conversation) {
+      return null;
+    }
+    const normalizedIdentityId = normalizeId(myIdentityId);
+    const normalizedNumericId = normalizeId(myAccountNumericId);
+    return (
+      conversation.participantInfos.find((participant) => {
+        const participantId = normalizeId(participant.idAccount);
+        if (!participantId) {
+          return false;
+        }
+        return participantId === normalizedIdentityId || participantId === normalizedNumericId;
+      })?.role ?? null
+    );
+  }, [conversation, myAccountNumericId, myIdentityId]);
+  const isCurrentUserGroupManager = currentGroupRole === 'ADMIN' || currentGroupRole === 'DEPUTY';
+  const isGroupSendRestricted =
+    isGroupConversation &&
+    !conversation?.groupManagementSettings?.allowMemberSendMessage &&
+    !isCurrentUserGroupManager;
+  const isGroupPinRestricted =
+    isGroupConversation &&
+    !conversation?.groupManagementSettings?.allowMemberPinMessage &&
+    !isCurrentUserGroupManager;
   const isDirectConversation = conversation?.type === 'DOUBLE';
-  const isMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked);
+  const isDirectMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked);
+  const isComposerBlocked = isDirectMessageBlocked || isGroupSendRestricted;
   const blockedCallReasonText = blockStatus?.blockedByMe
-    ? 'Bạn đã chặn người này. Hãy bỏ chặn để tiếp tục.'
-    : 'Không thể gọi vì người này đã chặn bạn.';
-  const blockedComposerReasonText = blockStatus?.blockedByMe
-    ? 'Bạn đã chặn người này. Hãy bỏ chặn để tiếp tục nhắn tin.'
-    : 'Người này đã chặn bạn. Bạn không thể nhắn tin lúc này.';
+    ? 'B\u1EA1n \u0111\u00E3 ch\u1EB7n ng\u01B0\u1EDDi n\u00E0y. H\u00E3y b\u1ECF ch\u1EB7n \u0111\u1EC3 ti\u1EBFp t\u1EE5c.'
+    : 'Kh\u00F4ng th\u1EC3 g\u1ECDi v\u00EC ng\u01B0\u1EDDi n\u00E0y \u0111\u00E3 ch\u1EB7n b\u1EA1n.';
+  const blockedComposerReasonText = isGroupSendRestricted
+    ? GROUP_MANAGER_ONLY_SEND_MESSAGE
+    : blockStatus?.blockedByMe
+      ? 'B\u1EA1n \u0111\u00E3 ch\u1EB7n ng\u01B0\u1EDDi n\u00E0y. H\u00E3y b\u1ECF ch\u1EB7n \u0111\u1EC3 ti\u1EBFp t\u1EE5c nh\u1EAFn tin.'
+      : 'Ng\u01B0\u1EDDi n\u00E0y \u0111\u00E3 ch\u1EB7n b\u1EA1n. B\u1EA1n kh\u00F4ng th\u1EC3 nh\u1EAFn tin l\u00FAc n\u00E0y.';
 
   const resolveSenderName = useCallback(
     (message: UiMessage) => {
@@ -515,9 +608,52 @@ export default function ConversationDetailScreen() {
     [conversationId]
   );
 
+  const handleHideMessageForMe = useCallback(
+    (messageId: string) => {
+      if (!conversationId) {
+        return;
+      }
+      Alert.alert('Xóa ở phía tôi', 'Tin nhắn này sẽ bị xóa chỉ ở phía bạn.', [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await chatService.hideMessageForMe(conversationId, messageId);
+                setMessages((prev) => prev.filter((item) => item.idMessage !== messageId));
+                setReplyingToMessageId((prev) => (prev === messageId ? null : prev));
+                setMessageActionTargetId(null);
+                Toast.show({
+                  type: 'success',
+                  text1: 'Đã xóa tin nhắn ở phía bạn',
+                });
+              } catch {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Xóa tin nhắn ở phía bạn thất bại',
+                });
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [conversationId]
+  );
+
   const handleTogglePinMessage = useCallback(
     async (message: UiMessage) => {
       if (!conversationId) {
+        return;
+      }
+      if (isGroupPinRestricted) {
+        setMessageActionTargetId(null);
+        Toast.show({
+          type: 'error',
+          text1: GROUP_MANAGER_ONLY_PIN_MESSAGE,
+        });
         return;
       }
       try {
@@ -529,16 +665,28 @@ export default function ConversationDetailScreen() {
         setMessageActionTargetId(null);
         Toast.show({
           type: 'success',
-          text1: message.pinned ? 'Đã bỏ ghim tin nhắn' : 'Đã ghim tin nhắn',
+          text1: message.pinned ? '\u0110\u00E3 b\u1ECF ghim tin nh\u1EAFn' : '\u0110\u00E3 ghim tin nh\u1EAFn',
         });
-      } catch {
+      } catch (error) {
+        const backendMessage = getBackendErrorMessage(error);
+        if (isGroupPinPermissionError(backendMessage)) {
+          Toast.show({
+            type: 'error',
+            text1: GROUP_MANAGER_ONLY_PIN_MESSAGE,
+          });
+          return;
+        }
         Toast.show({
           type: 'error',
-          text1: message.pinned ? 'Bỏ ghim tin nhắn thất bại' : 'Ghim tin nhắn thất bại',
+          text1:
+            backendMessage ||
+            (message.pinned
+              ? 'B\u1ECF ghim tin nh\u1EAFn th\u1EA5t b\u1EA1i'
+              : 'Ghim tin nh\u1EAFn th\u1EA5t b\u1EA1i'),
         });
       }
     },
-    [conversationId]
+    [conversationId, isGroupPinRestricted]
   );
 
   const handleReactMessage = useCallback(
@@ -795,55 +943,44 @@ export default function ConversationDetailScreen() {
     if (!conversationId || !mySenderId || isSending) {
       return;
     }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
+      return;
+    }
+
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+      return;
+    }
 
     const replyToMessageId = replyingToMessageId;
-    const nowIso = new Date().toISOString();
-    const tempMessage: UiMessage = {
-      idMessage: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      idConversation: conversationId,
-      idAccountSent: mySenderId,
-      status: 'SENT',
-      content,
-      type: 'TEXT',
-      timeSent: nowIso,
-      attachments: [],
-      recalled: false,
-      replyToMessageId: replyToMessageId ?? undefined,
-      optimisticStatus: 'SENDING',
-    };
-    setMessages((prev) => [tempMessage, ...prev]);
-    setShouldScrollToBottom(true);
     setIsSending(true);
 
     try {
-      await chatSocketService.connect();
-      const connected = await waitForSocketConnected();
-      if (!connected) {
-        const response = await chatService.sendMessageRest(
-          conversationId,
-          content,
-          'TEXT',
-          undefined,
-          replyToMessageId ?? undefined
-        );
-        setMessages((prev) =>
-          prev.map((item) => (item.idMessage === tempMessage.idMessage ? toUiMessage(response.data) : item))
-        );
-        setReplyingToMessageId(null);
-        return;
-      }
-      chatSocketService.sendMessage(conversationId, content, 'TEXT', undefined, replyToMessageId ?? undefined);
-      setMessages((prev) =>
-        prev.map((item) =>
-          item.idMessage === tempMessage.idMessage ? { ...item, optimisticStatus: 'SENT' } : item
-        )
+      const response = await chatService.sendMessageRest(
+        conversationId,
+        normalizedContent,
+        'TEXT',
+        undefined,
+        replyToMessageId ?? undefined
       );
+      const incoming = toUiMessage(response.data);
+      setMessages((prev) => {
+        if (prev.some((message) => message.idMessage === incoming.idMessage)) {
+          return prev;
+        }
+        return [incoming, ...prev];
+      });
+      setShouldScrollToBottom(true);
       setReplyingToMessageId(null);
-    } catch {
-      setMessages((prev) => prev.filter((item) => item.idMessage !== tempMessage.idMessage));
+    } catch (error) {
+      const backendMessage = getBackendErrorMessage(error);
       Toast.show({
         type: 'error',
-        text1: 'Gửi tin nhắn thất bại',
+        text1: backendMessage || 'G\u1EEDi tin nh\u1EAFn th\u1EA5t b\u1EA1i',
       });
     } finally {
       setIsSending(false);
@@ -853,6 +990,13 @@ export default function ConversationDetailScreen() {
   const handleSendImages = async (imageUris: string[], mixedText?: string) => {
     const mySenderId = myIdentityId ?? myAccountNumericId;
     if (!conversationId || !mySenderId || isSending || imageUris.length === 0) {
+      return;
+    }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
       return;
     }
 
@@ -905,12 +1049,19 @@ export default function ConversationDetailScreen() {
     if (!conversationId || !mySenderId || isSending || !gifUrl) {
       return;
     }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
+      return;
+    }
 
     setIsSending(true);
     try {
       const response = await chatService.sendMessageRest(
         conversationId,
-        'Đã gửi GIF',
+        '\u0110\u00E3 g\u1EEDi GIF',
         'NONTEXT',
         [{ type: 'GIF', url: gifUrl, order: 0 }],
         replyingToMessageId ?? undefined
@@ -927,7 +1078,7 @@ export default function ConversationDetailScreen() {
     } catch {
       Toast.show({
         type: 'error',
-        text1: 'Gửi GIF thất bại',
+        text1: 'G\u1EEDi GIF th\u1EA5t b\u1EA1i',
       });
     } finally {
       setIsSending(false);
@@ -955,7 +1106,7 @@ export default function ConversationDetailScreen() {
           router.back();
         }}
         onStartAudioCall={() => {
-          if (isMessageBlocked) {
+          if (isDirectMessageBlocked) {
             Toast.show({
               type: 'error',
               text1: blockedCallReasonText,
@@ -977,7 +1128,7 @@ export default function ConversationDetailScreen() {
           });
         }}
         onStartVideoCall={() => {
-          if (isMessageBlocked) {
+          if (isDirectMessageBlocked) {
             Toast.show({
               type: 'error',
               text1: blockedCallReasonText,
@@ -1004,8 +1155,8 @@ export default function ConversationDetailScreen() {
           }
           router.push(`/message/options/${conversationId}`);
         }}
-        audioCallDisabled={isMessageBlocked || !peerUserId}
-        videoCallDisabled={isMessageBlocked || !peerUserId}
+        audioCallDisabled={isDirectMessageBlocked || !peerUserId}
+        videoCallDisabled={isDirectMessageBlocked || !peerUserId}
       />
 
       {activePinnedMessage && activePinnedPreview ? (
@@ -1022,7 +1173,7 @@ export default function ConversationDetailScreen() {
               }}>
               <Ionicons name="pin" size={14} color="#b45309" />
               <Text className="ml-1 text-[12px] font-semibold text-amber-700">
-                {`Tin nh?n ghim${pinnedMessages.length > 1 ? ` (${pinnedMessages.length})` : ''}`}
+                {`Tin nhắn ghim${pinnedMessages.length > 1 ? ` (${pinnedMessages.length})` : ''}`}
               </Text>
               {pinnedMessages.length > 1 ? (
                 <Ionicons
@@ -1039,16 +1190,22 @@ export default function ConversationDetailScreen() {
             </Pressable>
           </View>
           <Pressable
-            className="mt-1"
+            className="mt-1 flex-row items-center"
             disabled={pinnedMessages.length <= 1}
             onPress={() => {
               if (pinnedMessages.length > 1) {
                 setIsPinnedListExpanded((prev) => !prev);
               }
             }}>
-            <Text className="text-[12px] text-amber-800" numberOfLines={1}>
-              {messagePreviewSnippetText(activePinnedPreview)}
-            </Text>
+            {activePinnedPreview.kind !== 'text' ? <PinnedPreviewMedia preview={activePinnedPreview} /> : null}
+            <View className={`${activePinnedPreview.kind !== 'text' ? 'ml-2' : ''} flex-1`}>
+              <Text className="text-[11px] font-semibold text-amber-900" numberOfLines={1}>
+                {activePinnedPreview.senderName || 'Tin nhắn'}
+              </Text>
+              <Text className="text-[12px] text-amber-800" numberOfLines={1}>
+                {messagePreviewSnippetText(activePinnedPreview)}
+              </Text>
+            </View>
           </Pressable>
 
           {isPinnedListExpanded && pinnedMessages.length > 1 ? (
@@ -1068,12 +1225,17 @@ export default function ConversationDetailScreen() {
                       setActivePinnedMessageId(item.idMessage);
                       setIsPinnedListExpanded(false);
                     }}>
-                    <Text className="text-[11px] font-medium text-amber-900" numberOfLines={1}>
-                      {preview.senderName || 'Tin nh?n'}
-                    </Text>
-                    <Text className="text-[11px] text-amber-700" numberOfLines={1}>
-                      {messagePreviewSnippetText(preview)}
-                    </Text>
+                    <View className="flex-row items-center">
+                      {preview.kind !== 'text' ? <PinnedPreviewMedia preview={preview} size={24} /> : null}
+                      <View className={`${preview.kind !== 'text' ? 'ml-2' : ''} flex-1`}>
+                        <Text className="text-[11px] font-medium text-amber-900" numberOfLines={1}>
+                          {preview.senderName || 'Tin nhắn'}
+                        </Text>
+                        <Text className="text-[11px] text-amber-700" numberOfLines={1}>
+                          {messagePreviewSnippetText(preview)}
+                        </Text>
+                      </View>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -1092,7 +1254,7 @@ export default function ConversationDetailScreen() {
         isLoadingMore={isLoadingMore}
         hasMore={hasMore}
         shouldScrollToBottom={shouldScrollToBottom}
-        isInputBlocked={isMessageBlocked}
+        isInputBlocked={isComposerBlocked}
         blockedReasonText={blockedComposerReasonText}
         replyPreview={replyingPreview}
         onCancelReply={() => setReplyingToMessageId(null)}
@@ -1193,6 +1355,17 @@ export default function ConversationDetailScreen() {
                   return;
                 }
                 void handleTogglePinMessage(selectedActionMessage);
+              }}
+            />
+            <MessageActionItem
+              icon="eye-off-outline"
+              label="Xóa ở phía tôi"
+              danger
+              onPress={() => {
+                if (!selectedActionMessage) {
+                  return;
+                }
+                handleHideMessageForMe(selectedActionMessage.idMessage);
               }}
             />
             {selectedActionMessage &&

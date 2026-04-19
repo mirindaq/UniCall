@@ -4,6 +4,7 @@ import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.dtos.response.CreateGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.DissolveGroupConversationResponse;
@@ -56,12 +57,16 @@ public class ConversationController {
             @PathVariable String conversationId,
             @Valid @RequestBody AddGroupMembersRequest request
     ) {
-        Conversation conversation = conversationService.addGroupMembers(currentIdentityUserId, conversationId, request);
+        ManageGroupParticipantsResponse result = conversationService.addGroupMembers(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
         return ResponseEntity.ok(
                 new ResponseSuccess<>(
                         HttpStatus.OK,
                         "Add group members success",
-                        ManageGroupParticipantsResponse.from(conversation)
+                        result
                 )
         );
     }
@@ -140,6 +145,66 @@ public class ConversationController {
                 new ResponseSuccess<>(
                         HttpStatus.OK,
                         "Get group conversation details success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PatchMapping("/{conversationId}/management-settings")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> updateGroupManagementSettings(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @Valid @RequestBody UpdateGroupManagementSettingsRequest request
+    ) {
+        Conversation conversation = conversationService.updateGroupManagementSettings(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Update group management settings success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PostMapping("/{conversationId}/member-requests/{requestId}/approve")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> approveGroupMemberRequest(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String requestId
+    ) {
+        Conversation conversation = conversationService.approveGroupMemberRequest(
+                currentIdentityUserId,
+                conversationId,
+                requestId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Approve group member request success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @DeleteMapping("/{conversationId}/member-requests/{requestId}")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> rejectGroupMemberRequest(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String requestId
+    ) {
+        Conversation conversation = conversationService.rejectGroupMemberRequest(
+                currentIdentityUserId,
+                conversationId,
+                requestId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Reject group member request success",
                         ManageGroupParticipantsResponse.from(conversation)
                 )
         );

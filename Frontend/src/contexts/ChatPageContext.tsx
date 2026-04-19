@@ -24,8 +24,8 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
-  detailsView: "main" | "storage" | "group-members" | "search"
-  setDetailsView: (view: "main" | "storage" | "group-members" | "search") => void
+  detailsView: "main" | "storage" | "group-members" | "group-manage" | "search"
+  setDetailsView: (view: "main" | "storage" | "group-members" | "group-manage" | "search") => void
   isDetailsPanelOpen: boolean
   setDetailsPanelOpen: (open: boolean) => void
   toggleDetailsPanel: () => void
@@ -100,7 +100,7 @@ const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
-  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "search">("main")
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "group-manage" | "search">("main")
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
   const [messageFocusRequestId, setMessageFocusRequestId] = useState<string | null>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)

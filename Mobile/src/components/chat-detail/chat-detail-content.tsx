@@ -101,11 +101,8 @@ export function ChatDetailContent({
 
   const keyboardOffset =
     Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : keyboardHeight;
-  const inputBottom =
-    Platform.OS === 'ios'
-      ? insets.bottom + keyboardOffset
-      : Math.max(insets.bottom, 10) + keyboardOffset;
-  const listTopPadding = inputAreaHeight + inputBottom + 8;
+  const inputBottom = insets.bottom + keyboardOffset;
+  const listTopPadding = inputAreaHeight + inputBottom + 2;
 
   const openImageViewer = React.useCallback(
     (targetUrl: string) => {

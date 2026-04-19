@@ -6,6 +6,7 @@ import {
   Copy,
   FileText,
   Forward,
+  Info,
   Image as ImageIcon,
   ListChecks,
   MoreHorizontal,
@@ -526,6 +527,25 @@ function getDirectPeerId(
   )
 }
 
+function normalizeParticipantId(value?: string | null): string | null {
+  if (!value) {
+    return null
+  }
+  const normalized = value.trim().toLowerCase()
+  return normalized || null
+}
+
+function isGroupPinPermissionError(message?: string): boolean {
+  if (!message) {
+    return false
+  }
+  const normalized = message.toLowerCase()
+  const hasPinKeyword = /ghim|pin/.test(normalized)
+  const hasRoleKeyword =
+    /trưởng nhóm|pho nhóm|phó nhóm|deputy|admin|group admin/.test(normalized)
+  return hasPinKeyword && hasRoleKeyword
+}
+
 export default function ChatWindow() {
   const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -687,17 +707,48 @@ export default function ChatWindow() {
   const [allConversationImages, setAllConversationImages] = useState<
     ImageViewerItem[]
   >([])
+  const selectedConversationSettings = selectedConversation?.groupManagementSettings
+  const currentGroupRole = useMemo(() => {
+    if (!selectedConversation || !currentUserId) {
+      return null
+    }
+    const currentNormalizedId = normalizeParticipantId(currentUserId)
+    if (!currentNormalizedId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find(
+        (participant) =>
+          normalizeParticipantId(participant.idAccount) === currentNormalizedId
+      )?.role ?? null
+    )
+  }, [currentUserId, selectedConversation])
+  const isCurrentUserGroupManager =
+    currentGroupRole === "ADMIN" || currentGroupRole === "DEPUTY"
+  const isGroupSendRestricted =
+    selectedConversation?.type === "GROUP" &&
+    !selectedConversationSettings?.allowMemberSendMessage &&
+    !isCurrentUserGroupManager
+  const isGroupPinRestricted =
+    selectedConversation?.type === "GROUP" &&
+    !selectedConversationSettings?.allowMemberPinMessage &&
+    !isCurrentUserGroupManager
   const isDirectConversation = selectedConversation?.type === "DOUBLE"
-  const isMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked)
+  const isDirectMessageBlocked =
+    isDirectConversation && Boolean(blockStatus?.blocked)
   const blockedReasonText = blockStatus?.blockedByMe
     ? "Bạn đã chặn người này. Hãy bỏ chặn để tiếp tục nhắn tin."
     : "Hiện không thể nhắn tin vì người này đã chặn bạn."
+  const isComposerBlocked = isDirectMessageBlocked || isGroupSendRestricted
+  const blockedComposerReasonText = isDirectMessageBlocked
+    ? blockedReasonText
+    : "Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m \u0111\u01B0\u1EE3c g\u1EEDi tin nh\u1EAFn v\u00E0o nh\u00F3m."
   const conversationCall = useConversationCall({
     conversationId: selectedConversationId ?? undefined,
     conversationType: selectedConversation?.type,
     currentUserId,
     peerUserId,
-    isBlocked: isMessageBlocked,
+    isBlocked: isDirectMessageBlocked,
   })
   const refreshBlockStatus = useCallback(async () => {
     if (!selectedConversationId || selectedConversation?.type !== "DOUBLE") {
@@ -2226,10 +2277,10 @@ export default function ChatWindow() {
       (!normalized && !hasAttachments) ||
       !selectedConversationId ||
       !currentUserId ||
-      isMessageBlocked
+      isComposerBlocked
     ) {
-      if (isMessageBlocked) {
-        toast.error(blockedReasonText)
+      if (isComposerBlocked) {
+        toast.error(blockedComposerReasonText)
       }
       return
     }
@@ -2834,6 +2885,10 @@ export default function ChatWindow() {
       if (!selectedConversationId) {
         return
       }
+      if (isGroupPinRestricted) {
+        toast.error("Chỉ trưởng/phó nhóm mới có thể ghim tin nhắn.")
+        return
+      }
       try {
         const response = msg.pinned
           ? await chatService.unpinMessage(
@@ -2849,15 +2904,24 @@ export default function ChatWindow() {
           setSelectedReplyTargetMessageId(null)
         }
         toast.success(msg.pinned ? "Đã bỏ ghim tin nhắn" : "Đã ghim tin nhắn")
-      } catch {
+      } catch (error) {
+        const backendMessage = (
+          error as { response?: { data?: { message?: string } } }
+        )?.response?.data?.message
+        if (isGroupPinPermissionError(backendMessage)) {
+          toast.error("Chỉ trưởng/phó nhóm mới có thể ghim tin nhắn.")
+          return
+        }
         toast.error(
-          msg.pinned
-            ? "Không bỏ ghim được tin nhắn"
-            : "Không ghim được tin nhắn"
+          backendMessage ||
+            (msg.pinned
+              ? "Không bỏ ghim được tin nhắn"
+              : "Không ghim được tin nhắn")
         )
       }
     },
     [
+      isGroupPinRestricted,
       mergeIncomingOrUpdatedMessage,
       selectedConversationId,
       selectedPinnedMessageId,
@@ -3944,7 +4008,7 @@ export default function ChatWindow() {
                                 />
                               </div>
                             ) : hasMultiImageAttachments ? (
-                              <div className="max-w-xs">
+                              <div className="max-w-[15rem]">
                                 <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-2xl border bg-background p-1 shadow-xs">
                                   {imageAttachments
                                     .slice(0, 4)
@@ -3999,7 +4063,7 @@ export default function ChatWindow() {
                                 <img
                                   src={firstAttachment.url}
                                   alt="image"
-                                  className="max-h-64 max-w-xs object-contain transition-opacity hover:opacity-90"
+                                  className="max-h-60 w-[15rem] object-cover transition-opacity hover:opacity-90"
                                   onClick={() =>
                                     openConversationImagePreview(
                                       firstAttachment.url
@@ -4020,7 +4084,7 @@ export default function ChatWindow() {
                                 <video
                                   src={firstAttachment.url}
                                   controls
-                                  className="max-h-64 max-w-xs bg-black"
+                                  className="max-h-60 w-[15rem] bg-black object-cover"
                                   preload="metadata"
                                 />
                                 {normalizedMessageContent &&
@@ -4484,14 +4548,21 @@ export default function ChatWindow() {
             </div>
           </div>
         ) : null}
-        {isMessageBlocked ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        {isComposerBlocked ? (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-sm",
+              isDirectMessageBlocked
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-blue-200 bg-blue-50 text-blue-800"
+            )}
+          >
             <p>
-              {isLoadingBlockStatus
+              {isDirectMessageBlocked && isLoadingBlockStatus
                 ? "Đang kiểm tra quyền nhắn tin..."
-                : blockedReasonText}
+                : blockedComposerReasonText}
             </p>
-            {blockStatus?.blockedByMe ? (
+            {isDirectMessageBlocked && blockStatus?.blockedByMe ? (
               <Button
                 type="button"
                 size="sm"
@@ -4504,6 +4575,12 @@ export default function ChatWindow() {
                   ? "Đang xử lý..."
                   : "Bỏ chặn để nhắn tin"}
               </Button>
+            ) : null}
+            {!isDirectMessageBlocked ? (
+              <div className="mt-1 flex items-center gap-1 text-[13px] font-medium text-blue-700">
+                <Info className="h-4 w-4" />
+                <span>Chỉ trưởng/phó nhóm được gửi tin nhắn vào nhóm.</span>
+              </div>
             ) : null}
           </div>
         ) : (

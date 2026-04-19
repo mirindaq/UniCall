@@ -53,6 +53,8 @@ interface ChatInfoMainProps {
   avatarFallback: string
   isGroup?: boolean
   onOpenGroupMembers?: () => void
+  canManageGroupSettings?: boolean
+  onOpenGroupManage?: () => void
   canDissolveGroup?: boolean
   onLeaveGroup?: () => Promise<void>
   onDissolveGroup?: () => Promise<void>
@@ -114,6 +116,8 @@ export default function ChatInfoMain({
   avatarFallback,
   isGroup = false,
   onOpenGroupMembers,
+  canManageGroupSettings = false,
+  onOpenGroupManage,
   canDissolveGroup = false,
   onLeaveGroup,
   onDissolveGroup,
@@ -267,11 +271,14 @@ export default function ChatInfoMain({
 
         linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
 
-        const sortedImages = (imagesRes.data ?? []).slice().sort((a, b) => {
-          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
-          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
-          return right - left
-        })
+        const sortedImages = (imagesRes.data ?? [])
+          .filter((item) => item.type === "IMAGE" || item.type === "VIDEO")
+          .slice()
+          .sort((a, b) => {
+            const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+            const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+            return right - left
+          })
         const onlyImages = sortedImages.filter((item) => item.type === "IMAGE")
 
         setAllImageAttachments(onlyImages)
@@ -401,6 +408,13 @@ export default function ChatInfoMain({
     void mutateBlockMessaging(null)
   }
 
+  const handleOpenInNewTab = (url: string) => {
+    const openedWindow = window.open(url, "_blank", "noopener,noreferrer")
+    if (!openedWindow) {
+      toast.error("Không thể mở file. Vui lòng kiểm tra cài đặt trình duyệt.")
+    }
+  }
+
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
       <div className="flex shrink-0 items-center justify-center border-b px-4 py-5">
@@ -435,7 +449,7 @@ export default function ChatInfoMain({
 
             <div
               className={`mt-4 grid w-full min-w-0 gap-2 ${
-                isGroup ? "grid-cols-4" : "grid-cols-3"
+                isGroup ? (canManageGroupSettings ? "grid-cols-4" : "grid-cols-3") : "grid-cols-3"
               }`}
             >
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
@@ -476,20 +490,20 @@ export default function ChatInfoMain({
                     </span>
                   </div>
 
-                  <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      onClick={() =>
-                        toast.info("Mục quản lý nhóm sẽ được cập nhật sớm.")
-                      }
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                    <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                      Quản lý nhóm
-                    </span>
-                  </div>
+                  {canManageGroupSettings ? (
+                    <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={() => onOpenGroupManage?.()}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                      <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                        Quản lý nhóm
+                      </span>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
@@ -590,7 +604,14 @@ export default function ChatInfoMain({
                           </p>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <span>{file.size || "Unknown size"}</span>
-                            <Download className="h-3 w-3 text-blue-500" />
+                            <button
+                              type="button"
+                              className="rounded p-0.5 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                              title="Tải file"
+                              onClick={() => handleOpenInNewTab(file.url)}
+                            >
+                              <Download className="h-3 w-3" />
+                            </button>
                           </div>
                         </div>
 

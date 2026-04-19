@@ -6,6 +6,7 @@ import { chatService } from "@/services/chat/chat.service"
 import { displayNameFromProfile } from "@/utils/chat-display.util"
 
 import GroupMembersPanel from "./GroupMembersPanel"
+import GroupManagePanel from "./GroupManagePanel"
 import ChatInfoMain from "./ChatInfoMain"
 import ChatSearchSidebar from "./ChatSearchSidebar"
 import ChatStorage from "./ChatStorage"
@@ -63,6 +64,15 @@ export default function ChatDetails() {
     )
   }
 
+  if (selectedConversation.type === "GROUP" && detailsView === "group-manage") {
+    return (
+      <GroupManagePanel
+        conversationId={selectedConversation.idConversation}
+        onBack={() => setDetailsView("main")}
+      />
+    )
+  }
+
   const title = conversationTitle(selectedConversation)
   const avatarSrc = conversationAvatar(selectedConversation)
   const fallback =
@@ -73,6 +83,8 @@ export default function ChatDetails() {
   const currentUserRole =
     selectedConversation.participantInfos?.find((item) => item.idAccount === currentUserId)?.role ?? null
   const canDissolveGroup = selectedConversation.type === "GROUP" && currentUserRole === "ADMIN"
+  const canManageGroupSettings = selectedConversation.type === "GROUP" &&
+    (currentUserRole === "ADMIN" || currentUserRole === "DEPUTY")
 
   const handleLeaveGroupFromInfo = async () => {
     if (selectedConversation.type !== "GROUP") {
@@ -114,6 +126,12 @@ export default function ChatDetails() {
       onOpenGroupMembers={() => {
         if (selectedConversation.type === "GROUP") {
           setDetailsView("group-members")
+        }
+      }}
+      canManageGroupSettings={canManageGroupSettings}
+      onOpenGroupManage={() => {
+        if (selectedConversation.type === "GROUP" && canManageGroupSettings) {
+          setDetailsView("group-manage")
         }
       }}
       canDissolveGroup={canDissolveGroup}

@@ -93,6 +93,20 @@ export interface ChatParticipantInfo {
   dateJoin: string
 }
 
+export type GroupManagementSettings = {
+  allowMemberSendMessage: boolean
+  allowMemberPinMessage: boolean
+  allowMemberChangeAvatar: boolean
+  memberApprovalEnabled: boolean
+}
+
+export type PendingMemberRequestInfo = {
+  idRequest: string
+  requesterIdentityUserId: string
+  targetIdentityUserId: string
+  requestedAt: string
+}
+
 export interface ConversationResponse {
   idConversation: string
   type: ConversationType
@@ -106,6 +120,8 @@ export interface ConversationResponse {
   pinned?: boolean
   numberMember: number
   participantInfos: ChatParticipantInfo[]
+  groupManagementSettings?: GroupManagementSettings
+  pendingMemberRequestCount?: number
 }
 
 export interface ConversationBlockStatusResponse {
@@ -141,7 +157,12 @@ export type ManageGroupParticipantsResponse = {
   idConversation: string
   name: string
   numberMember: number
+  groupManagementSettings: GroupManagementSettings
   participantInfos: GroupParticipantInfo[]
+  pendingMemberRequests?: PendingMemberRequestInfo[]
+  pendingMemberRequestCount?: number
+  addedMemberCount?: number
+  createdMemberRequestCount?: number
 }
 
 export type AddGroupMembersRequest = {
@@ -159,6 +180,8 @@ export type UpdateMemberNicknameRequest = {
 export type TransferGroupAdminRequest = {
   targetIdentityUserId: string
 }
+
+export type UpdateGroupManagementSettingsRequest = GroupManagementSettings
 
 export type DissolveGroupConversationResponse = {
   idConversation: string

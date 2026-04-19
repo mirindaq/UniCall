@@ -151,6 +151,21 @@ export default function GroupMembersScreen() {
     () => participants.find((participant) => participant.idAccount === myIdentityUserId)?.role ?? null,
     [myIdentityUserId, participants]
   );
+  const canKickMember = useCallback(
+    (member: Pick<ResolvedMember, 'id' | 'role'>) => {
+      if (member.id === myIdentityUserId) {
+        return false;
+      }
+      if (currentUserRole === 'ADMIN') {
+        return member.role !== 'ADMIN';
+      }
+      if (currentUserRole === 'DEPUTY') {
+        return member.role === 'USER';
+      }
+      return false;
+    },
+    [currentUserRole, myIdentityUserId]
+  );
 
   const resolvedMembers = useMemo<ResolvedMember[]>(
     () =>
@@ -482,6 +497,13 @@ export default function GroupMembersScreen() {
       if (!conversationId || isProcessingAction) {
         return;
       }
+      if (!canKickMember(targetMember)) {
+        Toast.show({
+          type: 'error',
+          text1: 'Bạn không có quyền xóa thành viên này',
+        });
+        return;
+      }
       Alert.alert('Xóa thành viên', `Xóa ${targetMember.displayName} khỏi nhóm?`, [
         { text: 'Hủy', style: 'cancel' },
         {
@@ -507,12 +529,14 @@ export default function GroupMembersScreen() {
         },
       ]);
     },
-    [conversationId, isProcessingAction, loadGroupDetails]
+    [canKickMember, conversationId, isProcessingAction, loadGroupDetails]
   );
 
   const openMemberActions = useCallback(
     (member: ResolvedMember) => {
-      if (member.id !== myIdentityUserId && currentUserRole !== 'ADMIN') {
+      const canManageTarget =
+        member.id === myIdentityUserId || currentUserRole === 'ADMIN' || canKickMember(member);
+      if (!canManageTarget) {
         Toast.show({
           type: 'error',
           text1: 'Bạn không có quyền quản lý thành viên này',
@@ -521,7 +545,7 @@ export default function GroupMembersScreen() {
       }
       setActionTargetMember(member);
     },
-    [currentUserRole, myIdentityUserId]
+    [canKickMember, currentUserRole, myIdentityUserId]
   );
 
   const handleToggleAddSelection = useCallback(
@@ -570,10 +594,24 @@ export default function GroupMembersScreen() {
     }
     setIsSubmittingAddMembers(true);
     try {
-      await chatService.addGroupMembers(conversationId, {
+      const response = await chatService.addGroupMembers(conversationId, {
         memberIdentityUserIds: memberIds,
       });
-      Toast.show({ type: 'success', text1: 'Đã thêm thành viên' });
+      const addedCount = response.data.addedMemberCount ?? 0;
+      const createdRequestCount = response.data.createdMemberRequestCount ?? 0;
+      if (createdRequestCount > 0 && addedCount === 0) {
+        Toast.show({
+          type: 'success',
+          text1: 'Đã gửi yêu cầu thêm thành viên để trưởng/phó nhóm duyệt',
+        });
+      } else if (createdRequestCount > 0) {
+        Toast.show({
+          type: 'success',
+          text1: `Đã thêm ${addedCount} thành viên, gửi ${createdRequestCount} yêu cầu duyệt`,
+        });
+      } else {
+        Toast.show({ type: 'success', text1: 'Đã thêm thành viên' });
+      }
       closeAddMemberModal();
       await loadGroupDetails(false);
     } catch (error) {
@@ -669,9 +707,12 @@ export default function GroupMembersScreen() {
         onRequestClose={closeAddMemberModal}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={closeAddMemberModal}>
           <KeyboardAvoidingView
+            className="flex-1 justify-end"
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
-            <Pressable className="max-h-[88%] rounded-t-2xl bg-white pb-5" onPress={(e) => e.stopPropagation()}>
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 20}>
+            <Pressable
+              className="max-h-[90%] min-h-[56%] rounded-t-2xl bg-white"
+              onPress={(e) => e.stopPropagation()}>
               <View className="flex-row items-center justify-between border-b border-slate-200 px-4 py-3">
                 <Text className="text-[16px] font-semibold text-slate-900">Thêm thành viên</Text>
                 <Pressable
@@ -694,8 +735,8 @@ export default function GroupMembersScreen() {
               <FlatList
                 data={addDisplayedMembers}
                 keyExtractor={(item) => item.id}
-                className="mt-3"
-                contentContainerClassName="px-3 pb-2.5"
+                className="mt-3 flex-1"
+                contentContainerClassName="px-3 pb-4"
                 keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={
                   <View className="items-center py-8">
@@ -762,7 +803,7 @@ export default function GroupMembersScreen() {
                 }
               />
 
-              <View className="border-t border-slate-200 px-4 pt-3">
+              <View className="border-t border-slate-200 px-4 pb-5 pt-3">
                 <Pressable
                   className={`h-11 items-center justify-center rounded-xl ${
                     addSelectedCount === 0 || isSubmittingAddMembers ? 'bg-blue-300' : 'bg-[#1e98f3]'
@@ -849,6 +890,17 @@ export default function GroupMembersScreen() {
                           }}
                         />
                       </>
+                    ) : currentUserRole === 'DEPUTY' && canKickMember(actionTargetMember) ? (
+                      <MemberActionItem
+                        icon="person-remove-outline"
+                        label="Xóa khỏi nhóm"
+                        danger
+                        onPress={() => {
+                          const target = actionTargetMember;
+                          setActionTargetMember(null);
+                          handleRemoveMember(target);
+                        }}
+                      />
                     ) : (
                       <View className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                         <Text className="text-[13px] text-slate-600">

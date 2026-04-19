@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   Switch,
@@ -36,6 +37,7 @@ type LinkPreviewItem = {
 };
 
 const PREVIEW_LIMIT = 3;
+const IMAGE_PREVIEW_LIMIT = 4;
 const LINK_PAGE_LIMIT = 100;
 const LINK_MAX_PAGES = 6;
 
@@ -249,6 +251,10 @@ export default function ChatOptionsScreen() {
   const canDissolveGroup = Boolean(
     isGroupConversation && currentUserRole === "ADMIN"
   );
+  const canManageGroup = Boolean(
+    isGroupConversation &&
+      (currentUserRole === "ADMIN" || currentUserRole === "DEPUTY")
+  );
 
   const peerIdentityUserId = useMemo(() => {
     if (!conversation || conversation.type !== "DOUBLE" || !myIdentityUserId) {
@@ -352,6 +358,7 @@ export default function ChatOptionsScreen() {
       ]);
 
       const sortedImages = (imagesRes.data ?? [])
+        .filter((item) => item.type === "IMAGE" || item.type === "VIDEO")
         .slice()
         .sort(
           (a, b) =>
@@ -409,7 +416,7 @@ export default function ChatOptionsScreen() {
         (a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime()
       );
 
-      setImagesPreview(sortedImages.slice(0, PREVIEW_LIMIT));
+      setImagesPreview(sortedImages.slice(0, IMAGE_PREVIEW_LIMIT));
       setFilesPreview(sortedFiles.slice(0, PREVIEW_LIMIT));
       setLinksPreview(linksCollected.slice(0, PREVIEW_LIMIT));
     } catch (error) {
@@ -421,6 +428,38 @@ export default function ChatOptionsScreen() {
       setPreviewLoading(false);
     }
   }, [conversationId]);
+
+  const handleOpenStorage = useCallback(
+    (tab: "images" | "files") => {
+      if (!conversationId) {
+        return;
+      }
+      router.push(`/message/options/storage/${conversationId}?tab=${tab}`);
+    },
+    [conversationId, router]
+  );
+
+  const handleOpenAttachmentUrl = useCallback(async (url: string) => {
+    if (!url) {
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Toast.show({
+          type: "error",
+          text1: "Không thể mở tệp này",
+        });
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Toast.show({
+        type: "error",
+        text1: "Mở tệp thất bại",
+      });
+    }
+  }, []);
 
   const refreshBlockStatus = useCallback(async () => {
     if (!conversationId || conversation?.type !== "DOUBLE") {
@@ -592,7 +631,7 @@ export default function ChatOptionsScreen() {
 
   const quickActions = useMemo(() => {
     if (isGroupConversation) {
-      return [
+      const groupActions = [
         {
           id: "mute",
           icon: "notifications-off-outline" as const,
@@ -630,12 +669,15 @@ export default function ChatOptionsScreen() {
             if (!conversationId) {
               return;
             }
-            router.push(`/message/group-members/${conversationId}`);
+            router.push(`/message/group-manage/${conversationId}`);
           },
           active: false,
           disabled: false,
         },
       ];
+      return canManageGroup
+        ? groupActions
+        : groupActions.filter((action) => action.id !== "group-manage");
     }
 
     return [
@@ -670,6 +712,7 @@ export default function ChatOptionsScreen() {
     handleCreateGroupFromDirect,
     handleTogglePinConversation,
     isGroupConversation,
+    canManageGroup,
     isMuted,
     isPinningConversation,
     router,
@@ -748,11 +791,11 @@ export default function ChatOptionsScreen() {
           ) : imagesPreview.length === 0 ? (
             <Text className="text-[13px] text-slate-500">Chưa có ảnh/video</Text>
           ) : (
-            <View className="flex-row">
+            <View className="flex-row flex-wrap justify-between">
               {imagesPreview.map((item) => (
                 <View
                   key={item.idAttachment}
-                  className="mr-2 h-[72px] w-[72px] overflow-hidden rounded-md bg-slate-200"
+                  className="mb-2 h-[72px] w-[23.5%] overflow-hidden rounded-md bg-slate-200"
                 >
                   {item.type === "VIDEO" ? (
                     <View className="h-full w-full items-center justify-center bg-slate-700">
@@ -769,6 +812,12 @@ export default function ChatOptionsScreen() {
               ))}
             </View>
           )}
+          <Pressable
+            className="mt-3 self-start rounded-full bg-slate-100 px-3 py-1.5"
+            onPress={() => handleOpenStorage("images")}
+          >
+            <Text className="text-[12px] font-medium text-slate-700">Xem tất cả</Text>
+          </Pressable>
         </SectionCard>
 
         <SectionCard title="File">
@@ -784,9 +833,12 @@ export default function ChatOptionsScreen() {
               const ext = getFileExt(fileName);
               const extColor = getExtColor(ext);
               return (
-                <View
+                <Pressable
                   key={file.idAttachment}
                   className="mb-2 flex-row items-center rounded-lg bg-slate-50 px-2 py-2"
+                  onPress={() => {
+                    void handleOpenAttachmentUrl(file.url);
+                  }}
                 >
                   <View
                     className={`h-9 w-9 items-center justify-center rounded ${extColor}`}
@@ -801,13 +853,29 @@ export default function ChatOptionsScreen() {
                       {file.size || "Không xác định dung lượng"}
                     </Text>
                   </View>
-                  <Text className="text-[11px] text-slate-500">
-                    {formatMessageTime(file.timeSent ?? file.timeUpload)}
-                  </Text>
-                </View>
+                  <View className="ml-2 items-end">
+                    <Pressable
+                      className="mb-1 rounded-full bg-blue-50 p-1"
+                      onPress={() => {
+                        void handleOpenAttachmentUrl(file.url);
+                      }}
+                    >
+                      <Ionicons name="download-outline" size={14} color="#2563eb" />
+                    </Pressable>
+                    <Text className="text-[11px] text-slate-500">
+                      {formatMessageTime(file.timeSent ?? file.timeUpload)}
+                    </Text>
+                  </View>
+                </Pressable>
               );
             })
           )}
+          <Pressable
+            className="mt-2 self-start rounded-full bg-slate-100 px-3 py-1.5"
+            onPress={() => handleOpenStorage("files")}
+          >
+            <Text className="text-[12px] font-medium text-slate-700">Xem tất cả</Text>
+          </Pressable>
         </SectionCard>
 
         <SectionCard title="Link">

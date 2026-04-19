@@ -15,6 +15,7 @@ import type {
   ForwardMessageResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
+  UpdateGroupManagementSettingsRequest,
   UpdateMemberNicknameRequest,
 } from "@/types/chat"
 
@@ -224,6 +225,34 @@ export const chatService = {
     const response = await axiosClient.patch<ResponseSuccess<ManageGroupParticipantsResponse>>(
       `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/transfer-admin`,
       payload
+    )
+    return response.data
+  },
+  updateGroupManagementSettings: async (
+    conversationId: string,
+    payload: UpdateGroupManagementSettingsRequest
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.patch<ResponseSuccess<ManageGroupParticipantsResponse>>(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/management-settings`,
+      payload
+    )
+    return response.data
+  },
+  approveGroupMemberRequest: async (
+    conversationId: string,
+    requestId: string
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.post<ResponseSuccess<ManageGroupParticipantsResponse>>(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/member-requests/${encodeURIComponent(requestId)}/approve`
+    )
+    return response.data
+  },
+  rejectGroupMemberRequest: async (
+    conversationId: string,
+    requestId: string
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.delete<ResponseSuccess<ManageGroupParticipantsResponse>>(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/member-requests/${encodeURIComponent(requestId)}`
     )
     return response.data
   },
