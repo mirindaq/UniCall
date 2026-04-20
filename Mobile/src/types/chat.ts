@@ -58,13 +58,14 @@ export interface ConversationCallSignalResponse {
   sentAt?: string;
 }
 
-export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL';
+export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL' | 'CONVERSATION_UPSERT';
 
 export interface UserRealtimeEvent {
   eventType: UserRealtimeEventType;
   conversationId: string;
   message?: ChatMessageResponse;
   callSignal?: ConversationCallSignalResponse;
+  conversation?: ConversationResponse;
 }
 
 export type ConversationType = 'DOUBLE' | 'GROUP';
@@ -166,6 +167,10 @@ export type TransferGroupAdminRequest = {
 };
 
 export type UpdateGroupManagementSettingsRequest = GroupManagementSettings;
+
+export type UpdateGroupAvatarRequest = {
+  avatar: string;
+};
 
 export type DissolveGroupConversationResponse = {
   idConversation: string;

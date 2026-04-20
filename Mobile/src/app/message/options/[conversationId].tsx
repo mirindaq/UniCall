@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -228,6 +229,7 @@ export default function ChatOptionsScreen() {
   const [peerProfile, setPeerProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
@@ -254,6 +256,11 @@ export default function ChatOptionsScreen() {
   const canManageGroup = Boolean(
     isGroupConversation &&
       (currentUserRole === "ADMIN" || currentUserRole === "DEPUTY")
+  );
+  const allowMemberChangeAvatar =
+    conversation?.groupManagementSettings?.allowMemberChangeAvatar ?? true;
+  const canChangeGroupAvatar = Boolean(
+    isGroupConversation && (canManageGroup || allowMemberChangeAvatar)
   );
 
   const peerIdentityUserId = useMemo(() => {
@@ -629,6 +636,67 @@ export default function ChatOptionsScreen() {
     router.push(`/message/create-group?${params.toString()}`);
   }, [conversationAvatarUrl, conversationTitle, peerIdentityUserId, router]);
 
+  const handleChangeGroupAvatar = useCallback(async () => {
+    if (!conversationId || !canChangeGroupAvatar || isUpdatingAvatar) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Toast.show({
+        type: "error",
+        text1: "Thiếu quyền truy cập ảnh",
+        text2: "Vui lòng cấp quyền thư viện ảnh để đổi ảnh nhóm.",
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      allowsMultipleSelection: false,
+      quality: 0.9,
+    });
+
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+
+    const selected = result.assets[0];
+    if (!selected?.uri) {
+      return;
+    }
+
+    setIsUpdatingAvatar(true);
+    try {
+      const uploadResponse = await fileService.uploadFileFromUri(selected.uri, {
+        fileName: selected.fileName ?? undefined,
+        mimeType: selected.mimeType ?? undefined,
+      });
+      const avatarUrl = uploadResponse.data.url;
+      await chatService.updateGroupAvatar(conversationId, { avatar: avatarUrl });
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              avatar: avatarUrl,
+            }
+          : prev
+      );
+      Toast.show({
+        type: "success",
+        text1: "Đã cập nhật ảnh đại diện nhóm",
+      });
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: getErrorMessage(error, "Không thể cập nhật ảnh đại diện nhóm"),
+      });
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  }, [canChangeGroupAvatar, conversationId, isUpdatingAvatar]);
+
   const quickActions = useMemo(() => {
     if (isGroupConversation) {
       const groupActions = [
@@ -651,7 +719,7 @@ export default function ChatOptionsScreen() {
         {
           id: "add-member",
           icon: "person-add-outline" as const,
-          label: "Thêm thành viên",
+          label: "Thành viên",
           onPress: () => {
             if (!conversationId) {
               return;
@@ -748,7 +816,33 @@ export default function ChatOptionsScreen() {
 
       <ScrollView className="flex-1 px-3" showsVerticalScrollIndicator={false}>
         <View className="mt-3 items-center rounded-xl bg-white px-5 py-6">
-          {conversationAvatarUrl ? (
+          {canChangeGroupAvatar ? (
+            <Pressable
+              className="relative"
+              onPress={() => void handleChangeGroupAvatar()}
+              disabled={isUpdatingAvatar}
+            >
+              {conversationAvatarUrl ? (
+                <Image
+                  source={{ uri: conversationAvatarUrl }}
+                  className="h-20 w-20 rounded-full bg-slate-200"
+                />
+              ) : (
+                <View className="h-20 w-20 items-center justify-center rounded-full bg-slate-400">
+                  <Text className="text-[27px] font-semibold text-white">
+                    {conversationFallback}
+                  </Text>
+                </View>
+              )}
+              <View className="absolute bottom-0 right-0 h-7 w-7 items-center justify-center rounded-full border border-white bg-white">
+                {isUpdatingAvatar ? (
+                  <ActivityIndicator size="small" color="#1e98f3" />
+                ) : (
+                  <Ionicons name="camera-outline" size={15} color="#1e98f3" />
+                )}
+              </View>
+            </Pressable>
+          ) : conversationAvatarUrl ? (
             <Image
               source={{ uri: conversationAvatarUrl }}
               className="h-20 w-20 rounded-full bg-slate-200"
@@ -760,6 +854,11 @@ export default function ChatOptionsScreen() {
               </Text>
             </View>
           )}
+          {canChangeGroupAvatar ? (
+            <Text className="mt-2 text-[11px] text-slate-500">
+              Chạm vào ảnh để đổi ảnh đại diện nhóm
+            </Text>
+          ) : null}
           <Text className="mt-4 text-center text-[22px] font-semibold text-slate-900">
             {conversationTitle}
           </Text>

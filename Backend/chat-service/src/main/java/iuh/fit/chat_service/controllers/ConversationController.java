@@ -3,6 +3,7 @@ package iuh.fit.chat_service.controllers;
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
@@ -165,6 +166,26 @@ public class ConversationController {
                 new ResponseSuccess<>(
                         HttpStatus.OK,
                         "Update group management settings success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PatchMapping("/{conversationId}/avatar")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> updateGroupAvatar(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @Valid @RequestBody UpdateGroupAvatarRequest request
+    ) {
+        Conversation conversation = conversationService.updateGroupAvatar(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Update group avatar success",
                         ManageGroupParticipantsResponse.from(conversation)
                 )
         );

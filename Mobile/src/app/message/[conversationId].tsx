@@ -471,13 +471,53 @@ export default function ConversationDetailScreen() {
       }
       subscription?.unsubscribe();
       subscription = chatSocketService.subscribeUserEvents((event) => {
-        if (event.eventType !== 'MESSAGE_UPSERT' || event.conversationId !== conversationId) {
+        if (event.conversationId !== conversationId) {
+          return;
+        }
+
+        if (event.eventType === 'CONVERSATION_UPSERT' && event.conversation) {
+          const incomingConversation = event.conversation;
+          setConversation((prev) => {
+            if (!prev) {
+              return incomingConversation;
+            }
+            return {
+              ...prev,
+              ...incomingConversation,
+              pinned: prev.pinned,
+              unreadCount: prev.unreadCount,
+            };
+          });
+          setConversationOptions((prev) => {
+            const index = prev.findIndex(
+              (item) => item.idConversation === incomingConversation.idConversation
+            );
+            if (index < 0) {
+              return prev;
+            }
+            const next = [...prev];
+            next[index] = {
+              ...next[index],
+              ...incomingConversation,
+              pinned: next[index]?.pinned,
+              unreadCount: next[index]?.unreadCount,
+            };
+            return next;
+          });
+          if (incomingConversation.type === 'GROUP') {
+            setHeaderTitle(incomingConversation.name?.trim() || 'Nhóm chat');
+          }
+          return;
+        }
+
+        if (event.eventType !== 'MESSAGE_UPSERT') {
           return;
         }
         const incoming = event.message;
         if (!incoming) {
           return;
         }
+
         const isMine = isMessageFromCurrentUser(incoming, myIdentityId, myAccountNumericId);
         setMessages((prev) => {
           const incomingUi = toUiMessage(incoming);

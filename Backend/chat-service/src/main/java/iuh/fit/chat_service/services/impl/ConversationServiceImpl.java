@@ -2,10 +2,13 @@ package iuh.fit.chat_service.services.impl;
 
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
+import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
+import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.GroupManagementSettings;
@@ -14,7 +17,9 @@ import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.ConversationType;
 import iuh.fit.chat_service.enums.ParicipantRole;
 import iuh.fit.chat_service.repositories.ConversationRepository;
+import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.chat_service.services.ConversationService;
+import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
@@ -34,6 +39,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ConversationServiceImpl implements ConversationService {
     private final ConversationRepository conversationRepository;
+    private final ChatMessageService chatMessageService;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Override
     public Conversation createGroupConversation(String currentIdentityUserId, CreateGroupConversationRequest request) {
@@ -317,6 +324,7 @@ public class ConversationServiceImpl implements ConversationService {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
         assertAdminOrDeputyActor(conversation, actorId);
+        GroupManagementSettings previousSettings = copyGroupManagementSettings(ensureGroupManagementSettings(conversation));
 
         GroupManagementSettings settings = new GroupManagementSettings(
                 request.getAllowMemberSendMessage(),
@@ -327,7 +335,55 @@ public class ConversationServiceImpl implements ConversationService {
 
         conversation.setGroupManagementSettings(settings);
         conversation.setDateUpdateMessage(LocalDateTime.now());
-        return conversationRepository.save(conversation);
+        Conversation savedConversation = conversationRepository.save(conversation);
+
+        publishConversationRealtime(savedConversation);
+        publishGroupManagementSettingChangedMessages(
+                actorId,
+                savedConversation.getIdConversation(),
+                previousSettings,
+                settings
+        );
+
+        return savedConversation;
+    }
+
+    @Override
+    public Conversation updateGroupAvatar(
+            String currentIdentityUserId,
+            String conversationId,
+            UpdateGroupAvatarRequest request
+    ) {
+        String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
+        Conversation conversation = getGroupConversationOrThrow(conversationId);
+        assertMemberActor(conversation, actorId);
+
+        ParticipantInfo actorParticipant = findParticipant(conversation.getParticipantInfos(), actorId);
+        GroupManagementSettings settings = ensureGroupManagementSettings(conversation);
+        boolean isManager = isAdminOrDeputy(actorParticipant);
+        boolean memberCanChangeAvatar = Boolean.TRUE.equals(settings.getAllowMemberChangeAvatar());
+        if (!isManager && !memberCanChangeAvatar) {
+            throw new InvalidParamException("Only group admin or deputy can change group avatar");
+        }
+
+        String nextAvatar = request.getAvatar() == null ? "" : request.getAvatar().trim();
+        if (nextAvatar.isBlank()) {
+            throw new InvalidParamException("Group avatar is required");
+        }
+
+        String currentAvatar = conversation.getAvatar() == null ? "" : conversation.getAvatar().trim();
+        if (currentAvatar.equals(nextAvatar)) {
+            return conversation;
+        }
+
+        conversation.setAvatar(nextAvatar);
+        conversation.setDateUpdateMessage(LocalDateTime.now());
+        Conversation savedConversation = conversationRepository.save(conversation);
+
+        publishConversationRealtime(savedConversation);
+        sendGroupSystemNotification(actorId, savedConversation.getIdConversation(), "Đã thay đổi ảnh đại diện nhóm.");
+
+        return savedConversation;
     }
 
     @Override
@@ -581,6 +637,95 @@ public class ConversationServiceImpl implements ConversationService {
             throw new InvalidParamException("Deputy can only remove regular members");
         }
         throw new InvalidParamException("Only group admin or deputy can remove members");
+    }
+
+    private GroupManagementSettings copyGroupManagementSettings(GroupManagementSettings source) {
+        GroupManagementSettings safe = source == null ? GroupManagementSettings.defaults() : source;
+        return new GroupManagementSettings(
+                Boolean.TRUE.equals(safe.getAllowMemberSendMessage()),
+                Boolean.TRUE.equals(safe.getAllowMemberPinMessage()),
+                Boolean.TRUE.equals(safe.getAllowMemberChangeAvatar()),
+                Boolean.TRUE.equals(safe.getMemberApprovalEnabled())
+        );
+    }
+
+    private void publishConversationRealtime(Conversation conversation) {
+        if (conversation == null || conversation.getParticipantInfos() == null) {
+            return;
+        }
+
+        ConversationResponse payload = ConversationResponse.from(conversation);
+        conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(id -> !id.isBlank())
+                .distinct()
+                .forEach(userId -> realtimeEventPublisher.publishUserConversationEvent(
+                        userId,
+                        conversation.getIdConversation(),
+                        payload
+                ));
+    }
+
+    private void sendGroupSystemNotification(String actorId, String conversationId, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+
+        SendChatMessageRequest request = new SendChatMessageRequest();
+        request.setContent(content.trim());
+        try {
+            chatMessageService.sendRest(actorId, conversationId, request);
+        } catch (RuntimeException ignored) {
+            // Do not block the main management action if notification message cannot be created.
+        }
+    }
+
+    private void publishGroupManagementSettingChangedMessages(
+            String actorId,
+            String conversationId,
+            GroupManagementSettings previousSettings,
+            GroupManagementSettings currentSettings
+    ) {
+        List<String> messages = buildGroupManagementChangeMessages(previousSettings, currentSettings);
+        messages.forEach(content -> sendGroupSystemNotification(actorId, conversationId, content));
+    }
+
+    private List<String> buildGroupManagementChangeMessages(
+            GroupManagementSettings previousSettings,
+            GroupManagementSettings currentSettings
+    ) {
+        List<String> messages = new ArrayList<>();
+        if (previousSettings == null || currentSettings == null) {
+            return messages;
+        }
+
+        if (!Objects.equals(previousSettings.getAllowMemberSendMessage(), currentSettings.getAllowMemberSendMessage())) {
+            messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberSendMessage())
+                    ? "Đã cho phép tất cả thành viên gửi tin nhắn vào nhóm."
+                    : "Đã giới hạn gửi tin nhắn: chỉ trưởng/phó nhóm được gửi.");
+        }
+
+        if (!Objects.equals(previousSettings.getAllowMemberPinMessage(), currentSettings.getAllowMemberPinMessage())) {
+            messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberPinMessage())
+                    ? "Đã cho phép tất cả thành viên ghim tin nhắn."
+                    : "Đã giới hạn ghim tin nhắn: chỉ trưởng/phó nhóm được ghim.");
+        }
+
+        if (!Objects.equals(previousSettings.getAllowMemberChangeAvatar(), currentSettings.getAllowMemberChangeAvatar())) {
+            messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberChangeAvatar())
+                    ? "Đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm."
+                    : "Đã giới hạn thay đổi ảnh đại diện: chỉ trưởng/phó nhóm được đổi.");
+        }
+
+        if (!Objects.equals(previousSettings.getMemberApprovalEnabled(), currentSettings.getMemberApprovalEnabled())) {
+            messages.add(Boolean.TRUE.equals(currentSettings.getMemberApprovalEnabled())
+                    ? "Đã bật chế độ phê duyệt thành viên mới."
+                    : "Đã tắt chế độ phê duyệt thành viên mới.");
+        }
+
+        return messages;
     }
 
     private ParticipantInfo findParticipant(List<ParticipantInfo> participantInfos, String identityUserId) {

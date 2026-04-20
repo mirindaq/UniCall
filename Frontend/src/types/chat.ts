@@ -54,7 +54,7 @@ export interface ConversationCallSignal {
   sentAt: string
 }
 
-export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL"
+export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL" | "CONVERSATION_UPSERT"
 
 export interface UserRealtimeEvent {
   eventType: UserRealtimeEventType
@@ -62,6 +62,7 @@ export interface UserRealtimeEvent {
   sentAt: string
   message?: ChatMessageResponse
   callSignal?: ConversationCallSignal
+  conversation?: ConversationResponse
 }
 
 export interface ChatAttachment {
@@ -182,6 +183,10 @@ export type TransferGroupAdminRequest = {
 }
 
 export type UpdateGroupManagementSettingsRequest = GroupManagementSettings
+
+export type UpdateGroupAvatarRequest = {
+  avatar: string
+}
 
 export type DissolveGroupConversationResponse = {
   idConversation: string

@@ -586,6 +586,7 @@ export default function ChatWindow() {
     clearMessageFocusRequest,
     conversations,
     refetchConversations,
+    onRealtimeConversation,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -1012,6 +1013,10 @@ export default function ChatWindow() {
     onUserEvent: (event: UserRealtimeEvent) => {
       if (event.eventType === "MESSAGE_UPSERT" && event.message) {
         mergeIncomingOrUpdatedMessage(event.message)
+        return
+      }
+      if (event.eventType === "CONVERSATION_UPSERT" && event.conversation) {
+        onRealtimeConversation(event.conversation)
       }
     },
   })

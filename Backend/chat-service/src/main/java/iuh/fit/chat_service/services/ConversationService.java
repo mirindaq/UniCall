@@ -3,6 +3,7 @@ package iuh.fit.chat_service.services;
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
@@ -38,6 +39,11 @@ public interface ConversationService {
             String currentIdentityUserId,
             String conversationId,
             UpdateGroupManagementSettingsRequest request
+    );
+    Conversation updateGroupAvatar(
+            String currentIdentityUserId,
+            String conversationId,
+            UpdateGroupAvatarRequest request
     );
     Conversation approveGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId);
     Conversation rejectGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId);

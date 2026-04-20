@@ -33,6 +33,7 @@ type ChatPageContextValue = {
   requestMessageFocus: (messageId: string) => void
   clearMessageFocusRequest: () => void
   onRealtimeMessage: (message: ChatMessageResponse) => void
+  onRealtimeConversation: (conversation: ConversationResponse) => void
 }
 
 const normalizeConversationPreviewContent = (value: string | null | undefined): string => {
@@ -285,6 +286,40 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     })
   }, [currentUserId, markConversationAsRead, refetchConversationsSafely, selectedConversationId])
 
+  const onRealtimeConversation = useCallback((conversation: ConversationResponse) => {
+    if (!conversation?.idConversation) {
+      return
+    }
+
+    let found = false
+    setConversations((prev) => {
+      const index = prev.findIndex((item) => item.idConversation === conversation.idConversation)
+      if (index < 0) {
+        return prev
+      }
+
+      found = true
+      const existing = prev[index]
+      const next = [...prev]
+      next[index] = {
+        ...existing,
+        ...conversation,
+        pinned: existing.pinned,
+        unreadCount: existing.unreadCount,
+        lastMessageContent: normalizeConversationPreviewContent(
+          conversation.lastMessageContent ?? existing.lastMessageContent
+        ),
+        lastMessageSenderId:
+          conversation.lastMessageSenderId ?? existing.lastMessageSenderId,
+      }
+      return sortConversationsByPinnedAndTime(next)
+    })
+
+    if (!found) {
+      void refetchConversationsSafely()
+    }
+  }, [refetchConversationsSafely])
+
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
     setDetailsView("main")
@@ -351,6 +386,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       requestMessageFocus,
       clearMessageFocusRequest,
       onRealtimeMessage,
+      onRealtimeConversation,
     }),
     [
       conversationAvatar,
@@ -373,6 +409,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       requestMessageFocus,
       clearMessageFocusRequest,
       onRealtimeMessage,
+      onRealtimeConversation,
       selectedConversationId,
       startChatWithUser,
     ],

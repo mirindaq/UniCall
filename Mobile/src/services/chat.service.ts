@@ -14,6 +14,7 @@ import type {
   ForwardMessageResponse,
   ManageGroupParticipantsResponse,
   TransferGroupAdminRequest,
+  UpdateGroupAvatarRequest,
   UpdateGroupMemberRoleRequest,
   UpdateGroupManagementSettingsRequest,
   UpdateMemberNicknameRequest,
@@ -254,6 +255,16 @@ export const chatService = {
   ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
     const response = await axiosClient.patch<ResponseSuccess<ManageGroupParticipantsResponse>>(
       `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/management-settings`,
+      payload
+    );
+    return response.data;
+  },
+  updateGroupAvatar: async (
+    conversationId: string,
+    payload: UpdateGroupAvatarRequest
+  ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
+    const response = await axiosClient.patch<ResponseSuccess<ManageGroupParticipantsResponse>>(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/avatar`,
       payload
     );
     return response.data;
