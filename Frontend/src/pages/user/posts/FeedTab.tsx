@@ -7,6 +7,7 @@ import { Card, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { PostCard } from "@/components/post/PostCard"
+import { EditPostDialog } from "@/components/post/EditPostDialog"
 import type { ReactionType } from "@/components/post/ReactionPicker"
 import { useQuery } from "@/hooks/useQuery"
 import { useMutation } from "@/hooks/useMutation"
@@ -21,6 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface PostWithAuthor extends PostResponse {
   author: {
@@ -41,6 +52,9 @@ export function FeedTab() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [editingPost, setEditingPost] = useState<PostResponse | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; content: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: myProfileResponse } = useQuery(() => userService.getMyProfile(), {})
@@ -85,6 +99,21 @@ export function FeedTab() {
       onError: (error) => {
         console.error("Error creating post:", error)
         toast.error("Không thể đăng bài")
+      },
+    }
+  )
+
+  const { mutate: deletePost, isLoading: isDeleting } = useMutation(
+    (variables: any) => postService.deletePost(variables.postId),
+    {
+      onSuccess: () => {
+        toast.success("Đã xóa bài viết")
+        setDeleteTarget(null)
+        refetchFeed()
+      },
+      onError: (error) => {
+        console.error("Error deleting post:", error)
+        toast.error("Không thể xóa bài viết")
       },
     }
   )
@@ -166,16 +195,16 @@ export function FeedTab() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    const validFiles = files.filter(file => 
+    const validFiles = files.filter(file =>
       file.type.startsWith("image/") || file.type.startsWith("video/")
     )
-    
+
     if (validFiles.length !== files.length) {
       toast.error("Chỉ chấp nhận file ảnh và video")
     }
-    
+
     setSelectedFiles(prev => [...prev, ...validFiles])
-    
+
     // Create preview URLs with type info
     const newPreviews = validFiles.map(file => ({
       url: URL.createObjectURL(file),
@@ -202,7 +231,7 @@ export function FeedTab() {
     const formData = new FormData()
     formData.append("content", newPostContent.trim() || " ")
     formData.append("privacy", postPrivacy)
-    
+
     selectedFiles.forEach(file => {
       formData.append("files", file)
     })
@@ -247,15 +276,39 @@ export function FeedTab() {
       })
   }
 
+  const handleEdit = (postId: number) => {
+    const post = posts.find((p) => p.id === postId)
+    if (post) {
+      setEditingPost(post as PostResponse)
+      setEditDialogOpen(true)
+    }
+  }
+
+  const handleDelete = (postId: number) => {
+    const post = posts.find((p) => p.id === postId)
+    if (post) {
+      setDeleteTarget({
+        id: postId,
+        content: post.content.substring(0, 50) + (post.content.length > 50 ? "..." : ""),
+      })
+    }
+  }
+
+  const handleConfirmDelete = () => {
+    if (deleteTarget) {
+      deletePost({ postId: deleteTarget.id })
+    }
+  }
+
   const handleLoadMore = async () => {
     if (currentPage >= totalPages || isLoadingMore) return
-    
+
     setIsLoadingMore(true)
     try {
       const nextPage = currentPage + 1
       const response = await postService.getFeed(nextPage, 10)
       const pageData = (response as any)?.data
-      
+
       if (pageData?.items) {
         setCurrentPage(nextPage)
       }
@@ -272,6 +325,9 @@ export function FeedTab() {
   const myName = myProfile
     ? `${myProfile.firstName ?? ""}${myProfile.lastName ?? ""}`.trim()
     : "Me"
+  console.log('my profile: ', myProfile);
+
+  const currentUserId = myProfile?.identityUserId
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -293,7 +349,7 @@ export function FeedTab() {
                 />
               </div>
             </CardHeader>
-            
+
             {/* File Previews */}
             {previewUrls.length > 0 && (
               <div className="px-4 pb-3">
@@ -325,7 +381,7 @@ export function FeedTab() {
                 </div>
               </div>
             )}
-            
+
             <Separator className="mx-4" />
             <CardFooter className="pt-3 flex items-center justify-between">
               <div className="flex gap-2 items-center">
@@ -394,19 +450,19 @@ export function FeedTab() {
           {isLoadingFeed && (
             <div className="flex items-center justify-center py-12">
 
-          {/* Load More Button */}
-          {!isLoadingFeed && currentPage < totalPages && (
-            <div className="flex justify-center pt-4">
-              <Button
-                variant="secondary"
-                onClick={handleLoadMore}
-                disabled={isLoadingMore}
-                className="h-10 rounded-xl bg-slate-100 px-6 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-              >
-                {isLoadingMore ? "Đang tải..." : "Xem thêm"}
-              </Button>
-            </div>
-          )}
+              {/* Load More Button */}
+              {!isLoadingFeed && currentPage < totalPages && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    variant="secondary"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="h-10 rounded-xl bg-slate-100 px-6 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                  >
+                    {isLoadingMore ? "Đang tải..." : "Xem thêm"}
+                  </Button>
+                </div>
+              )}
               <Loader2 className="size-8 animate-spin text-primary" />
             </div>
           )}
@@ -425,17 +481,74 @@ export function FeedTab() {
           )}
 
           {!isLoadingFeed &&
-            posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                onReact={handleReact}
-                onUnreact={handleUnreact}
-                onComment={handleComment}
-              />
-            ))}
+            posts.map((post) => {
+              const isMyPost = post.authorId === currentUserId
+              {
+                console.log('isMyPost: ', isMyPost, '. ', post.authorId, '. ', currentUserId);
+              }
+              return (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  showActions={isMyPost}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onReact={handleReact}
+                  onUnreact={handleUnreact}
+                  onComment={handleComment}
+                />
+              )
+            })}
         </div>
       </div>
+
+      {/* Edit Post Dialog */}
+      <EditPostDialog
+        post={editingPost}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={() => {
+          setEditingPost(null)
+          refetchFeed()
+        }}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa bài viết</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa bài viết này không?
+              {deleteTarget && (
+                <span className="mt-2 block font-medium text-foreground">
+                  &quot;{deleteTarget.content}&quot;
+                </span>
+              )}
+              <span className="mt-2 block text-destructive">
+                Hành động này không thể hoàn tác.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                "Xóa"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

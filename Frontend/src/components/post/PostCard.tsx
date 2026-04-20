@@ -55,7 +55,7 @@ interface PostCardProps {
 
 export function PostCard({
   post,
-  showActions = false,
+  showActions,
   onEdit,
   onDelete,
   onReact,
@@ -90,11 +90,16 @@ export function PostCard({
       setIsLoadingComments(true)
       postService.getPostComments(post.id, 1, 20)
         .then(response => {
-          const commentList = (response as any)?.data?.items || []
+          console.log('response comment: ', response);
+
+          const commentList = (response as any)?.data?.data?.items || []
           setComments(commentList)
-          
+
+
           // Fetch user profiles for comment authors
           const authorIds = [...new Set(commentList.map((c: CommentResponse) => c.authorId))] as string[]
+          console.log('authorIds: ', authorIds);
+
           return Promise.all(
             authorIds.map((authorId) =>
               userService.getProfileByIdentityUserId(authorId)
@@ -127,7 +132,7 @@ export function PostCard({
         .then(response => {
           const reactionList = (response as any)?.data?.items || []
           setReactions(reactionList)
-          
+
           // Fetch user profiles for reactors
           const userIds = [...new Set(reactionList.map((r: ReactionResponse) => r.userId))] as string[]
           return Promise.all(
@@ -164,25 +169,25 @@ export function PostCard({
 
   const handleComment = async () => {
     if (!commentText.trim()) return
-    
+
     const content = commentText.trim()
     setCommentText("")
-    
+
     try {
       // Call API to create comment
       const response = await postService.createComment({
         postId: post.id,
         content,
       })
-      
+
       const newComment = (response as any)?.data
       if (newComment) {
         // Append new comment to list
         setComments(prev => [newComment, ...prev])
-        
+
         // Also call parent handler if exists
         onComment?.(post.id, content)
-        
+
         toast.success("Đã bình luận")
       }
     } catch (error) {
@@ -196,8 +201,8 @@ export function PostCard({
   // Calculate top reactions for display
   const reactionEntries = post.reactionCounts
     ? Object.entries(post.reactionCounts)
-        .filter(([_, count]) => count > 0)
-        .sort(([_, a], [__, b]) => (b as number) - (a as number))
+      .filter(([_, count]) => count > 0)
+      .sort(([_, a], [__, b]) => (b as number) - (a as number))
     : []
 
   const topReactions = reactionEntries.slice(0, 3)
@@ -358,7 +363,7 @@ export function PostCard({
         {/* Reaction Summary */}
         {topReactions.length > 0 && (
           <div className="flex w-full items-center justify-between text-sm border-b pb-2">
-            <button 
+            <button
               className="flex items-center gap-1 hover:underline cursor-pointer"
               onClick={() => setShowReactionsDialog(true)}
             >
@@ -437,9 +442,9 @@ export function PostCard({
                     }
                   }}
                 />
-                <Button 
-                  size="icon" 
-                  onClick={handleComment} 
+                <Button
+                  size="icon"
+                  onClick={handleComment}
                   disabled={!commentText.trim()}
                   className="bg-primary hover:bg-primary/90"
                 >
@@ -455,24 +460,24 @@ export function PostCard({
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                 </div>
               )}
-              
+
               {!isLoadingComments && comments.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-2">
                   Chưa có bình luận nào
                 </p>
               )}
-              
+
               {!isLoadingComments && comments.map((comment) => {
                 const profile = userProfiles[comment.authorId]
                 const authorName = profile
                   ? `${profile.lastName} ${profile.firstName}`.trim()
                   : comment.authorId
-                
+
                 return (
                   <div key={comment.id} className="flex gap-2">
                     <Avatar className="size-8">
                       <AvatarImage src={profile?.avatar ?? undefined} />
-                      <AvatarFallback>{authorName[0]}</AvatarFallback>
+                      <AvatarFallback>{authorName ? authorName[0] : "ABCD"}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <div className="bg-muted px-3 py-2 rounded-2xl">
@@ -492,7 +497,7 @@ export function PostCard({
           </div>
         )}
       </CardFooter>
-      
+
       {/* Reactions Dialog */}
       <Dialog open={showReactionsDialog} onOpenChange={setShowReactionsDialog}>
         <DialogContent className="max-w-md">
@@ -505,13 +510,13 @@ export function PostCard({
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             )}
-            
+
             {!isLoadingReactions && reactions.length === 0 && (
               <p className="text-center text-sm text-muted-foreground py-8">
                 Chưa có reactions
               </p>
             )}
-            
+
             {!isLoadingReactions && reactions.length > 0 && (
               <div className="space-y-2">
                 {reactions.map((reaction) => {
@@ -519,7 +524,7 @@ export function PostCard({
                   const userName = profile
                     ? `${profile.lastName} ${profile.firstName}`.trim()
                     : reaction.userId
-                  
+
                   return (
                     <div key={reaction.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded-lg">
                       <Avatar>

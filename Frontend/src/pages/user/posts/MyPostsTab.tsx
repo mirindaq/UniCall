@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PostCard } from "@/components/post/PostCard"
 import type { ReactionType } from "@/components/post/ReactionPicker"
+import { EditPostDialog } from "@/components/post/EditPostDialog"
 import { useQuery } from "@/hooks/useQuery"
 import { useMutation } from "@/hooks/useMutation"
 import { postService } from "@/services/post/post.service"
@@ -26,11 +27,15 @@ interface PostWithAuthor extends PostResponse {
     name: string
     avatar?: string
   }
+  isLiked: boolean
+  userReaction?: ReactionType
 }
 
 export function MyPostsTab() {
   const [posts, setPosts] = useState<PostWithAuthor[]>([])
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; content: string } | null>(null)
+  const [editingPost, setEditingPost] = useState<PostResponse | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const { data: myProfileResponse } = useQuery(() => userService.getMyProfile(), {})
   const myProfile = (myProfileResponse as any)?.data
@@ -78,13 +83,18 @@ export function MyPostsTab() {
         name: myName,
         avatar: myAvatar,
       },
+      isLiked: post.isLikedByCurrentUser || false,
+      userReaction: post.userReactionType,
     }))
     setPosts(postsWithAuthors)
   }, [myPostsResponse, myName, myAvatar])
 
   const handleEdit = (postId: number) => {
-    // TODO: Implement edit post dialog
-    toast.info("Chức năng chỉnh sửa đang được phát triển")
+    const post = posts.find((p) => p.id === postId)
+    if (post) {
+      setEditingPost(post as PostResponse)
+      setEditDialogOpen(true)
+    }
   }
 
   const handleDelete = (postId: number) => {
@@ -233,6 +243,17 @@ export function MyPostsTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Post Dialog */}
+      <EditPostDialog
+        post={editingPost}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={() => {
+          setEditingPost(null)
+          refetchMyPosts()
+        }}
+      />
     </>
   )
 }
