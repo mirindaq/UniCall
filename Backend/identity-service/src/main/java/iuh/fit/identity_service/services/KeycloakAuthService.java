@@ -17,6 +17,8 @@ public interface KeycloakAuthService {
 
     String findIdentityUserIdByPhoneNumber(String phoneNumber);
 
+    void resetPasswordWithOtp(String phoneNumber, String newPassword);
+
     AuthTokenResponse login(String phoneNumber, String password);
 
     AuthTokenResponse refreshToken(String refreshToken);
