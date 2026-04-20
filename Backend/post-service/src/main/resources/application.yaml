@@ -7,8 +7,8 @@ spring:
       max-request-size: 100MB
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_post_service?createDatabaseIfNotExist=true
-    username: springstudent
-    password: springstudent
+    username: root
+    password: 12345
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -39,7 +39,7 @@ grpc:
   file-service:
     host: ${FILE_SERVICE_GRPC_HOST:localhost}
     port: ${FILE_SERVICE_GRPC_PORT:9097}
-    deadline-ms: ${FILE_SERVICE_GRPC_DEADLINE_MS:5000}
+    deadline-ms: ${FILE_SERVICE_GRPC_DEADLINE_MS:10000}
 
 eureka:
   client:

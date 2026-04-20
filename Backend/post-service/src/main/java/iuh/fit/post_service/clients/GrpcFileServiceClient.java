@@ -56,6 +56,7 @@ public class GrpcFileServiceClient {
             if (ex.getStatus().getCode() == Status.Code.INVALID_ARGUMENT) {
                 log.warn("Invalid file upload request: {}", ex.getMessage());
             } else {
+                ex.printStackTrace();
                 log.error("Cannot upload file via gRPC: {}", ex.getMessage());
             }
             return Optional.empty();
