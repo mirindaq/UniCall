@@ -5,6 +5,7 @@ import {
   CircleHelp,
   CloudUpload,
   Database,
+  FileText,
   FolderKanban,
   Globe,
   LogOut,
@@ -56,6 +57,11 @@ const userTabs = [
     to: `${USER_PATH.ROOT}/${USER_PATH.FRIENDS}`,
     label: "Ban be",
     icon: Users,
+  },
+  {
+    to: `${USER_PATH.ROOT}/${USER_PATH.POSTS}`,
+    label: "Bai viet",
+    icon: FileText,
   },
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.NOTIFICATIONS}`,
