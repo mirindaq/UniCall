@@ -35,19 +35,13 @@ import type {
 } from "@/types/auth"
 
 type AuthTab = "login" | "register"
-type CountryOption = { code: string; label: string }
 type ForgotPasswordFormData = {
   phoneNumber: string
   newPassword: string
   confirmNewPassword: string
 }
 
-const PHONE_COUNTRY_OPTIONS: CountryOption[] = [
-  { code: "+84", label: "VN (+84)" },
-  { code: "+1", label: "US (+1)" },
-  { code: "+81", label: "JP (+81)" },
-  { code: "+82", label: "KR (+82)" },
-]
+const VIETNAM_COUNTRY_CODE = "+84"
 
 const REGISTER_EMAIL_DOMAIN = "@gmail.com"
 const STRONG_PASSWORD_REGEX =
@@ -69,13 +63,13 @@ function normalizeEmailDomain(value: string) {
   return raw.startsWith("@") ? raw : `@${raw}`
 }
 
-function toInternationalPhone(countryCode: string, localPhone: string) {
+function toVietnamInternationalPhone(localPhone: string) {
   const digits = normalizePhoneInput(localPhone)
   const normalizedLocal = digits.replace(/^0+/, "")
   if (!normalizedLocal) {
     return ""
   }
-  return `${countryCode}${normalizedLocal}`
+  return `${VIETNAM_COUNTRY_CODE}${normalizedLocal}`
 }
 
 function toBackendVietnamPhone(phoneNumber: string) {
@@ -133,8 +127,6 @@ export function AuthPage() {
   const [registerEmailLocalPart, setRegisterEmailLocalPart] = useState("")
   const [registerEmailDomain, setRegisterEmailDomain] =
     useState(REGISTER_EMAIL_DOMAIN)
-  const [loginCountryCode, setLoginCountryCode] = useState("+84")
-  const [registerCountryCode, setRegisterCountryCode] = useState("+84")
   const [loginLocalPhone, setLoginLocalPhone] = useState("")
   const [registerLocalPhone, setRegisterLocalPhone] = useState("")
   const [showOtpDialog, setShowOtpDialog] = useState(false)
@@ -616,28 +608,9 @@ export function AuthPage() {
                   <Label htmlFor="login-phone-local">Số điện thoại</Label>
 
                   <div className="flex gap-2">
-                    <select
-                      aria-label="Mã vùng đăng nhập"
-                      value={loginCountryCode}
-                      onChange={(event) => {
-                        const nextCode = event.target.value
-                        setLoginCountryCode(nextCode)
-                        setLoginData((prev) => ({
-                          ...prev,
-                          phoneNumber: toInternationalPhone(
-                            nextCode,
-                            loginLocalPhone
-                          ),
-                        }))
-                      }}
-                      className="h-11 w-[120px] rounded-md border border-slate-300 bg-white px-2.5 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                    >
-                      {PHONE_COUNTRY_OPTIONS.map((item) => (
-                        <option key={item.code} value={item.code}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex h-11 w-[90px] items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-sm font-medium text-slate-700">
+                      VN +84
+                    </div>
 
                     <Input
                       id="login-phone-local"
@@ -653,10 +626,7 @@ export function AuthPage() {
                         setLoginLocalPhone(localPhone)
                         setLoginData((prev) => ({
                           ...prev,
-                          phoneNumber: toInternationalPhone(
-                            loginCountryCode,
-                            localPhone
-                          ),
+                          phoneNumber: toVietnamInternationalPhone(localPhone),
                         }))
                       }}
                       required
@@ -707,28 +677,9 @@ export function AuthPage() {
                   </Label>
 
                   <div className="flex gap-2">
-                    <select
-                      aria-label="Mã vùng đăng ký"
-                      value={registerCountryCode}
-                      onChange={(event) => {
-                        const nextCode = event.target.value
-                        setRegisterCountryCode(nextCode)
-                        setRegisterData((prev) => ({
-                          ...prev,
-                          phoneNumber: toInternationalPhone(
-                            nextCode,
-                            registerLocalPhone
-                          ),
-                        }))
-                      }}
-                      className="h-11 w-[120px] rounded-md border border-slate-300 bg-white px-2.5 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                    >
-                      {PHONE_COUNTRY_OPTIONS.map((item) => (
-                        <option key={item.code} value={item.code}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex h-11 w-[90px] items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-sm font-medium text-slate-700">
+                      VN +84
+                    </div>
 
                     <Input
                       id="register-phone-local"
@@ -744,10 +695,7 @@ export function AuthPage() {
                         setRegisterLocalPhone(localPhone)
                         setRegisterData((prev) => ({
                           ...prev,
-                          phoneNumber: toInternationalPhone(
-                            registerCountryCode,
-                            localPhone
-                          ),
+                          phoneNumber: toVietnamInternationalPhone(localPhone),
                         }))
                       }}
                       required
