@@ -96,6 +96,13 @@ public class GlobalExceptionHandler {
                 return buildErrorResponse(UNAUTHORIZED, e.getMessage(), request);
         }
 
+        @ExceptionHandler(UnauthorizedException.class)
+        public ResponseEntity<ResponseError> handleUnauthorizedException(
+                        UnauthorizedException e,
+                        HttpServletRequest request) {
+                return buildErrorResponse(FORBIDDEN, e.getMessage(), request);
+        }
+
         @ExceptionHandler(DisabledException.class)
         public ResponseEntity<ResponseError> handleDisabledException(
                         DisabledException e,
