@@ -10,6 +10,18 @@ const disconnectedListeners = new Set<() => void>()
 export const realtimeSocketService = {
   getClient: () => sharedClient,
 
+  async waitForConnected(timeoutMs = 5000): Promise<boolean> {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const client = sharedClient
+      if (client?.connected) {
+        return true
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 80))
+    }
+    return false
+  },
+
   connect(onConnected?: () => void, onDisconnected?: () => void): Client {
     if (onConnected) {
       connectedListeners.add(onConnected)
@@ -86,10 +98,14 @@ export const realtimeSocketService = {
   },
 
   publish(destination: string, body: unknown) {
-    sharedClient?.publish({
+    if (!sharedClient?.connected) {
+      return false
+    }
+    sharedClient.publish({
       destination,
       body: JSON.stringify(body),
       headers: { "content-type": "application/json" },
     })
+    return true
   },
 }

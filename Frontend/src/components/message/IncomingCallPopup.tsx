@@ -28,6 +28,8 @@ type IncomingCallPopupProps = {
   micEnabled?: boolean
   cameraEnabled?: boolean
   canToggleCamera?: boolean
+  isGroupCall?: boolean
+  groupParticipants?: Array<{ id: string; name: string; avatar?: string | null }>
   remoteAudioRef?: RefObject<HTMLAudioElement | null>
   remoteVideoRef?: RefObject<HTMLVideoElement | null>
   localVideoRef?: RefObject<HTMLVideoElement | null>
@@ -60,6 +62,8 @@ export default function IncomingCallPopup({
   micEnabled = true,
   cameraEnabled = true,
   canToggleCamera = false,
+  isGroupCall = false,
+  groupParticipants = [],
   remoteAudioRef,
   remoteVideoRef,
   localVideoRef,
@@ -74,6 +78,7 @@ export default function IncomingCallPopup({
   const [remainingMs, setRemainingMs] = useState<number | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null)
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<{ offsetX: number; offsetY: number; pointerId: number } | null>(null)
@@ -84,8 +89,19 @@ export default function IncomingCallPopup({
     if (!inCallActive) {
       setIsMinimized(false)
       setPanelPosition(null)
+      setPinnedParticipantId(null)
     }
   }, [inCallActive])
+
+  useEffect(() => {
+    if (!isGroupCall) {
+      setPinnedParticipantId(null)
+      return
+    }
+    if (!pinnedParticipantId && groupParticipants.length > 0) {
+      setPinnedParticipantId(groupParticipants[0].id)
+    }
+  }, [groupParticipants, isGroupCall, pinnedParticipantId])
 
   useEffect(() => {
     if (phase !== "in-call" || !startedAt) {
@@ -215,6 +231,21 @@ export default function IncomingCallPopup({
   }
 
   const showVideoArea = !audioOnly
+  const visibleGroupParticipants = (() => {
+    if (!isGroupCall) {
+      return []
+    }
+    const unique = groupParticipants.filter((item, index, arr) =>
+      arr.findIndex((it) => it.id === item.id) === index
+    )
+    if (unique.length === 0) {
+      return []
+    }
+    const pinned = unique.find((item) => item.id === pinnedParticipantId) ?? unique[0]
+    const others = unique.filter((item) => item.id !== pinned.id)
+    return [pinned, ...others].slice(0, 4)
+  })()
+  const hiddenGroupParticipantCount = Math.max(0, groupParticipants.length - visibleGroupParticipants.length)
   const useFloatingPanel = phase !== "in-call" || Boolean(statusMessage)
   const modalClassName = useFloatingPanel
     ? "w-[360px] max-w-[calc(100vw-1rem)]"
@@ -306,7 +337,45 @@ export default function IncomingCallPopup({
         <div className="px-6 pb-5 text-center">
           <p className="text-sm font-medium text-slate-500">{copy.label}</p>
 
-          {showVideoArea && !useFloatingPanel ? (
+          {showVideoArea && !useFloatingPanel && isGroupCall ? (
+            <div className="mx-auto mt-3 w-full max-w-[760px] rounded-xl bg-slate-900 p-2">
+              <div className="grid grid-cols-2 gap-2">
+                {visibleGroupParticipants.map((participant, index) => {
+                  const fallbackText = participant.name.trim().slice(0, 2).toUpperCase() || "U"
+                  const showRemote = index === 0
+                  const showLocal = index === 1
+                  return (
+                    <button
+                      key={participant.id}
+                      type="button"
+                      className="relative aspect-video overflow-hidden rounded-lg border border-white/20 text-left"
+                      onClick={() => setPinnedParticipantId(participant.id)}
+                    >
+                      {showRemote ? (
+                        <video ref={remoteVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                      ) : showLocal ? (
+                        <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
+                      ) : participant.avatar ? (
+                        <img src={participant.avatar} alt={participant.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-slate-700 text-xl font-semibold text-white">
+                          {fallbackText}
+                        </div>
+                      )}
+                      <div className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
+                        {participant.name}
+                      </div>
+                    </button>
+                  )
+                })}
+                {hiddenGroupParticipantCount > 0 ? (
+                  <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-white/25 bg-slate-800 text-lg font-semibold text-white">
+                    +{hiddenGroupParticipantCount}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : showVideoArea && !useFloatingPanel ? (
             <div className="relative mx-auto mt-3 aspect-video w-full max-h-[62vh] overflow-hidden rounded-xl bg-slate-900">
               <video
                 ref={remoteVideoRef}
@@ -340,6 +409,9 @@ export default function IncomingCallPopup({
           )}
 
           <p className={`mt-2 text-sm ${statusMessage ? "text-amber-600" : "text-slate-500"}`}>{copy.subtitle}</p>
+          {isGroupCall && inCallActive ? (
+            <p className="mt-1 text-xs text-slate-500">Tối đa hiển thị 4 người, bấm ô để ghim lên đầu.</p>
+          ) : null}
           {countdownPercent != null ? (
             <div className={`mx-auto mt-3 ${showVideoArea && !useFloatingPanel ? "max-w-full" : "max-w-[500px]"}`}>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">

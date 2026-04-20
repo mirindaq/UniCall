@@ -49,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -137,6 +138,8 @@ const SEARCH_PAGE_SIZE = 12
 const SEARCH_DEBOUNCE_MS = 500
 const SEARCH_FILES_PREVIEW_LIMIT = 8
 const MESSAGE_REACTIONS = ["👍", "❤️", "😆", "😮", "😭", "😡"] as const
+const GROUP_CALL_MAX_MEMBERS = 5
+const GROUP_CALL_MAX_TARGETS = GROUP_CALL_MAX_MEMBERS - 1
 const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
 
 type ForwardTab = "recent" | "groups" | "friends"
@@ -660,6 +663,8 @@ export default function ChatWindow() {
   >([])
   const [isLoadingForwardFriends, setIsLoadingForwardFriends] = useState(false)
   const [isSubmittingForward, setIsSubmittingForward] = useState(false)
+  const [isGroupCallPickerOpen, setIsGroupCallPickerOpen] = useState(false)
+  const [groupCallSelectedUserIds, setGroupCallSelectedUserIds] = useState<string[]>([])
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(
@@ -2045,6 +2050,42 @@ export default function ChatWindow() {
     () => conversationCall.phase !== "idle",
     [conversationCall.phase]
   )
+  const groupCallSelectableMembers = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return []
+    }
+    return selectedConversation.participantInfos
+      .filter((participant) => participant.idAccount !== currentUserId)
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount]
+        return {
+          id: participant.idAccount,
+          name: profile?.displayName ?? participant.idAccount,
+          avatar: profile?.avatar,
+        }
+      })
+  }, [currentUserId, selectedConversation, senderProfiles])
+  const callModalGroupParticipants = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return []
+    }
+    const joinedUserIds = new Set(conversationCall.activeCall?.joinedUserIds ?? [])
+    const participantsToShow =
+      joinedUserIds.size > 0
+        ? selectedConversation.participantInfos.filter((participant) =>
+            joinedUserIds.has(participant.idAccount)
+          )
+        : selectedConversation.participantInfos
+
+    return participantsToShow.map((participant) => {
+      const profile = senderProfiles[participant.idAccount]
+      return {
+        id: participant.idAccount,
+        name: profile?.displayName ?? participant.idAccount,
+        avatar: profile?.avatar,
+      }
+    })
+  }, [conversationCall.activeCall?.joinedUserIds, selectedConversation, senderProfiles])
   const callModalPeerId = conversationCall.activeCall?.peerUserId ?? null
   const callModalAvatarFallback =
     peerUserId && callModalPeerId && peerUserId === callModalPeerId
@@ -2057,6 +2098,80 @@ export default function ChatWindow() {
       : callModalPeerId) ??
     "Người dùng"
   const callModalAvatar = callPeerProfile?.avatar ?? callModalAvatarFallback
+
+  const handleOpenGroupVideoCallPicker = useCallback(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return
+    }
+    setGroupCallSelectedUserIds([])
+    setIsGroupCallPickerOpen(true)
+  }, [selectedConversation])
+
+  const handleToggleGroupCallMember = useCallback((userId: string) => {
+    setGroupCallSelectedUserIds((prev) => {
+      if (prev.includes(userId)) {
+        return prev.filter((id) => id !== userId)
+      }
+      if (prev.length >= GROUP_CALL_MAX_TARGETS) {
+        toast.info("Tối đa 5 người trong cuộc gọi nhóm (bao gồm bạn)")
+        return prev
+      }
+      return [...prev, userId]
+    })
+  }, [])
+
+  const handleStartGroupVideoCall = useCallback(() => {
+    if (selectedConversation?.type !== "GROUP") {
+      return
+    }
+    if (groupCallSelectedUserIds.length === 0) {
+      toast.info("Chọn ít nhất 1 người để bắt đầu cuộc gọi nhóm")
+      return
+    }
+    setIsGroupCallPickerOpen(false)
+    void conversationCall.startVideoCall({
+      targetUserIds: groupCallSelectedUserIds,
+    })
+  }, [conversationCall, groupCallSelectedUserIds, selectedConversation?.type])
+
+  const isCurrentConversationGroupCallOngoing = Boolean(
+    selectedConversation?.type === "GROUP" &&
+      conversationCall.phase !== "idle" &&
+      conversationCall.activeCall?.conversationId === selectedConversationId &&
+      conversationCall.activeCall?.audioOnly === false
+  )
+
+  const handleJoinGroupCallFromMessage = useCallback(() => {
+    if (selectedConversation?.type !== "GROUP") {
+      return
+    }
+    const isIncomingCurrentConversation =
+      conversationCall.phase === "incoming" &&
+      conversationCall.activeCall?.conversationId === selectedConversationId &&
+      conversationCall.activeCall?.audioOnly === false
+    if (isIncomingCurrentConversation) {
+      void conversationCall.acceptIncomingCall()
+      return
+    }
+
+    if (isCurrentConversationGroupCallOngoing) {
+      toast.info("Bạn đang trong cuộc gọi nhóm")
+      return
+    }
+
+    const shouldRecall = window.confirm(
+      "Cuộc gọi nhóm đã kết thúc. Gọi lại cho nhóm?"
+    )
+    if (shouldRecall) {
+      handleOpenGroupVideoCallPicker()
+    }
+  }, [
+    conversationCall,
+    handleOpenGroupVideoCallPicker,
+    isCurrentConversationGroupCallOngoing,
+    selectedConversation?.type,
+    selectedConversationId,
+  ])
 
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds((prev) => {
@@ -3118,6 +3233,8 @@ export default function ChatWindow() {
           callerName={callModalName}
           callerAvatar={callModalAvatar}
           audioOnly={conversationCall.activeCall?.audioOnly ?? true}
+          isGroupCall={selectedConversation?.type === "GROUP"}
+          groupParticipants={callModalGroupParticipants}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
@@ -3195,21 +3312,29 @@ export default function ChatWindow() {
           >
             <Search className="h-5 w-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Cuộc gọi thoại"
-            disabled={!conversationCall.canStartAudioCall}
-            onClick={() => conversationCall.startAudioCall()}
-          >
-            <Phone className="h-5 w-5" />
-          </Button>
+          {selectedConversation.type === "DOUBLE" ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Cuộc gọi thoại"
+              disabled={!conversationCall.canStartAudioCall}
+              onClick={() => conversationCall.startAudioCall()}
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon-sm"
             title="Cuộc gọi video"
             disabled={!conversationCall.canStartVideoCall}
-            onClick={() => conversationCall.startVideoCall()}
+            onClick={() => {
+              if (selectedConversation.type === "GROUP") {
+                handleOpenGroupVideoCallPicker()
+                return
+              }
+              void conversationCall.startVideoCall()
+            }}
           >
             <Video className="h-5 w-5" />
           </Button>
@@ -3661,6 +3786,8 @@ export default function ChatWindow() {
         callerName={callModalName}
         callerAvatar={callModalAvatar}
         audioOnly={conversationCall.activeCall?.audioOnly ?? true}
+        isGroupCall={selectedConversation?.type === "GROUP"}
+        groupParticipants={callModalGroupParticipants}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
@@ -3984,16 +4111,27 @@ export default function ChatWindow() {
                                 <button
                                   type="button"
                                   className="mt-2 text-sm font-semibold text-blue-600 hover:underline"
-                                  disabled={!conversationCall.canStartAudioCall}
+                                  disabled={
+                                    msg.callInfo?.audioOnly === false
+                                      ? !conversationCall.canStartVideoCall
+                                      : !conversationCall.canStartAudioCall
+                                  }
                                   onClick={() => {
                                     if (msg.callInfo?.audioOnly === false) {
+                                      if (selectedConversation.type === "GROUP") {
+                                        handleJoinGroupCallFromMessage()
+                                        return
+                                      }
                                       void conversationCall.startVideoCall()
                                       return
                                     }
                                     void conversationCall.startAudioCall()
                                   }}
                                 >
-                                  Gọi lại
+                                  {selectedConversation.type === "GROUP" &&
+                                  msg.callInfo?.audioOnly === false
+                                    ? "Tham gia"
+                                    : "Gọi lại"}
                                 </button>
                               </div>
                             ) : firstAttachment?.type === "STICKER" ? (
@@ -4999,6 +5137,54 @@ export default function ChatWindow() {
                 onClick={() => void handleSubmitForward()}
               >
                 {isSubmittingForward ? "Đang chia sẻ..." : "Chia sẻ"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isGroupCallPickerOpen}
+        onOpenChange={setIsGroupCallPickerOpen}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chọn người tham gia</DialogTitle>
+            <DialogDescription>
+              Cuộc gọi nhóm tối đa 5 người (bao gồm bạn).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {groupCallSelectableMembers.map((member) => {
+              const checked = groupCallSelectedUserIds.includes(member.id)
+              return (
+                <label
+                  key={member.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => handleToggleGroupCallMember(member.id)}
+                  />
+                  <Avatar size="sm">
+                    <AvatarImage src={member.avatar} alt={member.name} />
+                    <AvatarFallback>{member.name.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate text-sm">{member.name}</span>
+                </label>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-muted-foreground">
+              Đã chọn {groupCallSelectedUserIds.length}/{GROUP_CALL_MAX_TARGETS}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsGroupCallPickerOpen(false)}>
+                Hủy
+              </Button>
+              <Button onClick={handleStartGroupVideoCall}>
+                Bắt đầu gọi
               </Button>
             </div>
           </div>

@@ -54,6 +54,14 @@ export interface ConversationCallSignal {
   sentAt: string
 }
 
+export type SfuAccessTokenResponse = {
+  callId: string
+  roomName: string
+  url: string
+  token: string
+  expiresAt: string
+}
+
 export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL" | "CONVERSATION_UPSERT"
 
 export interface UserRealtimeEvent {

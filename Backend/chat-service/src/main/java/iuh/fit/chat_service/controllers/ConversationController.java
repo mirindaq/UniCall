@@ -1,6 +1,7 @@
 package iuh.fit.chat_service.controllers;
 
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
+import iuh.fit.chat_service.dtos.request.CreateSfuTokenRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
@@ -10,8 +11,10 @@ import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.dtos.response.CreateGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.DissolveGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
+import iuh.fit.chat_service.dtos.response.SfuAccessTokenResponse;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.services.ConversationService;
+import iuh.fit.chat_service.services.SfuTokenService;
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +39,7 @@ public class ConversationController {
     private static final String USER_ID_HEADER = "X-User-Id";
 
     private final ConversationService conversationService;
+    private final SfuTokenService sfuTokenService;
 
     @PostMapping("/groups")
     public ResponseEntity<ResponseSuccess<CreateGroupConversationResponse>> createGroupConversation(
@@ -258,6 +262,27 @@ public class ConversationController {
                         HttpStatus.OK,
                         "Leave group conversation success",
                         ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PostMapping("/{conversationId}/calls/sfu-token")
+    public ResponseEntity<ResponseSuccess<SfuAccessTokenResponse>> createSfuAccessToken(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @RequestBody(required = false) CreateSfuTokenRequest request
+    ) {
+        String callId = request == null ? null : request.getCallId();
+        SfuAccessTokenResponse response = sfuTokenService.createConversationCallToken(
+                currentIdentityUserId,
+                conversationId,
+                callId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Create SFU token success",
+                        response
                 )
         );
     }

@@ -16,6 +16,7 @@ interface ChatMessageRowProps {
   otherAvatarUrl?: string | null;
   onOpenImageGallery?: (targetUrl: string) => void;
   onLongPressMessage?: (message: MockChatMessage) => void;
+  onPressCallMessage?: (message: MockChatMessage) => void;
 }
 
 function StickerBlock({ url }: { url?: string }) {
@@ -259,6 +260,7 @@ export function ChatMessageRow({
   otherAvatarUrl,
   onOpenImageGallery,
   onLongPressMessage,
+  onPressCallMessage,
 }: ChatMessageRowProps) {
   const isMine = message.sender === 'me';
   const rowAvatar: MockAvatar = {
@@ -309,9 +311,18 @@ export function ChatMessageRow({
         <Text allowFontScaling={false} className="mt-0.5 text-[11px] text-slate-500">
           {message.timeLabel || ''}
         </Text>
-        <Pressable className="mt-2 self-start rounded-full bg-sky-100 px-3 py-1">
-          <Text allowFontScaling={false} className="text-[11px] font-semibold text-sky-700">
-            GỌI LẠI
+        <Pressable
+          className={`mt-2 self-start rounded-full px-3 py-1 ${
+            message.callActionDisabled ? 'bg-slate-200' : 'bg-sky-500'
+          }`}
+          disabled={message.callActionDisabled}
+          onPress={() => onPressCallMessage?.(message)}>
+          <Text
+            allowFontScaling={false}
+            className={`text-[11px] font-semibold ${
+              message.callActionDisabled ? 'text-slate-500' : 'text-white'
+            }`}>
+            {message.callActionLabel || 'Tham gia'}
           </Text>
         </Pressable>
       </View>

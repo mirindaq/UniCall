@@ -14,6 +14,7 @@ import type {
   ForwardMessageRequest,
   ForwardMessageResponse,
   TransferGroupAdminRequest,
+  SfuAccessTokenResponse,
   UpdateGroupAvatarRequest,
   UpdateGroupMemberRoleRequest,
   UpdateGroupManagementSettingsRequest,
@@ -272,6 +273,18 @@ export const chatService = {
   ): Promise<ResponseSuccess<ManageGroupParticipantsResponse>> => {
     const response = await axiosClient.post<ResponseSuccess<ManageGroupParticipantsResponse>>(
       `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/leave`
+    )
+    return response.data
+  },
+  createConversationSfuToken: async (
+    conversationId: string,
+    callId?: string
+  ): Promise<ResponseSuccess<SfuAccessTokenResponse>> => {
+    const response = await axiosClient.post<ResponseSuccess<SfuAccessTokenResponse>>(
+      `${CHAT_API_PREFIX}/${encodeURIComponent(conversationId)}/calls/sfu-token`,
+      {
+        callId,
+      }
     )
     return response.data
   },

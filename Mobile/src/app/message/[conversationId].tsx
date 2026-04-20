@@ -51,6 +51,8 @@ type UiMessage = {
 };
 
 const MESSAGE_PAGE_SIZE = 20;
+const GROUP_CALL_MAX_MEMBERS = 5;
+const GROUP_CALL_MAX_TARGETS = GROUP_CALL_MAX_MEMBERS - 1;
 const GROUP_MANAGER_ONLY_SEND_MESSAGE =
   'Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m \u0111\u01B0\u1EE3c g\u1EEDi tin nh\u1EAFn v\u00E0o nh\u00F3m.';
 const GROUP_MANAGER_ONLY_PIN_MESSAGE =
@@ -156,6 +158,12 @@ type MessageActionItemProps = {
   onPress: () => void;
 };
 
+type GroupCallMemberOption = {
+  id: string;
+  name: string;
+  avatar?: string | null;
+};
+
 function MessageActionItem({
   label,
   icon,
@@ -241,7 +249,13 @@ function PinnedPreviewMedia({
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { startAudioCall, startVideoCall } = useCall();
+  const {
+    phase: callPhase,
+    activeCall: activeConversationCall,
+    startAudioCall,
+    startVideoCall,
+    joinGroupCallFromConversation,
+  } = useCall();
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [conversation, setConversation] = useState<ConversationResponse | null>(null);
@@ -263,6 +277,8 @@ export default function ConversationDetailScreen() {
   const [messageActionTargetId, setMessageActionTargetId] = useState<string | null>(null);
   const [activePinnedMessageId, setActivePinnedMessageId] = useState<string | null>(null);
   const [isPinnedListExpanded, setIsPinnedListExpanded] = useState(false);
+  const [isGroupCallPickerOpen, setIsGroupCallPickerOpen] = useState(false);
+  const [groupCallSelectedUserIds, setGroupCallSelectedUserIds] = useState<string[]>([]);
 
   const peerInfo = useMemo(() => {
     const participants = conversation?.participantInfos ?? [];
@@ -319,6 +335,47 @@ export default function ConversationDetailScreen() {
     : blockStatus?.blockedByMe
       ? 'B\u1EA1n \u0111\u00E3 ch\u1EB7n ng\u01B0\u1EDDi n\u00E0y. H\u00E3y b\u1ECF ch\u1EB7n \u0111\u1EC3 ti\u1EBFp t\u1EE5c nh\u1EAFn tin.'
       : 'Ng\u01B0\u1EDDi n\u00E0y \u0111\u00E3 ch\u1EB7n b\u1EA1n. B\u1EA1n kh\u00F4ng th\u1EC3 nh\u1EAFn tin l\u00FAc n\u00E0y.';
+  const isCurrentConversationGroupCallOngoing = Boolean(
+    conversationId &&
+      callPhase !== 'idle' &&
+      activeConversationCall?.conversationId === conversationId &&
+      activeConversationCall?.isGroupCall
+  );
+  const groupCallSelectableMembers = useMemo<GroupCallMemberOption[]>(() => {
+    if (!isGroupConversation || !conversation) {
+      return [];
+    }
+    return conversation.participantInfos
+      .filter((participant) => {
+        const participantId = normalizeId(participant.idAccount);
+        return (
+          participantId != null &&
+          participantId !== normalizeId(myIdentityId) &&
+          participantId !== normalizeId(myAccountNumericId)
+        );
+      })
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount];
+        return {
+          id: participant.idAccount,
+          name: toDisplayName(profile, participant.idAccount),
+          avatar: profile?.avatar ?? null,
+        };
+      });
+  }, [conversation, isGroupConversation, myAccountNumericId, myIdentityId, senderProfiles]);
+  const groupCallMembers = useMemo<GroupCallMemberOption[]>(() => {
+    if (!isGroupConversation || !conversation) {
+      return [];
+    }
+    return conversation.participantInfos.map((participant) => {
+      const profile = senderProfiles[participant.idAccount];
+      return {
+        id: participant.idAccount,
+        name: toDisplayName(profile, participant.idAccount),
+        avatar: profile?.avatar ?? null,
+      };
+    });
+  }, [conversation, isGroupConversation, senderProfiles]);
 
   const resolveSenderName = useCallback(
     (message: UiMessage) => {
@@ -843,6 +900,16 @@ export default function ConversationDetailScreen() {
         reactionSummary: reactionSummary.items,
         reactionTotal: reactionSummary.total,
         pinned: message.pinned,
+        callActionLabel:
+          conversation?.type === 'GROUP' && message.type === 'CALL'
+            ? isCurrentConversationGroupCallOngoing
+              ? 'Tham gia'
+              : 'Tham gia'
+            : undefined,
+        callActionDisabled:
+          conversation?.type === 'GROUP' && message.type === 'CALL'
+            ? false
+            : undefined,
         statusText:
           isMine && index === lastMineIndex
             ? message.optimisticStatus === 'SENDING'
@@ -860,6 +927,7 @@ export default function ConversationDetailScreen() {
     myIdentityId,
     resolveSenderName,
     senderProfiles,
+    isCurrentConversationGroupCallOngoing,
   ]);
 
   const conversationGalleryImages = useMemo(() => {
@@ -1136,6 +1204,106 @@ export default function ConversationDetailScreen() {
     setForwardSourceMessage(null);
   };
 
+  const openGroupCallPicker = () => {
+    if (!isGroupConversation || !conversationId) {
+      return;
+    }
+    if (groupCallSelectableMembers.length === 0) {
+      Toast.show({
+        type: 'info',
+        text1: 'Nhóm hiện không có thành viên khả dụng để gọi',
+      });
+      return;
+    }
+    setGroupCallSelectedUserIds([]);
+    setIsGroupCallPickerOpen(true);
+  };
+
+  const toggleGroupCallMember = (userId: string) => {
+    setGroupCallSelectedUserIds((prev) => {
+      if (prev.includes(userId)) {
+        return prev.filter((id) => id !== userId);
+      }
+      if (prev.length >= GROUP_CALL_MAX_TARGETS) {
+        Toast.show({
+          type: 'info',
+          text1: `Tối đa ${GROUP_CALL_MAX_MEMBERS} người trong cuộc gọi (bao gồm bạn)`,
+        });
+        return prev;
+      }
+      return [...prev, userId];
+    });
+  };
+
+  const startGroupVideoCall = () => {
+    if (!conversationId || !isGroupConversation) {
+      return;
+    }
+    if (groupCallSelectedUserIds.length === 0) {
+      Toast.show({
+        type: 'info',
+        text1: 'Chọn ít nhất 1 người để bắt đầu cuộc gọi nhóm',
+      });
+      return;
+    }
+
+    const selectedNormalizedIds: string[] = groupCallSelectedUserIds.reduce<string[]>((acc, id) => {
+      const normalized = normalizeId(id);
+      if (normalized) {
+        acc.push(normalized);
+      }
+      return acc;
+    }, []);
+    const selectedUserIdSet = new Set(selectedNormalizedIds);
+    const selfId = normalizeId(myIdentityId) ?? normalizeId(myAccountNumericId);
+    const groupMembersForCall = groupCallMembers.filter((member) => {
+      const normalizedMemberId = normalizeId(member.id);
+      if (!normalizedMemberId) {
+        return false;
+      }
+      return normalizedMemberId === selfId || selectedUserIdSet.has(normalizedMemberId);
+    });
+
+    setIsGroupCallPickerOpen(false);
+    void startVideoCall({
+      conversationId,
+      conversationType: 'GROUP',
+      peerUserId: groupCallSelectedUserIds[0] ?? 'group',
+      peerName: headerTitle,
+      peerAvatar: conversation?.avatar ?? null,
+      targetUserIds: groupCallSelectedUserIds,
+      groupMembers: groupMembersForCall,
+    });
+  };
+
+  const handleJoinGroupCallFromMessage = useCallback(async () => {
+    if (!conversationId) {
+      return;
+    }
+    const joined = await joinGroupCallFromConversation(conversationId);
+    if (joined) {
+      return;
+    }
+
+    Alert.alert(
+      'Cuộc gọi nhóm đã kết thúc. Gọi lại cho nhóm?',
+      '',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Gọi lại',
+          onPress: () => {
+            openGroupCallPicker();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [conversationId, joinGroupCallFromConversation]);
+
   return (
     <View className="flex-1 bg-[#d9dde8]">
       <AppStatusBarBlue />
@@ -1146,6 +1314,13 @@ export default function ConversationDetailScreen() {
           router.back();
         }}
         onStartAudioCall={() => {
+          if (isGroupConversation) {
+            Toast.show({
+              type: 'info',
+              text1: 'Cuộc gọi nhóm chỉ hỗ trợ gọi video',
+            });
+            return;
+          }
           if (isDirectMessageBlocked) {
             Toast.show({
               type: 'error',
@@ -1165,6 +1340,7 @@ export default function ConversationDetailScreen() {
             peerUserId,
             peerName: headerTitle,
             peerAvatar: conversation?.avatar ?? null,
+            conversationType: 'DOUBLE',
           });
         }}
         onStartVideoCall={() => {
@@ -1173,6 +1349,10 @@ export default function ConversationDetailScreen() {
               type: 'error',
               text1: blockedCallReasonText,
             });
+            return;
+          }
+          if (isGroupConversation) {
+            openGroupCallPicker();
             return;
           }
           if (!conversationId || !peerUserId) {
@@ -1187,6 +1367,7 @@ export default function ConversationDetailScreen() {
             peerUserId,
             peerName: headerTitle,
             peerAvatar: conversation?.avatar ?? null,
+            conversationType: 'DOUBLE',
           });
         }}
         onOpenOptions={() => {
@@ -1195,8 +1376,11 @@ export default function ConversationDetailScreen() {
           }
           router.push(`/message/options/${conversationId}`);
         }}
-        audioCallDisabled={isDirectMessageBlocked || !peerUserId}
-        videoCallDisabled={isDirectMessageBlocked || !peerUserId}
+        audioCallDisabled={isGroupConversation || isDirectMessageBlocked || !peerUserId}
+        videoCallDisabled={
+          isDirectMessageBlocked ||
+          (isGroupConversation ? groupCallSelectableMembers.length === 0 : !peerUserId)
+        }
       />
 
       {activePinnedMessage && activePinnedPreview ? (
@@ -1311,9 +1495,100 @@ export default function ConversationDetailScreen() {
           }
           setMessageActionTargetId(idMessage);
         }}
+        onPressCallMessage={(message) => {
+          if (conversation?.type !== 'GROUP' || message.rawType !== 'CALL') {
+            return;
+          }
+          void handleJoinGroupCallFromMessage();
+        }}
         onLoadMore={loadMoreMessages}
         onScrolledToBottom={() => setShouldScrollToBottom(false)}
       />
+
+      <Modal
+        visible={isGroupCallPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsGroupCallPickerOpen(false)}>
+        <Pressable
+          className="flex-1 justify-end bg-black/35"
+          onPress={() => setIsGroupCallPickerOpen(false)}>
+          <Pressable
+            className="max-h-[70%] rounded-t-2xl bg-white px-4 pb-4 pt-3"
+            onPress={(event) => event.stopPropagation()}>
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-slate-900">Chọn người tham gia</Text>
+              <Pressable
+                onPress={() => setIsGroupCallPickerOpen(false)}
+                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
+                <Text className="text-slate-600">x</Text>
+              </Pressable>
+            </View>
+            <Text className="mb-2 text-xs text-slate-500">
+              Tối đa {GROUP_CALL_MAX_MEMBERS} người trong cuộc gọi (bao gồm bạn).
+            </Text>
+            <FlatList
+              data={groupCallSelectableMembers}
+              keyExtractor={(item) => item.id}
+              ListEmptyComponent={
+                <View className="py-8">
+                  <Text className="text-center text-sm text-slate-500">
+                    Không có thành viên phù hợp
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const isChecked = groupCallSelectedUserIds.includes(item.id);
+                return (
+                  <Pressable
+                    className="mb-2 flex-row items-center rounded-lg border border-slate-200 px-3 py-2.5"
+                    onPress={() => toggleGroupCallMember(item.id)}>
+                    <View
+                      className={`h-5 w-5 items-center justify-center rounded border ${
+                        isChecked ? 'border-blue-500 bg-blue-500' : 'border-slate-300 bg-white'
+                      }`}>
+                      {isChecked ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
+                    </View>
+                    {item.avatar ? (
+                      <Image
+                        source={{ uri: item.avatar }}
+                        className="ml-2.5 h-9 w-9 rounded-full"
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="ml-2.5 h-9 w-9 items-center justify-center rounded-full bg-slate-300">
+                        <Text className="text-xs font-semibold text-white">
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <Text className="ml-2.5 flex-1 text-[14px] text-slate-900" numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="text-xs text-slate-500">
+                Đã chọn {groupCallSelectedUserIds.length}/{GROUP_CALL_MAX_TARGETS}
+              </Text>
+              <View className="flex-row gap-2">
+                <Pressable
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                  onPress={() => setIsGroupCallPickerOpen(false)}>
+                  <Text className="text-sm text-slate-700">Hủy</Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-lg bg-[#1e98f3] px-3 py-2"
+                  onPress={startGroupVideoCall}>
+                  <Text className="text-sm font-medium text-white">Bắt đầu gọi</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={Boolean(selectedActionMessage)}

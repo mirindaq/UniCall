@@ -38,6 +38,7 @@ interface ChatDetailContentProps {
   replyPreview?: MessagePreviewData | null;
   onCancelReply?: () => void;
   onLongPressMessage?: (message: MockChatMessage) => void;
+  onPressCallMessage?: (message: MockChatMessage) => void;
   onLoadMore?: () => void;
   onScrolledToBottom?: () => void;
 }
@@ -60,6 +61,7 @@ export function ChatDetailContent({
   replyPreview,
   onCancelReply,
   onLongPressMessage,
+  onPressCallMessage,
   onLoadMore,
   onScrolledToBottom,
 }: ChatDetailContentProps) {
@@ -135,6 +137,7 @@ export function ChatDetailContent({
         otherAvatarUrl={otherAvatarUrl}
         onOpenImageGallery={openImageViewer}
         onLongPressMessage={onLongPressMessage}
+        onPressCallMessage={onPressCallMessage}
       />
     </View>
   );

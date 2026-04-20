@@ -29,6 +29,8 @@ export interface MockChatMessage {
   showDownloadButton?: boolean;
   pinned?: boolean;
   statusText?: string;
+  callActionLabel?: string;
+  callActionDisabled?: boolean;
 }
 
 export interface MockChatThread {
