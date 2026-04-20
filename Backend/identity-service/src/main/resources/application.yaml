@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: identity-service
 
@@ -7,6 +9,9 @@ server:
 
 app:
   prefix: ${API_PREFIX:/api/v1}
+  firebase:
+    enabled: ${FIREBASE_OTP_ENABLED:false}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
   security:
     cookie:
       secure: ${COOKIE_SECURE:false}

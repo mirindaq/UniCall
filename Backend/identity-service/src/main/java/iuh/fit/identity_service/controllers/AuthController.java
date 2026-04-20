@@ -6,6 +6,7 @@ import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RefreshTokenRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResetPasswordWithOtpRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.request.auth.VerifyPasswordRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
@@ -72,6 +73,14 @@ public class AuthController {
     ) {
         authService.verifyPassword(request.getIdentityUserId(), request.getPhoneNumber(), request.getPassword());
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password verified"));
+    }
+
+    @PostMapping("/reset-password-with-otp")
+    public ResponseEntity<ResponseSuccess<Void>> resetPasswordWithOtp(
+            @Valid @RequestBody ResetPasswordWithOtpRequest request
+    ) {
+        authService.resetPasswordWithOtp(request);
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password reset successfully"));
     }
 
     @PostMapping("/login")
