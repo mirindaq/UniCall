@@ -6,6 +6,7 @@ import {
   Copy,
   FileText,
   Forward,
+  Info,
   Image as ImageIcon,
   ListChecks,
   MoreHorizontal,
@@ -48,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -136,6 +138,8 @@ const SEARCH_PAGE_SIZE = 12
 const SEARCH_DEBOUNCE_MS = 500
 const SEARCH_FILES_PREVIEW_LIMIT = 8
 const MESSAGE_REACTIONS = ["👍", "❤️", "😆", "😮", "😭", "😡"] as const
+const GROUP_CALL_MAX_MEMBERS = 5
+const GROUP_CALL_MAX_TARGETS = GROUP_CALL_MAX_MEMBERS - 1
 const CHAT_BLOCK_STATUS_CHANGED_EVENT = "chat:block-status-changed"
 
 type ForwardTab = "recent" | "groups" | "friends"
@@ -168,9 +172,24 @@ type MentionSuggestionState = {
   highlightedIndex: number
 }
 
-type AiQuickPrompt = {
-  label: string
-  prompt: string
+type MessagePreviewKind =
+  | "text"
+  | "call"
+  | "image"
+  | "video"
+  | "audio"
+  | "file"
+  | "gif"
+  | "sticker"
+  | "link"
+
+type MessagePreviewData = {
+  text: string
+  kind: MessagePreviewKind
+  mediaLabel?: string
+  thumbnailUrl?: string
+  fileExt?: string
+  hasCustomText: boolean
 }
 
 const AI_MENTION_COMMANDS: MentionCommand[] = [
@@ -183,30 +202,6 @@ const AI_MENTION_COMMANDS: MentionCommand[] = [
     description: "Yêu cầu UniCall AI tạo hình ảnh.",
   },
 ]
-
-const AI_QUICK_PROMPTS: AiQuickPrompt[] = [
-  { label: "Thống kê tổng quan", prompt: "@Unicall thống kê chat" },
-  { label: "Thống kê 7 ngày", prompt: "@Unicall thống kê chat 7 ngày" },
-  { label: "Thống kê 30 ngày", prompt: "@Unicall thống kê chat 30 ngày" },
-  { label: "Tóm tắt 7 ngày", prompt: "@Unicall tóm tắt chat 7 ngày" },
-  { label: "Tóm tắt 30 ngày", prompt: "@Unicall tóm tắt chat 30 ngày" },
-  { label: "Rút action items", prompt: "@Unicall rút action items 7 ngày" },
-  { label: "Bật ghi nhớ AI", prompt: "@Unicall bật ghi nhớ AI" },
-  { label: "Ghi nhớ sở thích", prompt: "@Unicall ghi nhớ: trả lời ngắn gọn, rõ ý" },
-  { label: "Tắt ghi nhớ AI", prompt: "@Unicall tắt ghi nhớ AI" },
-  { label: "Xóa ghi nhớ", prompt: "@Unicall xóa ghi nhớ" },
-]
-
-function normalizeQuickPromptText(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-}
 
 function renderHighlightedSearchText(
   content: string,
@@ -243,28 +238,201 @@ function renderHighlightedSearchText(
 }
 
 function messagePlainTextForCopy(msg: ChatMessageResponse): string {
+  return buildMessagePreviewData(msg).text
+}
+
+function buildMessagePreviewData(msg: ChatMessageResponse): MessagePreviewData {
   const normalizedContent = normalizeFileMessageContent(msg.content)
+  const normalizedTrimmed = normalizedContent.trim()
 
   if (msg.recalled) {
-    return normalizedContent
+    return {
+      text: normalizedContent || "Tin nh?n ?? thu h?i",
+      kind: "text",
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
   }
   if (msg.type === "CALL") {
-    return "Cuộc gọi thoại"
+    return {
+      text: "Cu?c g?i tho?i",
+      kind: "call",
+      mediaLabel: "Cu?c g?i",
+      hasCustomText: false,
+    }
   }
   if (msg.type === "TEXT") {
-    return normalizedContent
+    return {
+      text: normalizedContent,
+      kind: "text",
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
   }
+
   const a = msg.attachments?.[0]
   if (a?.type === "STICKER") {
-    return "[Sticker]"
+    return {
+      text: normalizedContent || "[Sticker]",
+      kind: "sticker",
+      mediaLabel: "Sticker",
+      thumbnailUrl: a.url,
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
   }
   if (a?.type === "GIF") {
-    return "[GIF]"
+    return {
+      text: normalizedContent || "[GIF]",
+      kind: "gif",
+      mediaLabel: "GIF",
+      thumbnailUrl: a.url,
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
   }
   if (a?.type === "LINK") {
-    return a.url || normalizedContent || "[Link]"
+    const linkText = a.url || normalizedContent || "[Link]"
+    return {
+      text: linkText,
+      kind: "link",
+      mediaLabel: "Li?n k?t",
+      hasCustomText: Boolean(linkText && linkText !== "[Link]"),
+    }
   }
-  return normalizedContent
+  if (a?.type === "IMAGE") {
+    return {
+      text: normalizedContent || "?? gửi ảnh",
+      kind: "image",
+      mediaLabel: "ảnh",
+      thumbnailUrl: a.url,
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
+  }
+  if (a?.type === "VIDEO") {
+    return {
+      text: normalizedContent || "?? g?i video",
+      kind: "video",
+      mediaLabel: "Video",
+      thumbnailUrl: a.url,
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
+  }
+  if (a?.type === "AUDIO") {
+    return {
+      text: normalizedContent || "?? g?i file ?m thanh",
+      kind: "audio",
+      mediaLabel: "?m thanh",
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
+  }
+  if (a?.type === "FILE") {
+    const fileNameFromMessage =
+      extractFileNameFromFileMessage(normalizedContent)
+    const fileNameFromUrl = getOriginalFileNameFromUrl(a.url)
+    const fileText =
+      fileNameFromMessage ||
+      fileNameFromUrl ||
+      normalizedContent ||
+      "?? g?i file"
+    const fileExt = fileNameFromUrl
+      .split(".")
+      .pop()
+      ?.toUpperCase()
+      .substring(0, 4)
+
+    return {
+      text: fileText,
+      kind: "file",
+      mediaLabel: "File",
+      fileExt: fileExt || "FILE",
+      hasCustomText: Boolean(
+        fileNameFromMessage || fileNameFromUrl || normalizedTrimmed
+      ),
+    }
+  }
+  if (a?.type) {
+    return {
+      text: normalizedContent || `[${a.type}]`,
+      kind: "text",
+      mediaLabel: a.type,
+      hasCustomText: Boolean(normalizedTrimmed),
+    }
+  }
+
+  return {
+    text: normalizedContent,
+    kind: "text",
+    hasCustomText: Boolean(normalizedTrimmed),
+  }
+}
+
+function messagePreviewSnippetText(preview: MessagePreviewData): string {
+  if (!preview.mediaLabel) {
+    return preview.text
+  }
+  if (preview.hasCustomText) {
+    return `[${preview.mediaLabel}] ${preview.text}`
+  }
+  return `[${preview.mediaLabel}]`
+}
+
+function renderMessagePreviewThumb(
+  preview: MessagePreviewData,
+  className = "h-8 w-8"
+): ReactNode {
+  if (preview.kind === "video" && preview.thumbnailUrl) {
+    return (
+      <span className={cn(className, "relative shrink-0 overflow-hidden rounded")}>
+        <video
+          src={preview.thumbnailUrl}
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          preload="metadata"
+        />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <Video className="size-3 text-white" />
+        </span>
+      </span>
+    )
+  }
+
+  if (
+    preview.thumbnailUrl &&
+    (preview.kind === "image" ||
+      preview.kind === "gif" ||
+      preview.kind === "sticker")
+  ) {
+    return (
+      <img
+        src={preview.thumbnailUrl}
+        alt={preview.mediaLabel ?? "attachment"}
+        className={cn(className, "shrink-0 rounded object-cover")}
+      />
+    )
+  }
+
+  const iconClassName = "size-3.5"
+  const label = preview.fileExt || preview.mediaLabel || "T"
+  return (
+    <span
+      className={cn(
+        className,
+        "inline-flex shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground"
+      )}
+    >
+      {preview.kind === "video" ? (
+        <Video className={iconClassName} />
+      ) : preview.kind === "audio" ? (
+        <Paperclip className={iconClassName} />
+      ) : preview.kind === "file" ? (
+        <span>{label}</span>
+      ) : preview.kind === "call" ? (
+        <Phone className={iconClassName} />
+      ) : preview.kind === "link" ? (
+        <Paperclip className={iconClassName} />
+      ) : (
+        <ImageIcon className={iconClassName} />
+      )}
+    </span>
+  )
 }
 
 function renderMessageRichText(content: string): ReactNode {
@@ -362,6 +530,25 @@ function getDirectPeerId(
   )
 }
 
+function normalizeParticipantId(value?: string | null): string | null {
+  if (!value) {
+    return null
+  }
+  const normalized = value.trim().toLowerCase()
+  return normalized || null
+}
+
+function isGroupPinPermissionError(message?: string): boolean {
+  if (!message) {
+    return false
+  }
+  const normalized = message.toLowerCase()
+  const hasPinKeyword = /ghim|pin/.test(normalized)
+  const hasRoleKeyword =
+    /trưởng nhóm|pho nhóm|phó nhóm|deputy|admin|group admin/.test(normalized)
+  return hasPinKeyword && hasRoleKeyword
+}
+
 export default function ChatWindow() {
   const { isAuthenticated } = useAuth()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -402,6 +589,7 @@ export default function ChatWindow() {
     clearMessageFocusRequest,
     conversations,
     refetchConversations,
+    onRealtimeConversation,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -449,8 +637,6 @@ export default function ChatWindow() {
   const [draft, setDraft] = useState("")
   const [mentionSuggestion, setMentionSuggestion] =
     useState<MentionSuggestionState | null>(null)
-  const [showAiQuickPrompts, setShowAiQuickPrompts] = useState(true)
-  const [forceOpenAiQuickPrompts, setForceOpenAiQuickPrompts] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [blockStatus, setBlockStatus] =
     useState<ConversationBlockStatusResponse | null>(null)
@@ -477,6 +663,8 @@ export default function ChatWindow() {
   >([])
   const [isLoadingForwardFriends, setIsLoadingForwardFriends] = useState(false)
   const [isSubmittingForward, setIsSubmittingForward] = useState(false)
+  const [isGroupCallPickerOpen, setIsGroupCallPickerOpen] = useState(false)
+  const [groupCallSelectedUserIds, setGroupCallSelectedUserIds] = useState<string[]>([])
   const [replyingTo, setReplyingTo] = useState<ChatMessageResponse | null>(null)
   const [multiSelectActive, setMultiSelectActive] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(
@@ -525,17 +713,48 @@ export default function ChatWindow() {
   const [allConversationImages, setAllConversationImages] = useState<
     ImageViewerItem[]
   >([])
+  const selectedConversationSettings = selectedConversation?.groupManagementSettings
+  const currentGroupRole = useMemo(() => {
+    if (!selectedConversation || !currentUserId) {
+      return null
+    }
+    const currentNormalizedId = normalizeParticipantId(currentUserId)
+    if (!currentNormalizedId) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find(
+        (participant) =>
+          normalizeParticipantId(participant.idAccount) === currentNormalizedId
+      )?.role ?? null
+    )
+  }, [currentUserId, selectedConversation])
+  const isCurrentUserGroupManager =
+    currentGroupRole === "ADMIN" || currentGroupRole === "DEPUTY"
+  const isGroupSendRestricted =
+    selectedConversation?.type === "GROUP" &&
+    !selectedConversationSettings?.allowMemberSendMessage &&
+    !isCurrentUserGroupManager
+  const isGroupPinRestricted =
+    selectedConversation?.type === "GROUP" &&
+    !selectedConversationSettings?.allowMemberPinMessage &&
+    !isCurrentUserGroupManager
   const isDirectConversation = selectedConversation?.type === "DOUBLE"
-  const isMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked)
+  const isDirectMessageBlocked =
+    isDirectConversation && Boolean(blockStatus?.blocked)
   const blockedReasonText = blockStatus?.blockedByMe
     ? "Bạn đã chặn người này. Hãy bỏ chặn để tiếp tục nhắn tin."
     : "Hiện không thể nhắn tin vì người này đã chặn bạn."
+  const isComposerBlocked = isDirectMessageBlocked || isGroupSendRestricted
+  const blockedComposerReasonText = isDirectMessageBlocked
+    ? blockedReasonText
+    : "Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m \u0111\u01B0\u1EE3c g\u1EEDi tin nh\u1EAFn v\u00E0o nh\u00F3m."
   const conversationCall = useConversationCall({
     conversationId: selectedConversationId ?? undefined,
     conversationType: selectedConversation?.type,
     currentUserId,
     peerUserId,
-    isBlocked: isMessageBlocked,
+    isBlocked: isDirectMessageBlocked,
   })
   const refreshBlockStatus = useCallback(async () => {
     if (!selectedConversationId || selectedConversation?.type !== "DOUBLE") {
@@ -799,6 +1018,10 @@ export default function ChatWindow() {
     onUserEvent: (event: UserRealtimeEvent) => {
       if (event.eventType === "MESSAGE_UPSERT" && event.message) {
         mergeIncomingOrUpdatedMessage(event.message)
+        return
+      }
+      if (event.eventType === "CONVERSATION_UPSERT" && event.conversation) {
+        onRealtimeConversation(event.conversation)
       }
     },
   })
@@ -1827,6 +2050,42 @@ export default function ChatWindow() {
     () => conversationCall.phase !== "idle",
     [conversationCall.phase]
   )
+  const groupCallSelectableMembers = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return []
+    }
+    return selectedConversation.participantInfos
+      .filter((participant) => participant.idAccount !== currentUserId)
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount]
+        return {
+          id: participant.idAccount,
+          name: profile?.displayName ?? participant.idAccount,
+          avatar: profile?.avatar,
+        }
+      })
+  }, [currentUserId, selectedConversation, senderProfiles])
+  const callModalGroupParticipants = useMemo(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return []
+    }
+    const joinedUserIds = new Set(conversationCall.activeCall?.joinedUserIds ?? [])
+    const participantsToShow =
+      joinedUserIds.size > 0
+        ? selectedConversation.participantInfos.filter((participant) =>
+            joinedUserIds.has(participant.idAccount)
+          )
+        : selectedConversation.participantInfos
+
+    return participantsToShow.map((participant) => {
+      const profile = senderProfiles[participant.idAccount]
+      return {
+        id: participant.idAccount,
+        name: profile?.displayName ?? participant.idAccount,
+        avatar: profile?.avatar,
+      }
+    })
+  }, [conversationCall.activeCall?.joinedUserIds, selectedConversation, senderProfiles])
   const callModalPeerId = conversationCall.activeCall?.peerUserId ?? null
   const callModalAvatarFallback =
     peerUserId && callModalPeerId && peerUserId === callModalPeerId
@@ -1839,6 +2098,80 @@ export default function ChatWindow() {
       : callModalPeerId) ??
     "Người dùng"
   const callModalAvatar = callPeerProfile?.avatar ?? callModalAvatarFallback
+
+  const handleOpenGroupVideoCallPicker = useCallback(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return
+    }
+    setGroupCallSelectedUserIds([])
+    setIsGroupCallPickerOpen(true)
+  }, [selectedConversation])
+
+  const handleToggleGroupCallMember = useCallback((userId: string) => {
+    setGroupCallSelectedUserIds((prev) => {
+      if (prev.includes(userId)) {
+        return prev.filter((id) => id !== userId)
+      }
+      if (prev.length >= GROUP_CALL_MAX_TARGETS) {
+        toast.info("Tối đa 5 người trong cuộc gọi nhóm (bao gồm bạn)")
+        return prev
+      }
+      return [...prev, userId]
+    })
+  }, [])
+
+  const handleStartGroupVideoCall = useCallback(() => {
+    if (selectedConversation?.type !== "GROUP") {
+      return
+    }
+    if (groupCallSelectedUserIds.length === 0) {
+      toast.info("Chọn ít nhất 1 người để bắt đầu cuộc gọi nhóm")
+      return
+    }
+    setIsGroupCallPickerOpen(false)
+    void conversationCall.startVideoCall({
+      targetUserIds: groupCallSelectedUserIds,
+    })
+  }, [conversationCall, groupCallSelectedUserIds, selectedConversation?.type])
+
+  const isCurrentConversationGroupCallOngoing = Boolean(
+    selectedConversation?.type === "GROUP" &&
+      conversationCall.phase !== "idle" &&
+      conversationCall.activeCall?.conversationId === selectedConversationId &&
+      conversationCall.activeCall?.audioOnly === false
+  )
+
+  const handleJoinGroupCallFromMessage = useCallback(() => {
+    if (selectedConversation?.type !== "GROUP") {
+      return
+    }
+    const isIncomingCurrentConversation =
+      conversationCall.phase === "incoming" &&
+      conversationCall.activeCall?.conversationId === selectedConversationId &&
+      conversationCall.activeCall?.audioOnly === false
+    if (isIncomingCurrentConversation) {
+      void conversationCall.acceptIncomingCall()
+      return
+    }
+
+    if (isCurrentConversationGroupCallOngoing) {
+      toast.info("Bạn đang trong cuộc gọi nhóm")
+      return
+    }
+
+    const shouldRecall = window.confirm(
+      "Cuộc gọi nhóm đã kết thúc. Gọi lại cho nhóm?"
+    )
+    if (shouldRecall) {
+      handleOpenGroupVideoCallPicker()
+    }
+  }, [
+    conversationCall,
+    handleOpenGroupVideoCallPicker,
+    isCurrentConversationGroupCallOngoing,
+    selectedConversation?.type,
+    selectedConversationId,
+  ])
 
   const toggleMessageSelection = useCallback((messageId: string) => {
     setSelectedMessageIds((prev) => {
@@ -1962,90 +2295,6 @@ export default function ChatWindow() {
     )
   }, [mentionSuggestion])
 
-  const aiQuickPromptQuery = useMemo(() => {
-    const normalizedDraft = draft.trimStart()
-    if (!normalizedDraft.toLowerCase().startsWith("@unicall")) {
-      return ""
-    }
-    return normalizedDraft.slice("@unicall".length).trim()
-  }, [draft])
-
-  const visibleAiQuickPrompts = useMemo(() => {
-    const normalizedQuery = normalizeQuickPromptText(aiQuickPromptQuery)
-    if (!normalizedQuery) {
-      return AI_QUICK_PROMPTS
-    }
-    return AI_QUICK_PROMPTS.filter((item) => {
-      const normalizedLabel = normalizeQuickPromptText(item.label)
-      const normalizedPrompt = normalizeQuickPromptText(
-        item.prompt.replace(/^@unicall\s*/i, "")
-      )
-      return (
-        normalizedLabel.includes(normalizedQuery) ||
-        normalizedPrompt.includes(normalizedQuery)
-      )
-    })
-  }, [aiQuickPromptQuery])
-
-  const shouldShowAiQuickPromptPanel = useMemo(() => {
-    if (!showAiQuickPrompts || mentionSuggestion) {
-      return false
-    }
-    const normalizedDraft = draft.trimStart().toLowerCase()
-    return (
-      (forceOpenAiQuickPrompts ||
-        normalizedDraft.startsWith("@unicall ") ||
-        normalizedDraft === "@unicall") &&
-      visibleAiQuickPrompts.length > 0
-    )
-  }, [
-    draft,
-    forceOpenAiQuickPrompts,
-    mentionSuggestion,
-    showAiQuickPrompts,
-    visibleAiQuickPrompts.length,
-  ])
-
-  const applyAiQuickPrompt = useCallback((prompt: string) => {
-    const nextDraft = prompt.trim()
-    setDraft(nextDraft)
-    setMentionSuggestion(null)
-    setForceOpenAiQuickPrompts(false)
-    setShowAiQuickPrompts(false)
-    const caretAfter = nextDraft.length
-    draftCaretRef.current = { start: caretAfter, end: caretAfter }
-    window.setTimeout(() => {
-      const textarea = textareaRef.current
-      if (!textarea) {
-        return
-      }
-      textarea.focus()
-      textarea.setSelectionRange(caretAfter, caretAfter)
-      handleInput()
-    }, 0)
-  }, [])
-
-  const openAiQuickPromptPanel = useCallback(() => {
-    setShowAiQuickPrompts(true)
-    setMentionSuggestion(null)
-    const baseDraft = draft.trimStart().toLowerCase().startsWith("@unicall")
-      ? draft
-      : "@Unicall "
-    setDraft(baseDraft)
-    setForceOpenAiQuickPrompts(true)
-    const caretAfter = baseDraft.length
-    draftCaretRef.current = { start: caretAfter, end: caretAfter }
-    window.setTimeout(() => {
-      const textarea = textareaRef.current
-      if (!textarea) {
-        return
-      }
-      textarea.focus()
-      textarea.setSelectionRange(caretAfter, caretAfter)
-      handleInput()
-    }, 0)
-  }, [draft])
-
   useEffect(() => {
     if (!mentionSuggestion) {
       return
@@ -2062,32 +2311,6 @@ export default function ChatWindow() {
       )
     }
   }, [mentionSuggestion, visibleMentionCommands.length])
-
-  useEffect(() => {
-    if (!showAiQuickPrompts || mentionSuggestion) {
-      return
-    }
-
-    const normalizedDraft = draft.trimStart().toLowerCase()
-    if (!normalizedDraft.startsWith("@unicall")) {
-      if (forceOpenAiQuickPrompts) {
-        setForceOpenAiQuickPrompts(false)
-      }
-      return
-    }
-
-    if (aiQuickPromptQuery && visibleAiQuickPrompts.length === 0) {
-      setShowAiQuickPrompts(false)
-      setForceOpenAiQuickPrompts(false)
-    }
-  }, [
-    aiQuickPromptQuery,
-    draft,
-    forceOpenAiQuickPrompts,
-    mentionSuggestion,
-    showAiQuickPrompts,
-    visibleAiQuickPrompts.length,
-  ])
 
   const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
     if (allConversationImages.length > 0) {
@@ -2174,10 +2397,10 @@ export default function ChatWindow() {
       (!normalized && !hasAttachments) ||
       !selectedConversationId ||
       !currentUserId ||
-      isMessageBlocked
+      isComposerBlocked
     ) {
-      if (isMessageBlocked) {
-        toast.error(blockedReasonText)
+      if (isComposerBlocked) {
+        toast.error(blockedComposerReasonText)
       }
       return
     }
@@ -2782,6 +3005,10 @@ export default function ChatWindow() {
       if (!selectedConversationId) {
         return
       }
+      if (isGroupPinRestricted) {
+        toast.error("Chỉ trưởng/phó nhóm mới có thể ghim tin nhắn.")
+        return
+      }
       try {
         const response = msg.pinned
           ? await chatService.unpinMessage(
@@ -2797,15 +3024,24 @@ export default function ChatWindow() {
           setSelectedReplyTargetMessageId(null)
         }
         toast.success(msg.pinned ? "Đã bỏ ghim tin nhắn" : "Đã ghim tin nhắn")
-      } catch {
+      } catch (error) {
+        const backendMessage = (
+          error as { response?: { data?: { message?: string } } }
+        )?.response?.data?.message
+        if (isGroupPinPermissionError(backendMessage)) {
+          toast.error("Chỉ trưởng/phó nhóm mới có thể ghim tin nhắn.")
+          return
+        }
         toast.error(
-          msg.pinned
-            ? "Không bỏ ghim được tin nhắn"
-            : "Không ghim được tin nhắn"
+          backendMessage ||
+            (msg.pinned
+              ? "Không bỏ ghim được tin nhắn"
+              : "Không ghim được tin nhắn")
         )
       }
     },
     [
+      isGroupPinRestricted,
       mergeIncomingOrUpdatedMessage,
       selectedConversationId,
       selectedPinnedMessageId,
@@ -2997,6 +3233,8 @@ export default function ChatWindow() {
           callerName={callModalName}
           callerAvatar={callModalAvatar}
           audioOnly={conversationCall.activeCall?.audioOnly ?? true}
+          isGroupCall={selectedConversation?.type === "GROUP"}
+          groupParticipants={callModalGroupParticipants}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
@@ -3074,21 +3312,29 @@ export default function ChatWindow() {
           >
             <Search className="h-5 w-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Cuộc gọi thoại"
-            disabled={!conversationCall.canStartAudioCall}
-            onClick={() => conversationCall.startAudioCall()}
-          >
-            <Phone className="h-5 w-5" />
-          </Button>
+          {selectedConversation.type === "DOUBLE" ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Cuộc gọi thoại"
+              disabled={!conversationCall.canStartAudioCall}
+              onClick={() => conversationCall.startAudioCall()}
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon-sm"
             title="Cuộc gọi video"
             disabled={!conversationCall.canStartVideoCall}
-            onClick={() => conversationCall.startVideoCall()}
+            onClick={() => {
+              if (selectedConversation.type === "GROUP") {
+                handleOpenGroupVideoCallPicker()
+                return
+              }
+              void conversationCall.startVideoCall()
+            }}
           >
             <Video className="h-5 w-5" />
           </Button>
@@ -3129,34 +3375,46 @@ export default function ChatWindow() {
           </div>
 
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
-            {pinnedMessagesSorted.map((pinnedMessage) => (
-              <div
-                key={pinnedMessage.idMessage}
-                className={cn(
-                  "flex max-w-xs min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-1",
-                  selectedPinnedMessageId === pinnedMessage.idMessage
-                    ? "border-amber-400 bg-amber-200/80 ring-1 ring-amber-300"
-                    : "border-amber-200 bg-amber-100/70"
-                )}
-              >
-                <button
-                  type="button"
-                  className="truncate text-left text-amber-900 hover:text-amber-950"
-                  onClick={() => focusPinnedMessage(pinnedMessage.idMessage)}
-                  title={messagePlainTextForCopy(pinnedMessage)}
+            {pinnedMessagesSorted.map((pinnedMessage) => {
+              const pinnedPreview = buildMessagePreviewData(pinnedMessage)
+
+              return (
+                <div
+                  key={pinnedMessage.idMessage}
+                  className={cn(
+                    "flex max-w-xs min-w-0 shrink-0 items-center gap-1 rounded-md border px-2 py-1",
+                    selectedPinnedMessageId === pinnedMessage.idMessage
+                      ? "border-amber-400 bg-amber-200/80 ring-1 ring-amber-300"
+                      : "border-amber-200 bg-amber-100/70"
+                  )}
                 >
-                  {messagePlainTextForCopy(pinnedMessage)}
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-amber-700 hover:bg-amber-200 hover:text-amber-900"
-                  title="Bỏ ghim"
-                  onClick={() => void handleTogglePinMessage(pinnedMessage)}
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
+                  <button
+                    type="button"
+                    className="flex min-w-0 items-center gap-1.5 text-left text-amber-900 hover:text-amber-950"
+                    onClick={() => focusPinnedMessage(pinnedMessage.idMessage)}
+                    title={messagePlainTextForCopy(pinnedMessage)}
+                  >
+                    {pinnedPreview.kind !== "text"
+                      ? renderMessagePreviewThumb(
+                          pinnedPreview,
+                          "h-5 w-5 rounded-sm"
+                        )
+                      : null}
+                    <span className="truncate">
+                      {messagePreviewSnippetText(pinnedPreview)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-amber-700 hover:bg-amber-200 hover:text-amber-900"
+                    title="Bỏ ghim"
+                    onClick={() => void handleTogglePinMessage(pinnedMessage)}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       ) : null}
@@ -3199,7 +3457,7 @@ export default function ChatWindow() {
                   >
                     Xóa
                   </button>
-                 ) : null}
+                ) : null}
               </div>
 
               <div className="mt-3 flex items-center gap-2">
@@ -3528,6 +3786,8 @@ export default function ChatWindow() {
         callerName={callModalName}
         callerAvatar={callModalAvatar}
         audioOnly={conversationCall.activeCall?.audioOnly ?? true}
+        isGroupCall={selectedConversation?.type === "GROUP"}
+        groupParticipants={callModalGroupParticipants}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
@@ -3620,6 +3880,22 @@ export default function ChatWindow() {
                     ? (messageById.get(msg.replyToMessageId) ??
                       replyTargetCache[msg.replyToMessageId])
                     : undefined
+                  const replyParentPreview = replyParent
+                    ? buildMessagePreviewData(replyParent)
+                    : null
+                  const replyParentSenderName = replyParent
+                    ? replyParent.idAccountSent === currentUserId
+                      ? "Bạn"
+                      : UNICALL_AI_BOT_IDS.includes(
+                            replyParent.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number]
+                          )
+                        ? "UniCall AI"
+                        : selectedConversation.type === "GROUP"
+                          ? (senderProfiles[replyParent.idAccountSent]
+                              ?.displayName ?? replyParent.idAccountSent)
+                          : (senderProfiles[replyParent.idAccountSent]
+                              ?.displayName ?? headerTitle)
+                    : "Tin nhắn"
                   const normalizedMessageContent = normalizeFileMessageContent(
                     msg.content
                   )
@@ -3752,11 +4028,32 @@ export default function ChatWindow() {
                                   isMe ? "mr-0" : "ml-0"
                                 )}
                               >
-                                <span className="line-clamp-2">
-                                  {replyParent
-                                    ? messagePlainTextForCopy(replyParent)
-                                    : "Tin nhắn"}
-                                </span>
+                                <div className="flex min-w-0 items-start gap-1.5">
+                                  {replyParent && replyParentPreview ? (
+                                    <>
+                                      {replyParentPreview.kind !== "text"
+                                        ? renderMessagePreviewThumb(
+                                            replyParentPreview,
+                                            "h-7 w-7 rounded-sm"
+                                          )
+                                        : null}
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium text-foreground/85">
+                                          {replyParentSenderName}
+                                        </p>
+                                        <p className="truncate text-xs text-muted-foreground">
+                                          {messagePreviewSnippetText(
+                                            replyParentPreview
+                                          )}
+                                        </p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <span className="line-clamp-2">
+                                      Tin nhan
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             ) : null}
                             {msg.recalled ? (
@@ -3814,16 +4111,27 @@ export default function ChatWindow() {
                                 <button
                                   type="button"
                                   className="mt-2 text-sm font-semibold text-blue-600 hover:underline"
-                                  disabled={!conversationCall.canStartAudioCall}
+                                  disabled={
+                                    msg.callInfo?.audioOnly === false
+                                      ? !conversationCall.canStartVideoCall
+                                      : !conversationCall.canStartAudioCall
+                                  }
                                   onClick={() => {
                                     if (msg.callInfo?.audioOnly === false) {
+                                      if (selectedConversation.type === "GROUP") {
+                                        handleJoinGroupCallFromMessage()
+                                        return
+                                      }
                                       void conversationCall.startVideoCall()
                                       return
                                     }
                                     void conversationCall.startAudioCall()
                                   }}
                                 >
-                                  Gọi lại
+                                  {selectedConversation.type === "GROUP" &&
+                                  msg.callInfo?.audioOnly === false
+                                    ? "Tham gia"
+                                    : "Gọi lại"}
                                 </button>
                               </div>
                             ) : firstAttachment?.type === "STICKER" ? (
@@ -3843,7 +4151,7 @@ export default function ChatWindow() {
                                 />
                               </div>
                             ) : hasMultiImageAttachments ? (
-                              <div className="max-w-xs">
+                              <div className="max-w-[15rem]">
                                 <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-2xl border bg-background p-1 shadow-xs">
                                   {imageAttachments
                                     .slice(0, 4)
@@ -3898,7 +4206,7 @@ export default function ChatWindow() {
                                 <img
                                   src={firstAttachment.url}
                                   alt="image"
-                                  className="max-h-64 max-w-xs object-contain transition-opacity hover:opacity-90"
+                                  className="max-h-60 w-[15rem] object-cover transition-opacity hover:opacity-90"
                                   onClick={() =>
                                     openConversationImagePreview(
                                       firstAttachment.url
@@ -3919,7 +4227,7 @@ export default function ChatWindow() {
                                 <video
                                   src={firstAttachment.url}
                                   controls
-                                  className="max-h-64 max-w-xs bg-black"
+                                  className="max-h-60 w-[15rem] bg-black object-cover"
                                   preload="metadata"
                                 />
                                 {normalizedMessageContent &&
@@ -4295,28 +4603,54 @@ export default function ChatWindow() {
       ) : null}
 
       <div className="shrink-0 border-t bg-background p-3">
-        {replyingTo ? (
-          <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-            <Quote className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground">
-                Trả lời
-              </p>
-              <p className="truncate text-foreground">
-                {messagePlainTextForCopy(replyingTo)}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              type="button"
-              title="Bỏ trả lời"
-              onClick={() => setReplyingTo(null)}
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        ) : null}
+        {replyingTo
+          ? (() => {
+              const replyComposerPreview = buildMessagePreviewData(replyingTo)
+              const replyComposerSenderName =
+                replyingTo.idAccountSent === currentUserId
+                  ? "B?n"
+                  : UNICALL_AI_BOT_IDS.includes(
+                        replyingTo.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number]
+                      )
+                    ? "UniCall AI"
+                    : selectedConversation?.type === "GROUP"
+                      ? (senderProfiles[replyingTo.idAccountSent]
+                          ?.displayName ?? replyingTo.idAccountSent)
+                      : (senderProfiles[replyingTo.idAccountSent]
+                          ?.displayName ?? headerTitle)
+
+              return (
+                <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                  <Quote className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Tr? l?i {replyComposerSenderName}
+                    </p>
+                    <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                      {replyComposerPreview.kind !== "text"
+                        ? renderMessagePreviewThumb(
+                            replyComposerPreview,
+                            "h-7 w-7 rounded-sm"
+                          )
+                        : null}
+                      <p className="truncate text-foreground">
+                        {messagePreviewSnippetText(replyComposerPreview)}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    type="button"
+                    title="B? tr? l?i"
+                    onClick={() => setReplyingTo(null)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              )
+            })()
+          : null}
         {pendingImageUploads.length > 0 ? (
           <div className="mb-2 rounded-lg border bg-muted/20 p-2">
             <div className="mb-2 flex items-center justify-between">
@@ -4357,14 +4691,21 @@ export default function ChatWindow() {
             </div>
           </div>
         ) : null}
-        {isMessageBlocked ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        {isComposerBlocked ? (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-sm",
+              isDirectMessageBlocked
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-blue-200 bg-blue-50 text-blue-800"
+            )}
+          >
             <p>
-              {isLoadingBlockStatus
+              {isDirectMessageBlocked && isLoadingBlockStatus
                 ? "Đang kiểm tra quyền nhắn tin..."
-                : blockedReasonText}
+                : blockedComposerReasonText}
             </p>
-            {blockStatus?.blockedByMe ? (
+            {isDirectMessageBlocked && blockStatus?.blockedByMe ? (
               <Button
                 type="button"
                 size="sm"
@@ -4378,30 +4719,16 @@ export default function ChatWindow() {
                   : "Bỏ chặn để nhắn tin"}
               </Button>
             ) : null}
+            {!isDirectMessageBlocked ? (
+              <div className="mt-1 flex items-center gap-1 text-[13px] font-medium text-blue-700">
+                <Info className="h-4 w-4" />
+                <span>Chỉ trưởng/phó nhóm được gửi tin nhắn vào nhóm.</span>
+              </div>
+            ) : null}
           </div>
         ) : (
           <>
             <div className="mb-2 flex gap-1">
-              <Button
-                variant={showAiQuickPrompts ? "secondary" : "ghost"}
-                size="icon-sm"
-                title={
-                  showAiQuickPrompts
-                    ? "Tắt gợi ý mẫu @Unicall"
-                    : "Bật gợi ý mẫu @Unicall"
-                }
-                type="button"
-                onClick={() => {
-                  if (shouldShowAiQuickPromptPanel) {
-                    setForceOpenAiQuickPrompts(false)
-                    setShowAiQuickPrompts(false)
-                    return
-                  }
-                  void openAiQuickPromptPanel()
-                }}
-              >
-                <Bot className="h-5 w-5" />
-              </Button>
               <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -4525,50 +4852,8 @@ export default function ChatWindow() {
                       ))}
                     </div>
                   </div>
-                                ) : shouldShowAiQuickPromptPanel ? (
-                  <div className="absolute bottom-full left-0 z-20 mb-2 w-[360px] max-w-[95vw] overflow-hidden rounded-xl border bg-popover shadow-lg">
-                    <div className="flex items-center justify-between border-b px-3 py-2">
-                      <div className="text-xs font-medium text-muted-foreground">
-                        Mẫu lệnh @Unicall
-                      </div>
-                      <button
-                        type="button"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                        onClick={() => {
-                          setForceOpenAiQuickPrompts(false)
-                          setShowAiQuickPrompts(false)
-                        }}
-                        aria-label="Đóng gợi ý mẫu AI"
-                        title="Đóng"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="grid gap-1 p-1">
-                      {visibleAiQuickPrompts.map((item) => (
-                        <button
-                          key={item.prompt}
-                          type="button"
-                          className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted/70"
-                          onMouseDown={(event) => {
-                            event.preventDefault()
-                          }}
-                          onClick={() => applyAiQuickPrompt(item.prompt)}
-                        >
-                          <ListChecks className="mt-0.5 h-4 w-4 text-blue-600" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium text-foreground">
-                              {item.label}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {item.prompt}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}                <Textarea
+                ) : null}
+                <Textarea
                   ref={textareaRef}
                   value={draft}
                   onChange={(event) => {
@@ -4858,6 +5143,54 @@ export default function ChatWindow() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={isGroupCallPickerOpen}
+        onOpenChange={setIsGroupCallPickerOpen}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chọn người tham gia</DialogTitle>
+            <DialogDescription>
+              Cuộc gọi nhóm tối đa 5 người (bao gồm bạn).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {groupCallSelectableMembers.map((member) => {
+              const checked = groupCallSelectedUserIds.includes(member.id)
+              return (
+                <label
+                  key={member.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => handleToggleGroupCallMember(member.id)}
+                  />
+                  <Avatar size="sm">
+                    <AvatarImage src={member.avatar} alt={member.name} />
+                    <AvatarFallback>{member.name.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate text-sm">{member.name}</span>
+                </label>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-muted-foreground">
+              Đã chọn {groupCallSelectedUserIds.length}/{GROUP_CALL_MAX_TARGETS}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsGroupCallPickerOpen(false)}>
+                Hủy
+              </Button>
+              <Button onClick={handleStartGroupVideoCall}>
+                Bắt đầu gọi
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ImageGalleryViewer
         open={imagePreview != null}
         onOpenChange={(open) => {
@@ -4871,4 +5204,3 @@ export default function ChatWindow() {
     </div>
   )
 }
-

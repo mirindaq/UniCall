@@ -1,9 +1,21 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, Image, Keyboard, Modal, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MockAvatar } from '@/mock/chat-conversations';
 import type { MockChatMessage } from '@/mock/chat-thread-messages';
+import type { MessagePreviewData } from '@/utils/chat-message-preview';
 
 import { ChatInputBar } from './chat-input-bar';
 import { ChatMessageRow } from './chat-message-row';
@@ -22,11 +34,11 @@ interface ChatDetailContentProps {
   shouldScrollToBottom?: boolean;
   onSend?: (content: string) => Promise<void> | void;
   onSendImages?: (imageUris: string[], mixedText?: string) => Promise<void> | void;
-  prefillDraftText?: string | null;
-  prefillDraftRequestId?: string | null;
-  replyPreviewText?: string | null;
+  onSendGif?: (gifUrl: string) => Promise<void> | void;
+  replyPreview?: MessagePreviewData | null;
   onCancelReply?: () => void;
   onLongPressMessage?: (message: MockChatMessage) => void;
+  onPressCallMessage?: (message: MockChatMessage) => void;
   onLoadMore?: () => void;
   onScrolledToBottom?: () => void;
 }
@@ -45,11 +57,11 @@ export function ChatDetailContent({
   shouldScrollToBottom = false,
   onSend,
   onSendImages,
-  prefillDraftText,
-  prefillDraftRequestId,
-  replyPreviewText,
+  onSendGif,
+  replyPreview,
   onCancelReply,
   onLongPressMessage,
+  onPressCallMessage,
   onLoadMore,
   onScrolledToBottom,
 }: ChatDetailContentProps) {
@@ -69,7 +81,7 @@ export function ChatDetailContent({
         onScrolledToBottom?.();
       }, 100);
     }
-  }, [shouldScrollToBottom, messages.length, onScrolledToBottom]);
+  }, [messages.length, onScrolledToBottom, shouldScrollToBottom]);
 
   React.useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -89,29 +101,30 @@ export function ChatDetailContent({
     };
   }, []);
 
-  const keyboardOffset = Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : keyboardHeight;
-  const inputBottom = Platform.OS === 'ios' ? insets.bottom + keyboardOffset : Math.max(insets.bottom, 16) + keyboardOffset;
+  const keyboardOffset =
+    Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : keyboardHeight;
+  const inputBottom = insets.bottom + keyboardOffset;
+  const listTopPadding = inputAreaHeight + inputBottom + 2;
 
-  const listTopPadding = inputAreaHeight + inputBottom + 8;
-
-  const openImageViewer = React.useCallback((targetUrl: string) => {
-    if (galleryImages.length === 0) {
-      return;
-    }
-    const index = galleryImages.findIndex((item) => item.url === targetUrl);
-    setViewerIndex(index >= 0 ? index : 0);
-    setViewerOpen(true);
-  }, [galleryImages]);
+  const openImageViewer = React.useCallback(
+    (targetUrl: string) => {
+      if (galleryImages.length === 0) {
+        return;
+      }
+      const index = galleryImages.findIndex((item) => item.url === targetUrl);
+      setViewerIndex(index >= 0 ? index : 0);
+      setViewerOpen(true);
+    },
+    [galleryImages]
+  );
 
   const renderFooter = () => {
     if (!hasMore) {
       return null;
     }
     return (
-      <View className="py-3 items-center">
-        {isLoadingMore ? (
-          <ActivityIndicator size="small" color="#1e98f3" />
-        ) : null}
+      <View className="items-center py-3">
+        {isLoadingMore ? <ActivityIndicator size="small" color="#1e98f3" /> : null}
       </View>
     );
   };
@@ -124,6 +137,7 @@ export function ChatDetailContent({
         otherAvatarUrl={otherAvatarUrl}
         onOpenImageGallery={openImageViewer}
         onLongPressMessage={onLongPressMessage}
+        onPressCallMessage={onPressCallMessage}
       />
     </View>
   );
@@ -146,7 +160,7 @@ export function ChatDetailContent({
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ 
+        contentContainerStyle={{
           paddingTop: listTopPadding,
           paddingBottom: 14,
         }}
@@ -162,33 +176,38 @@ export function ChatDetailContent({
             onLayout={(event) => {
               setInputAreaHeight(event.nativeEvent.layout.height);
             }}>
-            <Text className="text-sm font-medium text-amber-900">
-              Nhap tin nhan da bi khoa
-            </Text>
+            <Text className="text-sm font-medium text-amber-900">Nhập tin nhắn đã bị khóa</Text>
             <Text className="mt-1 text-xs text-amber-800">
-              {blockedReasonText ?? 'Khong the nhan tin trong cuoc tro chuyen nay.'}
+              {blockedReasonText ?? 'Không thể nhắn tin trong cuộc trò chuyện này.'}
             </Text>
           </View>
         ) : (
           <ChatInputBar
             placeholder={inputPlaceholder}
             isSending={isSending}
-            prefillDraftText={prefillDraftText}
-            prefillDraftRequestId={prefillDraftRequestId}
-            replyPreviewText={replyPreviewText}
+            replyPreview={replyPreview}
             onCancelReply={onCancelReply}
             onSend={onSend}
             onSendImages={onSendImages}
+            onSendGif={onSendGif}
             onHeightChange={(height) => setInputAreaHeight(height)}
           />
         )}
       </View>
 
-      <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
+      <Modal
+        visible={viewerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerOpen(false)}>
         <View className="flex-1 bg-black">
-          <View className="flex-row items-center justify-between px-3 pt-12 pb-2">
-            <Pressable className="h-9 w-9 items-center justify-center rounded-full bg-white/15" onPress={() => setViewerOpen(false)}>
-              <Text allowFontScaling={false} className="text-lg text-white">✕</Text>
+          <View className="flex-row items-center justify-between px-3 pb-2 pt-12">
+            <Pressable
+              className="h-9 w-9 items-center justify-center rounded-full bg-white/15"
+              onPress={() => setViewerOpen(false)}>
+              <Text allowFontScaling={false} className="text-lg text-white">
+                ✕
+              </Text>
             </Pressable>
             <Text allowFontScaling={false} className="text-sm font-medium text-white">
               {galleryImages.length > 0 ? `${viewerIndex + 1}/${galleryImages.length}` : ''}
@@ -202,7 +221,11 @@ export function ChatDetailContent({
             horizontal
             pagingEnabled
             initialScrollIndex={viewerIndex}
-            getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
+            getItemLayout={(_, index) => ({
+              length: screenWidth,
+              offset: screenWidth * index,
+              index,
+            })}
             keyExtractor={(item, index) => `${item.url}-${index}`}
             onMomentumScrollEnd={(event) => {
               const nextIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
@@ -224,7 +247,9 @@ export function ChatDetailContent({
               contentContainerStyle={{ paddingHorizontal: 10, gap: 6 }}
               renderItem={({ item, index }) => (
                 <Pressable
-                  className={`h-12 w-12 overflow-hidden rounded border ${index === viewerIndex ? 'border-sky-400' : 'border-white/20'}`}
+                  className={`h-12 w-12 overflow-hidden rounded border ${
+                    index === viewerIndex ? 'border-sky-400' : 'border-white/20'
+                  }`}
                   onPress={() => {
                     setViewerIndex(index);
                     viewerListRef.current?.scrollToIndex({ index, animated: true });

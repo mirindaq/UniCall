@@ -8,16 +8,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AiAssistantProperties {
     private boolean enabled = true;
     private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
-    private String textModel = "gemini-2.5-flash";
-    private String imageModel = "gemini-2.5-flash-image";
-    private String imageProvider = "gemini";
+    private String textModel = "gemini-2.0-flash";
+    private String imageModel = "gemini-2.0-flash-preview-image-generation";
     private String apiKey = "";
-    private String stabilityBaseUrl = "https://api.stability.ai";
-    private String stabilityApiKey = "";
-    private String stabilityImageModel = "stable-image-core";
-    private String stabilityOutputFormat = "png";
-    private String textSystemPrompt = "Ban la UniCall AI, tra loi huu ich, lich su bang tieng Viet.";
-    private String imageSystemPrompt = "Ban la UniCallImage, tao mo ta anh ngan gon bang tieng Viet.";
+    private String textSystemPrompt = "Bạn là UniCall AI, trả lời ngắn gọn, hữu ích, lịch sự bằng tiếng Việt.";
+    private String imageSystemPrompt = "Bạn là UniCallImage, tạo mô tả ảnh ngắn gọn bằng tiếng Việt.";
     private int connectTimeoutMs = 3000;
     private int readTimeoutMs = 30000;
 }
