@@ -103,7 +103,9 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
         participant.idAccount === currentUserId
           ? participant.role === "ADMIN"
             ? "Trưởng nhóm"
-            : "Bạn"
+            : participant.role === "DEPUTY"
+              ? "Phó nhóm"
+              : "Bạn"
           : participant.role === "ADMIN"
             ? "Trưởng nhóm"
             : participant.role === "DEPUTY"
@@ -173,7 +175,21 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
     }
   }
 
-  const handleRemoveMember = async (memberId: string) => {
+  const canKickMember = (memberRole: GroupParticipantInfo["role"]) => {
+    if (currentUserParticipant?.role === "ADMIN") {
+      return memberRole !== "ADMIN"
+    }
+    if (currentUserParticipant?.role === "DEPUTY") {
+      return memberRole === "USER"
+    }
+    return false
+  }
+
+  const handleRemoveMember = async (memberId: string, memberRole: GroupParticipantInfo["role"]) => {
+    if (!canKickMember(memberRole)) {
+      toast.error("Bạn không có quyền xóa thành viên này.")
+      return
+    }
     try {
       await chatService.removeGroupMember(conversationId, memberId)
       toast.success("Đã xóa thành viên khỏi nhóm.")
@@ -301,11 +317,18 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="h-9 rounded-md px-3 text-red-600 focus:text-red-600"
-                            onClick={() => void handleRemoveMember(member.id)}
+                            onClick={() => void handleRemoveMember(member.id, member.role)}
                           >
                             Xóa khỏi nhóm
                           </DropdownMenuItem>
                         </>
+                      ) : currentUserParticipant?.role === "DEPUTY" && member.role === "USER" ? (
+                        <DropdownMenuItem
+                          className="h-9 rounded-md px-3 text-red-600 focus:text-red-600"
+                          onClick={() => void handleRemoveMember(member.id, member.role)}
+                        >
+                          Xóa khỏi nhóm
+                        </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem className="h-9 rounded-md px-3" disabled>
                           Không có quyền

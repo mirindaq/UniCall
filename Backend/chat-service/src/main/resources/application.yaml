@@ -1,8 +1,6 @@
 spring:
   application:
     name: chat-service
-  config:
-    import: optional:file:.env[.properties],optional:file:chat-service/.env[.properties],optional:file:Backend/chat-service/.env[.properties]
 
   servlet:
     multipart:
@@ -26,17 +24,18 @@ api:
 app:
   websocket:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
+  livekit:
+    enabled: ${LIVEKIT_ENABLED:true}
+    url: ${LIVEKIT_URL:ws://192.168.222.128:7880}
+    api-key: ${LIVEKIT_API_KEY:devkey}
+    api-secret: ${LIVEKIT_API_SECRET:secret}
+    token-ttl-seconds: ${LIVEKIT_TOKEN_TTL_SECONDS:3600}
   ai-assistant:
     enabled: ${AI_ASSISTANT_ENABLED:true}
     base-url: ${AI_ASSISTANT_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
     text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-flash}
     image-model: ${AI_ASSISTANT_IMAGE_MODEL:gemini-2.5-flash-image}
-    image-provider: ${AI_IMAGE_PROVIDER:gemini}
     api-key: ${AI_ASSISTANT_API_KEY:}
-    stability-base-url: ${STABILITY_BASE_URL:https://api.stability.ai}
-    stability-api-key: ${STABILITY_API_KEY:}
-    stability-image-model: ${STABILITY_IMAGE_MODEL:stable-image-core}
-    stability-output-format: ${STABILITY_OUTPUT_FORMAT:png}
     text-system-prompt: ${AI_ASSISTANT_TEXT_SYSTEM_PROMPT:Bạn là UniCall AI, trả lời hữu ích, lịch sự bằng tiếng Việt.}
     image-system-prompt: ${AI_ASSISTANT_IMAGE_SYSTEM_PROMPT:Bạn là UniCallImage, tạo mô tả ảnh ngắn gọn bằng tiếng Việt.}
     connect-timeout-ms: ${AI_ASSISTANT_CONNECT_TIMEOUT_MS:3000}

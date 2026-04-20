@@ -3,6 +3,8 @@ package iuh.fit.chat_service.dtos.request;
 import iuh.fit.chat_service.enums.CallSignalType;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class ConversationCallSignalRequest {
     private String conversationId;
@@ -13,4 +15,5 @@ public class ConversationCallSignalRequest {
     private String candidate;
     private String sdpMid;
     private Integer sdpMLineIndex;
+    private List<String> targetUserIds;
 }

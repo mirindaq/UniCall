@@ -184,11 +184,14 @@ export default function StorageImages() {
           return
         }
 
-        const items = (response.data ?? []).slice().sort((a, b) => {
-          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
-          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
-          return right - left
-        })
+        const items = (response.data ?? [])
+          .filter((attachment) => attachment.type === "IMAGE" || attachment.type === "VIDEO")
+          .slice()
+          .sort((a, b) => {
+            const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+            const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+            return right - left
+          })
         setAttachments(items)
       } catch (error) {
         console.error("Failed to load filtered image attachments", error)

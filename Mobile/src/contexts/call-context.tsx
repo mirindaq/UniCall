@@ -10,9 +10,14 @@ import React, {
 import Toast from "react-native-toast-message";
 
 import { authTokenStore } from "@/configurations/axios.config";
+import { chatService } from "@/services/chat.service";
 import { chatSocketService } from "@/services/chat-socket.service";
 import { userService } from "@/services/user.service";
-import type { CallSignalType, UserRealtimeEvent } from "@/types/chat";
+import type {
+  CallSignalType,
+  ConversationType,
+  UserRealtimeEvent,
+} from "@/types/chat";
 
 const WEBRTC_ICE_SERVERS = [
   {
@@ -39,6 +44,12 @@ const toErrorLog = (error: unknown) => {
 
 type CallPhase = "idle" | "outgoing" | "incoming" | "connecting" | "in-call";
 
+type CallMember = {
+  id: string;
+  name: string;
+  avatar?: string | null;
+};
+
 type ActiveCall = {
   conversationId: string;
   callId: string;
@@ -46,21 +57,27 @@ type ActiveCall = {
   peerName: string;
   peerAvatar?: string | null;
   audioOnly: boolean;
+  isGroupCall?: boolean;
+  members?: CallMember[];
+  joinedUserIds?: string[];
   startedAt?: number;
 };
 
 type StartCallParams = {
   conversationId: string;
-  peerUserId: string;
+  peerUserId?: string;
   peerName?: string;
   peerAvatar?: string | null;
+  conversationType?: ConversationType;
+  targetUserIds?: string[];
+  groupMembers?: CallMember[];
 };
 
 type PendingIncomingOffer = {
   conversationId: string;
   callId: string;
   fromUserId: string;
-  sdp: string;
+  sdp?: string;
   audioOnly: boolean;
 };
 
@@ -76,6 +93,7 @@ type CallContextValue = {
   remoteStreamRenderKey: number;
   startAudioCall: (params: StartCallParams) => Promise<void>;
   startVideoCall: (params: StartCallParams) => Promise<void>;
+  joinGroupCallFromConversation: (conversationId: string) => Promise<boolean>;
   acceptIncomingCall: () => Promise<void>;
   acceptIncomingCallWithoutCamera: () => Promise<void>;
   rejectIncomingCall: () => Promise<void>;
@@ -108,6 +126,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const remoteStreamRef = useRef<any>(null);
   const pendingIncomingOfferRef = useRef<PendingIncomingOffer | null>(null);
   const pendingIceCandidatesRef = useRef<any[]>([]);
+  const sfuRoomRef = useRef<any>(null);
+  const usingSfuCallRef = useRef(false);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -133,6 +153,50 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const ensureLiveKitModule = useCallback(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require("livekit-client");
+    } catch {
+      Toast.show({
+        type: "error",
+        text1: "Thiếu thư viện SFU",
+        text2: "Cần cài livekit-client và build lại app mobile.",
+      });
+      return null;
+    }
+  }, []);
+
+  const configureLiveKitGlobals = useCallback(() => {
+    const webRtc = ensureWebRtcModule();
+    if (!webRtc) {
+      return null;
+    }
+    const globalAny = globalThis as any;
+    if (!globalAny.RTCPeerConnection) {
+      globalAny.RTCPeerConnection = webRtc.RTCPeerConnection;
+    }
+    if (!globalAny.RTCSessionDescription) {
+      globalAny.RTCSessionDescription = webRtc.RTCSessionDescription;
+    }
+    if (!globalAny.RTCIceCandidate) {
+      globalAny.RTCIceCandidate = webRtc.RTCIceCandidate;
+    }
+    if (!globalAny.MediaStream) {
+      globalAny.MediaStream = webRtc.MediaStream;
+    }
+    if (!globalAny.MediaStreamTrack) {
+      globalAny.MediaStreamTrack = webRtc.MediaStreamTrack;
+    }
+    if (!globalAny.navigator) {
+      globalAny.navigator = {};
+    }
+    if (!globalAny.navigator.mediaDevices) {
+      globalAny.navigator.mediaDevices = webRtc.mediaDevices;
+    }
+    return webRtc;
+  }, [ensureWebRtcModule]);
+
   const clearRingTimeout = useCallback(() => {
     if (ringTimeoutRef.current) {
       clearTimeout(ringTimeoutRef.current);
@@ -154,6 +218,161 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateJoinedIdsFromSfuRoom = useCallback(() => {
+    const room = sfuRoomRef.current;
+    if (!room) {
+      return;
+    }
+    const ids = [
+      room.localParticipant?.identity,
+      ...(Array.from(room.remoteParticipants?.values?.() ?? []).map(
+        (participant: any) => participant?.identity
+      ) as string[]),
+    ].filter((value): value is string => Boolean(value));
+    const unique = Array.from(new Set(ids));
+    setActiveCall((prev) =>
+      prev
+        ? {
+            ...prev,
+            joinedUserIds: unique,
+          }
+        : prev
+    );
+  }, []);
+
+  const syncLocalPreviewFromSfuRoom = useCallback(
+    (webRtc: any, room: any) => {
+      const localStream = new webRtc.MediaStream();
+      room.localParticipant
+        ?.getTrackPublications?.()
+        ?.forEach((publication: any) => {
+          const mediaTrack = publication?.track?.mediaStreamTrack;
+          if (mediaTrack) {
+            localStream.addTrack(mediaTrack);
+          }
+        });
+      localStreamRef.current = localStream;
+      setLocalStreamURL(localStream?.toURL?.() ?? null);
+      const localAudioTrack = localStream.getAudioTracks?.()?.[0];
+      const localVideoTrack = localStream.getVideoTracks?.()?.[0];
+      setMicEnabled(localAudioTrack ? localAudioTrack.enabled : true);
+      setCameraEnabled(localVideoTrack ? localVideoTrack.enabled : false);
+    },
+    []
+  );
+
+  const cleanupSfuRoom = useCallback(() => {
+    const room = sfuRoomRef.current;
+    sfuRoomRef.current = null;
+    usingSfuCallRef.current = false;
+    if (room) {
+      room.disconnect?.(true);
+    }
+  }, []);
+
+  const connectSfuRoom = useCallback(
+    async (
+      conversationId: string,
+      callId: string,
+      audioOnly: boolean,
+      startWithCameraOff = false
+    ) => {
+      const webRtc = configureLiveKitGlobals();
+      if (!webRtc) {
+        throw new Error("react-native-webrtc is missing");
+      }
+      const liveKit = ensureLiveKitModule();
+      if (!liveKit) {
+        throw new Error("livekit-client is missing");
+      }
+
+      const sfuTokenResponse = await chatService.createConversationSfuToken(
+        conversationId,
+        callId
+      );
+      const sfuToken = sfuTokenResponse.data;
+      if (!sfuToken?.url || !sfuToken?.token) {
+        throw new Error("SFU token payload is invalid");
+      }
+
+      cleanupSfuRoom();
+      remoteStreamRef.current = null;
+      setRemoteStreamURL(null);
+      setRemoteStreamRenderKey(0);
+
+      const { Room, RoomEvent, Track } = liveKit;
+      const room = new Room();
+      sfuRoomRef.current = room;
+      usingSfuCallRef.current = true;
+
+      const ensureRemoteStream = () => {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new webRtc.MediaStream();
+        }
+        return remoteStreamRef.current;
+      };
+
+      room.on(RoomEvent.TrackSubscribed, (track: any) => {
+        if (
+          track?.kind !== Track.Kind.Video &&
+          track?.kind !== Track.Kind.Audio
+        ) {
+          return;
+        }
+        const mediaTrack = track?.mediaStreamTrack;
+        if (!mediaTrack) {
+          return;
+        }
+        const remoteStream = ensureRemoteStream();
+        const exists = remoteStream
+          .getTracks?.()
+          ?.some((item: any) => item.id === mediaTrack.id);
+        if (!exists) {
+          remoteStream.addTrack(mediaTrack);
+        }
+        setRemoteStreamURL(remoteStream.toURL?.() ?? null);
+        setRemoteStreamRenderKey((value) => value + 1);
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track: any) => {
+        const mediaTrack = track?.mediaStreamTrack;
+        const remoteStream = remoteStreamRef.current;
+        if (!mediaTrack || !remoteStream) {
+          return;
+        }
+        remoteStream.removeTrack(mediaTrack);
+        const hasTracks = (remoteStream.getTracks?.() ?? []).length > 0;
+        setRemoteStreamURL(hasTracks ? remoteStream.toURL?.() ?? null : null);
+        setRemoteStreamRenderKey((value) => value + 1);
+      });
+      room.on(RoomEvent.ParticipantConnected, () => {
+        updateJoinedIdsFromSfuRoom();
+      });
+      room.on(RoomEvent.ParticipantDisconnected, () => {
+        updateJoinedIdsFromSfuRoom();
+      });
+      room.on(RoomEvent.Reconnected, () => {
+        updateJoinedIdsFromSfuRoom();
+      });
+
+      await room.connect(sfuToken.url, sfuToken.token);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setCameraEnabled(
+        !audioOnly && !startWithCameraOff
+      );
+
+      syncLocalPreviewFromSfuRoom(webRtc, room);
+      updateJoinedIdsFromSfuRoom();
+    },
+    [
+      cleanupSfuRoom,
+      configureLiveKitGlobals,
+      ensureLiveKitModule,
+      syncLocalPreviewFromSfuRoom,
+      updateJoinedIdsFromSfuRoom,
+    ]
+  );
+
   const closeWithMessage = useCallback(
     (message: string) => {
       setStatusMessage(message);
@@ -171,6 +390,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     clearRingTimeout();
     clearConnectingTimeout();
     clearCloseDelayTimeout();
+    cleanupSfuRoom();
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.onicecandidate = null;
@@ -195,7 +415,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setRemoteStreamRenderKey(0);
     setMicEnabled(true);
     setCameraEnabled(true);
-  }, [clearCloseDelayTimeout, clearConnectingTimeout, clearRingTimeout]);
+  }, [
+    cleanupSfuRoom,
+    clearCloseDelayTimeout,
+    clearConnectingTimeout,
+    clearRingTimeout,
+  ]);
 
   const resetCall = useCallback(() => {
     cleanupPeerConnection();
@@ -224,6 +449,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       callId: string,
       extras?: {
         audioOnly?: boolean;
+        targetUserIds?: string[];
         sdp?: string;
         candidate?: string;
         sdpMid?: string;
@@ -254,6 +480,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         {
           audioOnly:
             extras?.audioOnly ?? activeCallRef.current?.audioOnly ?? true,
+          targetUserIds: extras?.targetUserIds,
           sdp: extras?.sdp,
           candidate: extras?.candidate,
           sdpMid: extras?.sdpMid,
@@ -513,7 +740,23 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         callDebugLog("startCall:ignored-not-idle", { phase: phaseRef.current });
         return;
       }
-      const { conversationId, peerUserId, peerName, peerAvatar } = params;
+      const {
+        conversationId,
+        peerUserId,
+        peerName,
+        peerAvatar,
+        conversationType,
+        targetUserIds,
+        groupMembers,
+      } = params;
+      const isGroupCall = conversationType === "GROUP";
+      if (isGroupCall && audioOnly) {
+        Toast.show({
+          type: "info",
+          text1: "Cuộc gọi nhóm chỉ hỗ trợ gọi video",
+        });
+        return;
+      }
       const callId = buildCallId();
 
       try {
@@ -525,39 +768,50 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         });
         await chatSocketService.connect();
 
-        const pc = createPeerConnection(conversationId, callId, audioOnly);
-        const localStream = await ensureLocalStream(audioOnly);
-        attachLocalTracks(pc, localStream, audioOnly);
-
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: !audioOnly,
-        });
-        await pc.setLocalDescription(offer);
-
-        const localOfferSdp = pc.localDescription?.sdp ?? offer.sdp ?? "";
-        if (!localOfferSdp) {
-          throw new Error("Cannot create valid offer sdp");
-        }
-        callDebugLog("startCall:offer-created", {
-          callId,
-          sdpLength: localOfferSdp.length,
-        });
-
         setStatusMessage(null);
         setPhase("outgoing");
         setActiveCall({
           conversationId,
           callId,
-          peerUserId,
-          peerName: peerName ?? peerUserId,
+          peerUserId: peerUserId ?? "group",
+          peerName: peerName ?? peerUserId ?? "Nhóm chat",
           peerAvatar: peerAvatar ?? null,
           audioOnly,
+          isGroupCall,
+          members: groupMembers,
+          joinedUserIds: myIdentityUserIdRef.current
+            ? [myIdentityUserIdRef.current]
+            : [],
         });
+
+        let offerPayloadSdp: string | undefined;
+        if (isGroupCall) {
+          await connectSfuRoom(conversationId, callId, audioOnly);
+        } else {
+          const pc = createPeerConnection(conversationId, callId, audioOnly);
+          const localStream = await ensureLocalStream(audioOnly);
+          attachLocalTracks(pc, localStream, audioOnly);
+
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: !audioOnly,
+          });
+          await pc.setLocalDescription(offer);
+          const localOfferSdp = pc.localDescription?.sdp ?? offer.sdp ?? "";
+          if (!localOfferSdp) {
+            throw new Error("Cannot create valid offer sdp");
+          }
+          offerPayloadSdp = localOfferSdp;
+          callDebugLog("startCall:offer-created", {
+            callId,
+            sdpLength: localOfferSdp.length,
+          });
+        }
 
         const offerSent = await sendSignal("OFFER", conversationId, callId, {
           audioOnly,
-          sdp: localOfferSdp,
+          targetUserIds: isGroupCall ? targetUserIds : undefined,
+          sdp: offerPayloadSdp,
         });
         if (!offerSent) {
           throw new Error("Call signaling socket is not connected");
@@ -592,6 +846,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       cleanupPeerConnection,
       clearRingTimeout,
       closeWithMessage,
+      connectSfuRoom,
       createPeerConnection,
       ensureLocalStream,
       resetCall,
@@ -629,60 +884,67 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         });
         await chatSocketService.connect();
 
-        const webRtc = ensureWebRtcModule();
-        if (!webRtc) {
-          return;
+        const isGroupCall = !offer.audioOnly;
+        let acceptPayloadSdp: string | undefined;
+        if (isGroupCall) {
+          await connectSfuRoom(
+            offer.conversationId,
+            offer.callId,
+            offer.audioOnly,
+            startWithCameraOff
+          );
+        } else {
+          const webRtc = ensureWebRtcModule();
+          if (!webRtc) {
+            return;
+          }
+          const { RTCSessionDescription } = webRtc;
+
+          const pc = createPeerConnection(
+            offer.conversationId,
+            offer.callId,
+            offer.audioOnly,
+          );
+          const localStream = await ensureLocalStream(
+            offer.audioOnly,
+            startWithCameraOff,
+          );
+          attachLocalTracks(pc, localStream, offer.audioOnly);
+
+          const setRemoteOfferStartedAt = Date.now();
+          await pc.setRemoteDescription(
+            new RTCSessionDescription({ type: "offer", sdp: offer.sdp ?? "" }),
+          );
+          callDebugLog("acceptCall:setRemoteDescription:done", {
+            callId: offer.callId,
+            elapsedMs: Date.now() - setRemoteOfferStartedAt,
+          });
+          await flushPendingIceCandidates(pc);
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          const localAnswerSdp = pc.localDescription?.sdp ?? answer.sdp ?? "";
+          if (!localAnswerSdp) {
+            throw new Error("Cannot create valid answer sdp");
+          }
+          acceptPayloadSdp = localAnswerSdp;
+          callDebugLog("acceptCall:answer-created", {
+            callId: offer.callId,
+            sdpLength: localAnswerSdp.length,
+          });
         }
-        const { RTCSessionDescription } = webRtc;
 
-        const pc = createPeerConnection(
-          offer.conversationId,
-          offer.callId,
-          offer.audioOnly,
-        );
-        const localStream = await ensureLocalStream(
-          offer.audioOnly,
-          startWithCameraOff,
-        );
-        attachLocalTracks(pc, localStream, offer.audioOnly);
-
-        const setRemoteOfferStartedAt = Date.now();
-        await pc.setRemoteDescription(
-          new RTCSessionDescription({ type: "offer", sdp: offer.sdp }),
-        );
-        callDebugLog("acceptCall:setRemoteDescription:done", {
-          callId: offer.callId,
-          elapsedMs: Date.now() - setRemoteOfferStartedAt,
+        const acceptSent = await sendSignal("ACCEPT", offer.conversationId, offer.callId, {
+          audioOnly: offer.audioOnly,
+          sdp: acceptPayloadSdp,
         });
-        await flushPendingIceCandidates(pc);
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        const localAnswerSdp = pc.localDescription?.sdp ?? answer.sdp ?? "";
-        if (!localAnswerSdp) {
-          throw new Error("Cannot create valid answer sdp");
-        }
-        callDebugLog("acceptCall:answer-created", {
-          callId: offer.callId,
-          sdpLength: localAnswerSdp.length,
-        });
-
-        const acceptSent = await sendSignal(
-          "ACCEPT",
-          offer.conversationId,
-          offer.callId,
-          {
-            audioOnly: offer.audioOnly,
-            sdp: localAnswerSdp,
-          },
-        );
         if (!acceptSent) {
           throw new Error("Call signaling socket is not connected");
         }
         callDebugLog("acceptCall:accept-sent", { callId: offer.callId });
 
         setStatusMessage(null);
-        setPhase("connecting");
+        setPhase(isGroupCall ? "in-call" : "connecting");
         setActiveCall((prev) =>
           prev
             ? {
@@ -690,6 +952,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                 callId: offer.callId,
                 conversationId: offer.conversationId,
                 audioOnly: offer.audioOnly,
+                joinedUserIds: Array.from(
+                  new Set([
+                    ...(prev.joinedUserIds ?? []),
+                    offer.fromUserId,
+                    ...(myIdentityUserIdRef.current
+                      ? [myIdentityUserIdRef.current]
+                      : []),
+                  ]),
+                ),
               }
             : {
                 conversationId: offer.conversationId,
@@ -697,6 +968,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                 peerUserId: offer.fromUserId,
                 peerName: offer.fromUserId,
                 audioOnly: offer.audioOnly,
+                isGroupCall: offer.audioOnly === false,
+                joinedUserIds: Array.from(
+                  new Set([
+                    offer.fromUserId,
+                    ...(myIdentityUserIdRef.current
+                      ? [myIdentityUserIdRef.current]
+                      : []),
+                  ]),
+                ),
               },
         );
         pendingIncomingOfferRef.current = null;
@@ -713,6 +993,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     },
     [
       attachLocalTracks,
+      connectSfuRoom,
       createPeerConnection,
       ensureLocalStream,
       ensureWebRtcModule,
@@ -728,6 +1009,35 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const acceptIncomingCallWithoutCamera = useCallback(async () => {
     await acceptIncomingCallInternal(true);
   }, [acceptIncomingCallInternal]);
+
+  const joinGroupCallFromConversation = useCallback(
+    async (conversationId: string): Promise<boolean> => {
+      if (!conversationId) {
+        return false;
+      }
+      const current = activeCallRef.current;
+      if (
+        current &&
+        current.conversationId === conversationId &&
+        phaseRef.current !== "idle"
+      ) {
+        return true;
+      }
+
+      const pendingOffer = pendingIncomingOfferRef.current;
+      if (
+        pendingOffer &&
+        pendingOffer.conversationId === conversationId &&
+        phaseRef.current === "incoming"
+      ) {
+        await acceptIncomingCallInternal(false);
+        return true;
+      }
+
+      return false;
+    },
+    [acceptIncomingCallInternal],
+  );
 
   const rejectIncomingCall = useCallback(async () => {
     const current = activeCallRef.current;
@@ -920,10 +1230,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (signal.type === "OFFER") {
+        const isGroupOffer = signal.audioOnly === false;
         if (
-          !signal.sdp ||
           !myIdentityUserIdRef.current ||
-          signal.toUserId !== myIdentityUserIdRef.current
+          signal.toUserId !== myIdentityUserIdRef.current ||
+          (!isGroupOffer && !signal.sdp)
         ) {
           callDebugLog("signal:offer-ignored-invalid-target-or-sdp", {
             callId: signal.callId,
@@ -969,6 +1280,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           peerName: signal.fromUserId,
           peerAvatar: null,
           audioOnly: signal.audioOnly,
+          isGroupCall: signal.audioOnly === false,
+          joinedUserIds: [signal.fromUserId],
         });
 
         void userService
@@ -998,7 +1311,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const current = activeCallRef.current;
       if (!current || current.callId !== signal.callId) {
-        if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
+        if (
+          signal.type === "ICE_CANDIDATE" &&
+          signal.candidate &&
+          signal.audioOnly !== false
+        ) {
           callDebugLog("signal:ice-buffered-no-active-call", {
             callId: signal.callId,
           });
@@ -1011,11 +1328,26 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (
-        signal.type === "ACCEPT" &&
-        signal.sdp &&
-        phaseRef.current === "outgoing"
-      ) {
+      if (signal.type === "ACCEPT" && phaseRef.current === "outgoing") {
+        if (current.isGroupCall) {
+          clearRingTimeout();
+          setActiveCall((prev) =>
+            prev && prev.callId === signal.callId
+              ? {
+                  ...prev,
+                  joinedUserIds: Array.from(
+                    new Set([...(prev.joinedUserIds ?? []), signal.fromUserId]),
+                  ),
+                  startedAt: prev.startedAt ?? Date.now(),
+                }
+              : prev,
+          );
+          setPhase("in-call");
+          return;
+        }
+        if (!signal.sdp) {
+          return;
+        }
         callDebugLog("signal:accept-processing", { callId: signal.callId });
         const webRtc = ensureWebRtcModule();
         const pc = peerConnectionRef.current;
@@ -1044,6 +1376,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             callDebugLog("signal:accept-remote-description-set", {
               callId: signal.callId,
             });
+            setActiveCall((prev) =>
+              prev && prev.callId === signal.callId
+                ? {
+                    ...prev,
+                    joinedUserIds: Array.from(
+                      new Set([...(prev.joinedUserIds ?? []), signal.fromUserId]),
+                    ),
+                  }
+                : prev,
+            );
             setPhase("connecting");
           })
           .catch((error: unknown) => {
@@ -1060,7 +1402,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
+      if (
+        signal.type === "ICE_CANDIDATE" &&
+        signal.candidate &&
+        !current.isGroupCall
+      ) {
         if (`${signal.candidate}`.includes(" typ relay ")) {
           remoteRelayCandidateCountRef.current += 1;
         }
@@ -1194,6 +1540,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       remoteStreamRenderKey,
       startAudioCall,
       startVideoCall,
+      joinGroupCallFromConversation,
       acceptIncomingCall,
       acceptIncomingCallWithoutCamera,
       rejectIncomingCall,
@@ -1215,6 +1562,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       remoteStreamRenderKey,
       startAudioCall,
       startVideoCall,
+      joinGroupCallFromConversation,
       statusMessage,
       toggleCamera,
       toggleMicrophone,

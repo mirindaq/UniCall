@@ -11,11 +11,14 @@ import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.entities.Attachment;
 import iuh.fit.chat_service.entities.Conversation;
+import iuh.fit.chat_service.entities.GroupManagementSettings;
 import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.AttachmentType;
+import iuh.fit.chat_service.enums.ConversationType;
 import iuh.fit.chat_service.enums.MessageEnum;
 import iuh.fit.chat_service.enums.MessageType;
+import iuh.fit.chat_service.enums.ParicipantRole;
 import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ChatConversationService;
@@ -168,6 +171,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public MessageResponse sendRest(String identityUserId, String conversationId, SendChatMessageRequest request) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
+        assertCanMemberSendMessage(conversationId, identityUserId);
         return persistAndBroadcast(
                 identityUserId,
                 conversationId,
@@ -185,6 +189,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
         MessageType type = payload.getType() == null ? MessageType.TEXT : payload.getType();
         chatConversationService.requireParticipant(payload.getConversationId(), identityUserId);
+        assertCanMemberSendMessage(payload.getConversationId(), identityUserId);
         persistAndBroadcast(
                 identityUserId,
                 payload.getConversationId(),
@@ -273,6 +278,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public MessageResponse pinMessage(String identityUserId, String conversationId, String messageId) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
+        assertCanMemberPinMessage(conversationId, identityUserId);
         Message message = requireMessageInConversation(conversationId, messageId);
         if (message.isRecalled()) {
             throw new InvalidParamException("Không thể ghim tin nhắn đã thu hồi");
@@ -297,6 +303,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Override
     public MessageResponse unpinMessage(String identityUserId, String conversationId, String messageId) {
         chatConversationService.requireParticipant(conversationId, identityUserId);
+        assertCanMemberPinMessage(conversationId, identityUserId);
         Message message = requireMessageInConversation(conversationId, messageId);
         if (!message.isPinned()) {
             return MessageResponse.from(message);
@@ -313,6 +320,65 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
         return dto;
+    }
+
+    private void assertCanMemberSendMessage(String conversationId, String identityUserId) {
+        assertGroupPermissionForMember(
+                conversationId,
+                identityUserId,
+                GroupManagementSettings::getAllowMemberSendMessage,
+                "Only group admin or deputy can send messages"
+        );
+    }
+
+    private void assertCanMemberPinMessage(String conversationId, String identityUserId) {
+        assertGroupPermissionForMember(
+                conversationId,
+                identityUserId,
+                GroupManagementSettings::getAllowMemberPinMessage,
+                "Only group admin or deputy can pin messages"
+        );
+    }
+
+    private void assertGroupPermissionForMember(
+            String conversationId,
+            String identityUserId,
+            java.util.function.Function<GroupManagementSettings, Boolean> memberAllowedResolver,
+            String deniedMessage
+    ) {
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        if (conversation == null || conversation.getType() != ConversationType.GROUP) {
+            return;
+        }
+
+        ParticipantInfo actor = findParticipant(conversation.getParticipantInfos(), identityUserId);
+        if (actor == null) {
+            return;
+        }
+
+        ParicipantRole role = actor.getRole() == null ? ParicipantRole.USER : actor.getRole();
+        if (role == ParicipantRole.ADMIN || role == ParicipantRole.DEPUTY) {
+            return;
+        }
+
+        GroupManagementSettings settings = conversation.getGroupManagementSettings() == null
+                ? GroupManagementSettings.defaults()
+                : conversation.getGroupManagementSettings();
+        Boolean resolvedPermission = memberAllowedResolver.apply(settings);
+        boolean memberAllowed = resolvedPermission == null || resolvedPermission;
+        if (!memberAllowed) {
+            throw new InvalidParamException(deniedMessage);
+        }
+    }
+
+    private ParticipantInfo findParticipant(List<ParticipantInfo> participantInfos, String identityUserId) {
+        if (participantInfos == null || participantInfos.isEmpty()) {
+            return null;
+        }
+        return participantInfos.stream()
+                .filter(participant -> identityUserId.equals(participant.getIdAccount()))
+                .findFirst()
+                .orElse(null);
     }
 
     @Override
@@ -906,8 +972,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
         if ("images".equalsIgnoreCase(type)) {
             return attachmentType == AttachmentType.IMAGE
-                    || attachmentType == AttachmentType.VIDEO
-                    || attachmentType == AttachmentType.GIF;
+                    || attachmentType == AttachmentType.VIDEO;
         }
 
         if ("files".equalsIgnoreCase(type)) {

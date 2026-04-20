@@ -13,6 +13,7 @@ const MOBILE_CLIENT_TYPE = 'mobile';
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 const stripLegacyGatewayPath = (value: string) =>
   stripTrailingSlash(value).replace(/\/api-gateway$/i, '');
+const isLoopbackHost = (value: string) => /https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(value);
 
 const extractHost = (value?: string | null) => {
   if (!value) return null;
@@ -42,11 +43,13 @@ const getExpoDevHost = () => {
 const resolveApiBaseUrl = () => {
   const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (envBaseUrl) {
-    return stripLegacyGatewayPath(envBaseUrl);
+    const normalizedEnvBaseUrl = stripLegacyGatewayPath(envBaseUrl);
+    if (Platform.OS === 'web' || !isLoopbackHost(normalizedEnvBaseUrl)) {
+      return normalizedEnvBaseUrl;
+    }
   }
 
   const expoHost = getExpoDevHost();
-
   if (expoHost) {
     return `http://${expoHost}:${DEFAULT_GATEWAY_PORT}`;
   }
@@ -60,6 +63,24 @@ const resolveApiBaseUrl = () => {
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
+const IS_DEV = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
+
+const getRequestUrl = (config: InternalAxiosRequestConfig) => {
+  try {
+    return axios.getUri(config);
+  } catch {
+    return `${config.baseURL ?? ''}${config.url ?? ''}`;
+  }
+};
+
+const apiLog = (message: string, payload?: unknown) => {
+  if (!IS_DEV) return;
+  if (payload === undefined) {
+    console.log(`[API] ${message}`);
+    return;
+  }
+  console.log(`[API] ${message}`, payload);
+};
 
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
@@ -160,6 +181,7 @@ const axiosClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
   timeout: 300000,
 });
+apiLog(`Base URL: ${API_BASE_URL}`);
 
 let isRefreshing = false;
 let failedQueue: {
@@ -201,15 +223,34 @@ axiosClient.interceptors.request.use(
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
+    apiLog(`${(config.method ?? 'GET').toUpperCase()} ${getRequestUrl(config)}`);
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 axiosClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    apiLog(
+      `${(response.config.method ?? 'GET').toUpperCase()} ${getRequestUrl(
+        response.config as InternalAxiosRequestConfig
+      )} -> ${response.status}`
+    );
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    if (originalRequest) {
+      apiLog(
+        `${(originalRequest.method ?? 'GET').toUpperCase()} ${getRequestUrl(
+          originalRequest
+        )} -> ${error.response?.status ?? 'NETWORK_ERROR'}`,
+        error.response?.data
+      );
+    } else {
+      apiLog(`UNKNOWN_REQUEST -> ${error.response?.status ?? 'NETWORK_ERROR'}`, error.message);
+    }
 
     if (!error.response || !originalRequest) {
       return Promise.reject(error);

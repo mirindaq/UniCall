@@ -290,11 +290,19 @@ export function AddGroupMembersDialog({
     }
     setIsSubmitting(true)
     try {
-      await chatService.addGroupMembers(conversationId, {
+      const response = await chatService.addGroupMembers(conversationId, {
         memberIdentityUserIds: ids,
       })
       await onMembersAdded()
-      toast.success("Thêm thành viên thành công.")
+      const addedCount = response.data.addedMemberCount ?? 0
+      const createdRequestCount = response.data.createdMemberRequestCount ?? 0
+      if (createdRequestCount > 0 && addedCount === 0) {
+        toast.success("Đã gửi yêu cầu thêm thành viên để trưởng/phó nhóm duyệt.")
+      } else if (createdRequestCount > 0) {
+        toast.success(`Đã thêm ${addedCount} thành viên và gửi ${createdRequestCount} yêu cầu duyệt.`)
+      } else {
+        toast.success("Thêm thành viên thành công.")
+      }
       onOpenChange(false)
     } catch {
       toast.error("Thêm thành viên thất bại, vui lòng thử lại.")
