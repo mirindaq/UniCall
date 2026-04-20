@@ -22,8 +22,7 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
         String identityUserId = keycloakIdentityClient.createUser(request);
         try {
             RegisterResponse response = grpcUserServiceClient.register(request, identityUserId);
-            emailService.sendActivationEmailAsync(identityUserId);
-            response.setMessage("Registration successful. Please verify your email to activate account.");
+            response.setMessage("Registration successful.");
             return response;
         } catch (RuntimeException ex) {
             keycloakIdentityClient.deleteUser(identityUserId);
@@ -55,6 +54,11 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     @Override
     public String findIdentityUserIdByPhoneNumber(String phoneNumber) {
         return keycloakIdentityClient.findIdentityUserIdByPhoneNumber(phoneNumber);
+    }
+
+    @Override
+    public void resetPasswordWithOtp(String phoneNumber, String newPassword) {
+        keycloakIdentityClient.resetPasswordWithOtp(phoneNumber, newPassword);
     }
 
     @Override

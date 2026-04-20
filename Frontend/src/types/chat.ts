@@ -134,6 +134,15 @@ export interface ConversationBlockStatusResponse {
   blockedAt?: string
 }
 
+export interface ConversationBlockStatusResponse {
+  conversationId: string
+  directPeerId?: string
+  blocked: boolean
+  blockedByMe: boolean
+  blockedByOther: boolean
+  blockedAt?: string
+}
+
 export type CreateGroupConversationRequest = {
   name: string
   memberIdentityUserIds: string[]
