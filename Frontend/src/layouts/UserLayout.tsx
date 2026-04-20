@@ -308,6 +308,8 @@ export function UserLayout() {
             callerName={globalCallPeer?.name ?? "Người dùng"}
             callerAvatar={globalCallPeer?.avatar}
             audioOnly={globalCall.activeCall?.audioOnly ?? true}
+            selfParticipantId={identityUserId}
+            remoteParticipantMedia={globalCall.remoteParticipantMedia}
             startedAt={globalCall.activeCall?.startedAt}
             ringDeadlineAt={globalCall.ringDeadlineAt}
             ringDurationMs={globalCall.ringDurationMs}
