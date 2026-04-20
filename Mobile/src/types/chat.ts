@@ -1,4 +1,4 @@
-export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX';
+export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX' | 'CALL';
 export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI';
 
 export type MessageEnum = 'SENT' | 'RECEIVED' | 'DELETED' | 'FAILED';
@@ -26,6 +26,42 @@ export interface ChatAttachment {
   order?: number;
 }
 
+export type ForwardMessageRequest = {
+  targetConversationIds?: string[];
+  targetUserIds?: string[];
+  note?: string;
+};
+
+export type ForwardMessageResponse = {
+  forwardedConversationCount: number;
+  targetConversationIds: string[];
+};
+
+export type CallSignalType = 'OFFER' | 'ACCEPT' | 'REJECT' | 'END' | 'ICE_CANDIDATE';
+
+export interface ConversationCallSignalResponse {
+  conversationId: string;
+  callId: string;
+  type: CallSignalType;
+  fromUserId: string;
+  toUserId: string;
+  audioOnly: boolean;
+  sdp?: string;
+  candidate?: string;
+  sdpMid?: string;
+  sdpMLineIndex?: number;
+  sentAt?: string;
+}
+
+export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL';
+
+export interface UserRealtimeEvent {
+  eventType: UserRealtimeEventType;
+  conversationId: string;
+  message?: ChatMessageResponse;
+  callSignal?: ConversationCallSignalResponse;
+}
+
 export type ConversationType = 'DOUBLE' | 'GROUP';
 export type GroupParticipantRole = 'ADMIN' | 'DEPUTY' | 'USER';
 
@@ -46,6 +82,15 @@ export interface ConversationResponse {
   lastMessageContent?: string;
   numberMember: number;
   participantInfos: ChatParticipantInfo[];
+}
+
+export interface ConversationBlockStatusResponse {
+  conversationId: string;
+  directPeerId?: string;
+  blocked: boolean;
+  blockedByMe: boolean;
+  blockedByOther: boolean;
+  blockedAt?: string;
 }
 
 export type CreateGroupConversationRequest = {

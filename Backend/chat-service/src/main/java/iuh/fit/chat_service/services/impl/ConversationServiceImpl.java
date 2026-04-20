@@ -4,6 +4,7 @@ import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.ConversationType;
@@ -78,7 +79,8 @@ public class ConversationServiceImpl implements ConversationService {
                 now,
                 "",
                 participantInfos.size(),
-                participantInfos
+                participantInfos,
+                new ArrayList<>()
         );
 
         return conversationRepository.save(conversation);
@@ -216,6 +218,37 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public Conversation updateMemberNickname(
+            String currentIdentityUserId,
+            String conversationId,
+            String memberIdentityUserId,
+            UpdateMemberNicknameRequest request
+    ) {
+        String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
+        String targetId = normalizeIdentityUserId(memberIdentityUserId, "Member identity user id is required");
+        Conversation conversation = getConversationOrThrow(conversationId);
+        assertMemberActor(conversation, actorId);
+
+        List<ParticipantInfo> participantInfos = conversation.getParticipantInfos() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(conversation.getParticipantInfos());
+        ParticipantInfo targetParticipant = findParticipant(participantInfos, targetId);
+        if (targetParticipant == null) {
+            throw new ResourceNotFoundException("Member does not exist in this conversation");
+        }
+
+        String nickname = request == null || request.getNickname() == null ? "" : request.getNickname().trim();
+        if (nickname.length() > 50) {
+            throw new InvalidParamException("Nickname must be at most 50 characters");
+        }
+
+        targetParticipant.setNickname(nickname);
+        conversation.setParticipantInfos(participantInfos);
+        conversation.setDateUpdateMessage(LocalDateTime.now());
+        return conversationRepository.save(conversation);
+    }
+
+    @Override
     public Conversation getGroupConversationDetails(String currentIdentityUserId, String conversationId) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
@@ -299,13 +332,17 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private Conversation getGroupConversationOrThrow(String conversationId) {
-        String normalizedConversationId = normalizeIdentityUserId(conversationId, "Conversation id is required");
-        Conversation conversation = conversationRepository.findById(normalizedConversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+        Conversation conversation = getConversationOrThrow(conversationId);
         if (conversation.getType() != ConversationType.GROUP) {
             throw new InvalidParamException("Only group conversation is supported");
         }
         return conversation;
+    }
+
+    private Conversation getConversationOrThrow(String conversationId) {
+        String normalizedConversationId = normalizeIdentityUserId(conversationId, "Conversation id is required");
+        return conversationRepository.findById(normalizedConversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
     }
 
     private String normalizeIdentityUserId(String value, String message) {

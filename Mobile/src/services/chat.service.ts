@@ -1,20 +1,24 @@
 import axiosClient from '@/configurations/axios.config';
+import { API_PREFIXES } from '@/constants/api-prefixes';
 import type { PageResponse, ResponseSuccess } from '@/types/api-response';
 import type {
   AddGroupMembersRequest,
   ChatAttachment,
   ChatMessageResponse,
+  ConversationBlockStatusResponse,
   ConversationResponse,
   CreateGroupConversationRequest,
   CreateGroupConversationResponse,
   DissolveGroupConversationResponse,
+  ForwardMessageRequest,
+  ForwardMessageResponse,
   ManageGroupParticipantsResponse,
   TransferGroupAdminRequest,
   UpdateGroupMemberRoleRequest,
 } from '@/types/chat';
 
-const CHAT_API_PREFIX = '/chat-service/api/v1/conversations';
-const CHAT_PREFIX = '/chat-service/api/v1/chat';
+const CHAT_API_PREFIX = API_PREFIXES.conversations;
+const CHAT_PREFIX = API_PREFIXES.chat;
 
 export const chatService = {
   listConversations: async (): Promise<ResponseSuccess<ConversationResponse[]>> => {
@@ -70,6 +74,27 @@ export const chatService = {
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(
         messageId
       )}/self`
+    );
+    return data;
+  },
+  forwardMessage: async (
+    conversationId: string,
+    messageId: string,
+    payload: ForwardMessageRequest
+  ): Promise<ResponseSuccess<ForwardMessageResponse>> => {
+    const { data } = await axiosClient.post<ResponseSuccess<ForwardMessageResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(
+        messageId
+      )}/forward`,
+      payload
+    );
+    return data;
+  },
+  getConversationBlockStatus: async (
+    conversationId: string
+  ): Promise<ResponseSuccess<ConversationBlockStatusResponse>> => {
+    const { data } = await axiosClient.get<ResponseSuccess<ConversationBlockStatusResponse>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/block-status`
     );
     return data;
   },

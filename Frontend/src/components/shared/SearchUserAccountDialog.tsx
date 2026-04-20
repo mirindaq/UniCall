@@ -102,7 +102,7 @@ export function SearchUserAccountDialog({
     if (!profile) {
       return selectedUser?.fullName ?? ""
     }
-    return `${profile.firstName} ${profile.lastName}`.trim()
+    return `${profile.lastName} ${profile.firstName}`.trim()
   }, [profile, selectedUser?.fullName])
 
   const memoizedRelationshipStatus = useMemo(

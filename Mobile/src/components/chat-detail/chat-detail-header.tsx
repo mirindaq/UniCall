@@ -6,9 +6,21 @@ interface ChatDetailHeaderProps {
   title: string;
   onBack: () => void;
   onOpenOptions: () => void;
+  onStartAudioCall?: () => void;
+  onStartVideoCall?: () => void;
+  audioCallDisabled?: boolean;
+  videoCallDisabled?: boolean;
 }
 
-export function ChatDetailHeader({ title, onBack, onOpenOptions }: ChatDetailHeaderProps) {
+export function ChatDetailHeader({
+  title,
+  onBack,
+  onOpenOptions,
+  onStartAudioCall,
+  onStartVideoCall,
+  audioCallDisabled = false,
+  videoCallDisabled = false,
+}: ChatDetailHeaderProps) {
   return (
     <View className="bg-[#1e98f3] px-3.5 pb-2.5 pt-2.5">
       <View className="flex-row items-center">
@@ -27,10 +39,20 @@ export function ChatDetailHeader({ title, onBack, onOpenOptions }: ChatDetailHea
           {title}
         </Text>
 
-        <Pressable className="h-9 w-9 items-center justify-center rounded-full">
+        <Pressable
+          className="h-9 w-9 items-center justify-center rounded-full"
+          onPress={onStartAudioCall}
+          disabled={audioCallDisabled}
+          style={audioCallDisabled ? { opacity: 0.45 } : undefined}
+        >
           <Ionicons name="call-outline" size={22} color="#ffffff" />
         </Pressable>
-        <Pressable className="ml-2.5 h-9 w-9 items-center justify-center rounded-full">
+        <Pressable
+          className="ml-2.5 h-9 w-9 items-center justify-center rounded-full"
+          onPress={onStartVideoCall}
+          disabled={videoCallDisabled}
+          style={videoCallDisabled ? { opacity: 0.45 } : undefined}
+        >
           <Ionicons name="videocam-outline" size={24} color="#ffffff" />
         </Pressable>
         <Pressable className="ml-2.5 h-9 w-9 items-center justify-center rounded-full" onPress={onOpenOptions}>

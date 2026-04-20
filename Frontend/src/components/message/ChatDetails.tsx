@@ -7,6 +7,7 @@ import { displayNameFromProfile } from "@/utils/chat-display.util"
 
 import GroupMembersPanel from "./GroupMembersPanel"
 import ChatInfoMain from "./ChatInfoMain"
+import ChatSearchSidebar from "./ChatSearchSidebar"
 import ChatStorage from "./ChatStorage"
 
 export default function ChatDetails() {
@@ -29,6 +30,10 @@ export default function ChatDetails() {
   const handleOpenStorage = (tab: "images" | "files" | "links") => {
     setActiveStorageTab(tab)
     setCurrentView("storage")
+  }
+
+  if (selectedConversation && detailsView === "search") {
+    return <ChatSearchSidebar />
   }
 
   if (currentView === "storage") {

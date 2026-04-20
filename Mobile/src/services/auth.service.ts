@@ -1,4 +1,5 @@
 import axiosClient from '@/configurations/axios.config';
+import { API_PREFIXES } from '@/constants/api-prefixes';
 import type { ResponseSuccess } from '@/types/api-response';
 import type {
   AccessTokenResponse,
@@ -11,7 +12,7 @@ import type {
   ResendVerificationEmailRequest,
 } from '@/types/auth';
 
-const AUTH_API_PREFIX = '/identity-service/api/v1/auth';
+const AUTH_API_PREFIX = API_PREFIXES.auth;
 const MOBILE_CLIENT_HEADER = { 'X-Client-Type': 'mobile' };
 
 export const authService = {

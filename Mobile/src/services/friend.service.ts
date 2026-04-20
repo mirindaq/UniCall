@@ -1,15 +1,17 @@
 import axiosClient from '@/configurations/axios.config';
+import { API_PREFIXES } from '@/constants/api-prefixes';
 import type { ResponseSuccess } from '@/types/api-response';
 import type { FriendItem } from '@/types/friendship';
 
-const FRIEND_API_PREFIX = '/friend-service/api/v1';
+const FRIEND_API_PREFIX = API_PREFIXES.friends;
+const FRIEND_REQUEST_API_PREFIX = API_PREFIXES.friendRequests;
 
 export type RelationshipStatus = 'FRIEND' | 'SENT' | 'RECEIVED' | 'NONE';
 
 export const friendService = {
   getAllFriends: async (idAccount: string): Promise<ResponseSuccess<FriendItem[]>> => {
     const response = await axiosClient.get<ResponseSuccess<FriendItem[]>>(
-      `${FRIEND_API_PREFIX}/friends/idAccount/${idAccount}`
+      `${FRIEND_API_PREFIX}/idAccount/${idAccount}`
     );
     return response.data;
   },
@@ -19,14 +21,14 @@ export const friendService = {
     idAccountTarget: string
   ): Promise<ResponseSuccess<RelationshipStatus>> => {
     const response = await axiosClient.get<ResponseSuccess<RelationshipStatus>>(
-      `${FRIEND_API_PREFIX}/friends/check-relationship/idAccountOrigin/${idAccountOrigin}/idTarget/${idAccountTarget}`
+      `${FRIEND_API_PREFIX}/check-relationship/idAccountOrigin/${idAccountOrigin}/idTarget/${idAccountTarget}`
     );
     return response.data;
   },
 
   deleteFriend: async (idFriend: string): Promise<ResponseSuccess<void>> => {
     const response = await axiosClient.delete<ResponseSuccess<void>>(
-      `${FRIEND_API_PREFIX}/friends/${idFriend}`
+      `${FRIEND_API_PREFIX}/${idFriend}`
     );
     return response.data;
   },
@@ -60,7 +62,7 @@ export const friendRequestService = {
     payload: FriendRequestPayload
   ): Promise<ResponseSuccess<FriendRequestItem>> => {
     const response = await axiosClient.post<ResponseSuccess<FriendRequestItem>>(
-      `${FRIEND_API_PREFIX}/friend-requestes`,
+      FRIEND_REQUEST_API_PREFIX,
       payload
     );
     return response.data;
@@ -71,7 +73,7 @@ export const friendRequestService = {
     payload: FriendRequestStatusUpdatePayload
   ): Promise<ResponseSuccess<FriendRequestItem>> => {
     const response = await axiosClient.put<ResponseSuccess<FriendRequestItem>>(
-      `${FRIEND_API_PREFIX}/friend-requestes/${idFriendRequest}/status`,
+      `${FRIEND_REQUEST_API_PREFIX}/${idFriendRequest}/status`,
       payload
     );
     return response.data;
@@ -79,7 +81,7 @@ export const friendRequestService = {
 
   getAllFriendRequests: async (idAccountReceive: string): Promise<ResponseSuccess<FriendRequestItem[]>> => {
     const response = await axiosClient.get<ResponseSuccess<FriendRequestItem[]>>(
-      `${FRIEND_API_PREFIX}/friend-requestes/all/${idAccountReceive}`
+      `${FRIEND_REQUEST_API_PREFIX}/all/${idAccountReceive}`
     );
     return response.data;
   },
@@ -89,7 +91,7 @@ export const friendRequestService = {
     idAccountReceive: string
   ): Promise<ResponseSuccess<FriendRequestStatus>> => {
     const response = await axiosClient.get<ResponseSuccess<FriendRequestStatus>>(
-      `${FRIEND_API_PREFIX}/friend-requestes/status/idAccountSent/${idAccountSent}/idAccountReceive/${idAccountReceive}`
+      `${FRIEND_REQUEST_API_PREFIX}/status/idAccountSent/${idAccountSent}/idAccountReceive/${idAccountReceive}`
     );
     return response.data;
   },

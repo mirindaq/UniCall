@@ -4,6 +4,7 @@ import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.dtos.response.CreateGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.DissolveGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
@@ -102,6 +103,28 @@ public class ConversationController {
                 new ResponseSuccess<>(
                         HttpStatus.OK,
                         "Update group member role success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PatchMapping("/{conversationId}/members/{memberIdentityUserId}/nickname")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> updateMemberNickname(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String memberIdentityUserId,
+            @Valid @RequestBody UpdateMemberNicknameRequest request
+    ) {
+        Conversation conversation = conversationService.updateMemberNickname(
+                currentIdentityUserId,
+                conversationId,
+                memberIdentityUserId,
+                request
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Update member nickname success",
                         ManageGroupParticipantsResponse.from(conversation)
                 )
         );
