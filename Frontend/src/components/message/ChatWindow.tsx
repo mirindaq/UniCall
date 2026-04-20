@@ -168,6 +168,11 @@ type MentionSuggestionState = {
   highlightedIndex: number
 }
 
+type AiQuickPrompt = {
+  label: string
+  prompt: string
+}
+
 const AI_MENTION_COMMANDS: MentionCommand[] = [
   {
     token: "@Unicall",
@@ -178,6 +183,30 @@ const AI_MENTION_COMMANDS: MentionCommand[] = [
     description: "Yêu cầu UniCall AI tạo hình ảnh.",
   },
 ]
+
+const AI_QUICK_PROMPTS: AiQuickPrompt[] = [
+  { label: "Thống kê tổng quan", prompt: "@Unicall thống kê chat" },
+  { label: "Thống kê 7 ngày", prompt: "@Unicall thống kê chat 7 ngày" },
+  { label: "Thống kê 30 ngày", prompt: "@Unicall thống kê chat 30 ngày" },
+  { label: "Tóm tắt 7 ngày", prompt: "@Unicall tóm tắt chat 7 ngày" },
+  { label: "Tóm tắt 30 ngày", prompt: "@Unicall tóm tắt chat 30 ngày" },
+  { label: "Rút action items", prompt: "@Unicall rút action items 7 ngày" },
+  { label: "Bật ghi nhớ AI", prompt: "@Unicall bật ghi nhớ AI" },
+  { label: "Ghi nhớ sở thích", prompt: "@Unicall ghi nhớ: trả lời ngắn gọn, rõ ý" },
+  { label: "Tắt ghi nhớ AI", prompt: "@Unicall tắt ghi nhớ AI" },
+  { label: "Xóa ghi nhớ", prompt: "@Unicall xóa ghi nhớ" },
+]
+
+function normalizeQuickPromptText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
 
 function renderHighlightedSearchText(
   content: string,
@@ -420,6 +449,8 @@ export default function ChatWindow() {
   const [draft, setDraft] = useState("")
   const [mentionSuggestion, setMentionSuggestion] =
     useState<MentionSuggestionState | null>(null)
+  const [showAiQuickPrompts, setShowAiQuickPrompts] = useState(true)
+  const [forceOpenAiQuickPrompts, setForceOpenAiQuickPrompts] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [blockStatus, setBlockStatus] =
     useState<ConversationBlockStatusResponse | null>(null)
@@ -1931,6 +1962,90 @@ export default function ChatWindow() {
     )
   }, [mentionSuggestion])
 
+  const aiQuickPromptQuery = useMemo(() => {
+    const normalizedDraft = draft.trimStart()
+    if (!normalizedDraft.toLowerCase().startsWith("@unicall")) {
+      return ""
+    }
+    return normalizedDraft.slice("@unicall".length).trim()
+  }, [draft])
+
+  const visibleAiQuickPrompts = useMemo(() => {
+    const normalizedQuery = normalizeQuickPromptText(aiQuickPromptQuery)
+    if (!normalizedQuery) {
+      return AI_QUICK_PROMPTS
+    }
+    return AI_QUICK_PROMPTS.filter((item) => {
+      const normalizedLabel = normalizeQuickPromptText(item.label)
+      const normalizedPrompt = normalizeQuickPromptText(
+        item.prompt.replace(/^@unicall\s*/i, "")
+      )
+      return (
+        normalizedLabel.includes(normalizedQuery) ||
+        normalizedPrompt.includes(normalizedQuery)
+      )
+    })
+  }, [aiQuickPromptQuery])
+
+  const shouldShowAiQuickPromptPanel = useMemo(() => {
+    if (!showAiQuickPrompts || mentionSuggestion) {
+      return false
+    }
+    const normalizedDraft = draft.trimStart().toLowerCase()
+    return (
+      (forceOpenAiQuickPrompts ||
+        normalizedDraft.startsWith("@unicall ") ||
+        normalizedDraft === "@unicall") &&
+      visibleAiQuickPrompts.length > 0
+    )
+  }, [
+    draft,
+    forceOpenAiQuickPrompts,
+    mentionSuggestion,
+    showAiQuickPrompts,
+    visibleAiQuickPrompts.length,
+  ])
+
+  const applyAiQuickPrompt = useCallback((prompt: string) => {
+    const nextDraft = prompt.trim()
+    setDraft(nextDraft)
+    setMentionSuggestion(null)
+    setForceOpenAiQuickPrompts(false)
+    setShowAiQuickPrompts(false)
+    const caretAfter = nextDraft.length
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    window.setTimeout(() => {
+      const textarea = textareaRef.current
+      if (!textarea) {
+        return
+      }
+      textarea.focus()
+      textarea.setSelectionRange(caretAfter, caretAfter)
+      handleInput()
+    }, 0)
+  }, [])
+
+  const openAiQuickPromptPanel = useCallback(() => {
+    setShowAiQuickPrompts(true)
+    setMentionSuggestion(null)
+    const baseDraft = draft.trimStart().toLowerCase().startsWith("@unicall")
+      ? draft
+      : "@Unicall "
+    setDraft(baseDraft)
+    setForceOpenAiQuickPrompts(true)
+    const caretAfter = baseDraft.length
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    window.setTimeout(() => {
+      const textarea = textareaRef.current
+      if (!textarea) {
+        return
+      }
+      textarea.focus()
+      textarea.setSelectionRange(caretAfter, caretAfter)
+      handleInput()
+    }, 0)
+  }, [draft])
+
   useEffect(() => {
     if (!mentionSuggestion) {
       return
@@ -1947,6 +2062,32 @@ export default function ChatWindow() {
       )
     }
   }, [mentionSuggestion, visibleMentionCommands.length])
+
+  useEffect(() => {
+    if (!showAiQuickPrompts || mentionSuggestion) {
+      return
+    }
+
+    const normalizedDraft = draft.trimStart().toLowerCase()
+    if (!normalizedDraft.startsWith("@unicall")) {
+      if (forceOpenAiQuickPrompts) {
+        setForceOpenAiQuickPrompts(false)
+      }
+      return
+    }
+
+    if (aiQuickPromptQuery && visibleAiQuickPrompts.length === 0) {
+      setShowAiQuickPrompts(false)
+      setForceOpenAiQuickPrompts(false)
+    }
+  }, [
+    aiQuickPromptQuery,
+    draft,
+    forceOpenAiQuickPrompts,
+    mentionSuggestion,
+    showAiQuickPrompts,
+    visibleAiQuickPrompts.length,
+  ])
 
   const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
     if (allConversationImages.length > 0) {
@@ -3058,7 +3199,7 @@ export default function ChatWindow() {
                   >
                     Xóa
                   </button>
-                ) : null}
+                 ) : null}
               </div>
 
               <div className="mt-3 flex items-center gap-2">
@@ -4241,6 +4382,26 @@ export default function ChatWindow() {
         ) : (
           <>
             <div className="mb-2 flex gap-1">
+              <Button
+                variant={showAiQuickPrompts ? "secondary" : "ghost"}
+                size="icon-sm"
+                title={
+                  showAiQuickPrompts
+                    ? "Tắt gợi ý mẫu @Unicall"
+                    : "Bật gợi ý mẫu @Unicall"
+                }
+                type="button"
+                onClick={() => {
+                  if (shouldShowAiQuickPromptPanel) {
+                    setForceOpenAiQuickPrompts(false)
+                    setShowAiQuickPrompts(false)
+                    return
+                  }
+                  void openAiQuickPromptPanel()
+                }}
+              >
+                <Bot className="h-5 w-5" />
+              </Button>
               <Popover open={stickerOpen} onOpenChange={setStickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -4364,8 +4525,50 @@ export default function ChatWindow() {
                       ))}
                     </div>
                   </div>
-                ) : null}
-                <Textarea
+                                ) : shouldShowAiQuickPromptPanel ? (
+                  <div className="absolute bottom-full left-0 z-20 mb-2 w-[360px] max-w-[95vw] overflow-hidden rounded-xl border bg-popover shadow-lg">
+                    <div className="flex items-center justify-between border-b px-3 py-2">
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Mẫu lệnh @Unicall
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                        onClick={() => {
+                          setForceOpenAiQuickPrompts(false)
+                          setShowAiQuickPrompts(false)
+                        }}
+                        aria-label="Đóng gợi ý mẫu AI"
+                        title="Đóng"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid gap-1 p-1">
+                      {visibleAiQuickPrompts.map((item) => (
+                        <button
+                          key={item.prompt}
+                          type="button"
+                          className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted/70"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                          }}
+                          onClick={() => applyAiQuickPrompt(item.prompt)}
+                        >
+                          <ListChecks className="mt-0.5 h-4 w-4 text-blue-600" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground">
+                              {item.label}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {item.prompt}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}                <Textarea
                   ref={textareaRef}
                   value={draft}
                   onChange={(event) => {
@@ -4668,3 +4871,4 @@ export default function ChatWindow() {
     </div>
   )
 }
+
