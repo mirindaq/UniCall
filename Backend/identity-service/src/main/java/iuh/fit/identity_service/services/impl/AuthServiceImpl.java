@@ -6,10 +6,12 @@ import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResetPasswordWithOtpRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
+import iuh.fit.identity_service.services.FirebasePhoneVerificationService;
 import iuh.fit.identity_service.services.KeycloakAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class AuthServiceImpl implements AuthService {
     private static final String REFRESH_COOKIE_NAME = "unicall_rt";
 
     private final KeycloakAuthService keycloakAuthService;
+    private final FirebasePhoneVerificationService firebasePhoneVerificationService;
     private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Value("${app.security.cookie.secure:true}")
@@ -36,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
+        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
         return keycloakAuthService.register(request);
     }
 
@@ -71,6 +75,12 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthenticatedException("Password verification failed");
         }
         keycloakAuthService.verifyPassword(normalizedPhoneNumber, password.trim());
+    }
+
+    @Override
+    public void resetPasswordWithOtp(ResetPasswordWithOtpRequest request) {
+        firebasePhoneVerificationService.verifyPhoneIdToken(request.getFirebaseIdToken(), request.getPhoneNumber());
+        keycloakAuthService.resetPasswordWithOtp(request.getPhoneNumber(), request.getNewPassword());
     }
 
     @Override
