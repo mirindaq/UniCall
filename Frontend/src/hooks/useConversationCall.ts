@@ -3,6 +3,9 @@ import { toast } from "sonner"
 
 import { CALL_RING_TIMEOUT_MS, WEBRTC_ICE_SERVERS } from "@/constants/call"
 import { useAuth } from "@/contexts/auth-context"
+import { chatService } from "@/services/chat/chat.service"
+import { createCallMediaAdapter } from "@/services/call/adapters/call-media-adapter.factory"
+import type { CallMediaAdapter } from "@/services/call/adapters/call-media-adapter"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import type {
   CallSignalType,
@@ -11,13 +14,13 @@ import type {
 } from "@/types/chat"
 
 type CallPhase = "idle" | "outgoing" | "incoming" | "connecting" | "in-call"
-type MediaMode = "audio" | "video"
 
 type ActiveCall = {
   conversationId: string
   callId: string
-  peerUserId: string
+  peerUserId?: string
   audioOnly: boolean
+  joinedUserIds?: string[]
   startedAt?: number
   ringingStartedAt?: number
 }
@@ -26,7 +29,7 @@ type PendingIncomingOffer = {
   conversationId: string
   callId: string
   fromUserId: string
-  sdp: string
+  sdp?: string
   audioOnly: boolean
 }
 
@@ -36,6 +39,10 @@ type UseConversationCallOptions = {
   currentUserId?: string | null
   peerUserId?: string | null
   isBlocked?: boolean
+}
+
+type StartVideoCallOptions = {
+  targetUserIds?: string[]
 }
 
 const getMediaErrorMessage = (audioOnly: boolean, error: unknown): string => {
@@ -97,7 +104,9 @@ export function useConversationCall({
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
-  const localStreamModeRef = useRef<MediaMode | null>(null)
+  const mediaAdapterRef = useRef<CallMediaAdapter>(
+    createCallMediaAdapter(conversationType)
+  )
   const pendingIncomingOfferRef = useRef<PendingIncomingOffer | null>(null)
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const ringTimeoutRef = useRef<number | null>(null)
@@ -106,14 +115,30 @@ export function useConversationCall({
   const ringtoneIntervalRef = useRef<number | null>(null)
   const ringtoneUnlockedRef = useRef(false)
 
+  const isCallSupportedConversation =
+    conversationType === "DOUBLE" || conversationType === "GROUP"
+  const isGroupConversation = conversationType === "GROUP"
   const canStartAudioCall = Boolean(
     conversationId &&
     currentUserId &&
-    peerUserId &&
     conversationType === "DOUBLE" &&
-    !isBlocked
+    peerUserId &&
+    !isBlocked &&
+    !isGroupConversation
   )
-  const canStartVideoCall = canStartAudioCall
+  const canStartVideoCall = Boolean(
+    conversationId &&
+    currentUserId &&
+    isCallSupportedConversation &&
+    !isBlocked &&
+    (isGroupConversation || peerUserId)
+  )
+
+  useEffect(() => {
+    void mediaAdapterRef.current.leave()
+    mediaAdapterRef.current = createCallMediaAdapter(conversationType)
+    localStreamRef.current = null
+  }, [conversationType])
 
   const clearRingTimeout = useCallback(() => {
     if (ringTimeoutRef.current != null) {
@@ -184,12 +209,13 @@ export function useConversationCall({
   }, [playIncomingTone])
 
   const sendSignal = useCallback(
-    (
+    async (
       type: CallSignalType,
       signalConversationId: string,
       callId: string,
       extras?: {
         audioOnly?: boolean
+        targetUserIds?: string[]
         sdp?: string
         candidate?: string
         sdpMid?: string
@@ -197,10 +223,21 @@ export function useConversationCall({
       }
     ) => {
       if (!signalConversationId) {
-        return
+        return false
       }
-      chatSocketService.sendCallSignal(signalConversationId, callId, type, {
+      chatSocketService.connect()
+      const connected = await chatSocketService.waitForConnected(5000)
+      if (!connected) {
+        console.warn("[call] socket not connected, skip signal", {
+          type,
+          signalConversationId,
+          callId,
+        })
+        return false
+      }
+      return chatSocketService.sendCallSignal(signalConversationId, callId, type, {
         audioOnly: extras?.audioOnly ?? activeCallRef.current?.audioOnly ?? true,
+        targetUserIds: extras?.targetUserIds,
         sdp: extras?.sdp,
         candidate: extras?.candidate,
         sdpMid: extras?.sdpMid,
@@ -223,9 +260,8 @@ export function useConversationCall({
       peerConnectionRef.current = null
     }
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop())
+      void mediaAdapterRef.current.leave()
       localStreamRef.current = null
-      localStreamModeRef.current = null
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null
@@ -337,39 +373,53 @@ export function useConversationCall({
     [cleanupPeerConnection, clearRingTimeout, resetCall, sendSignal]
   )
 
-  const ensureLocalStream = useCallback(async (audioOnly: boolean) => {
-    const expectedMode: MediaMode = audioOnly ? "audio" : "video"
-    if (
-      localStreamRef.current &&
-      localStreamModeRef.current === expectedMode
-    ) {
-      return localStreamRef.current
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop())
-      localStreamRef.current = null
-      localStreamModeRef.current = null
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: audioOnly ? false : { facingMode: "user" },
-      })
-      localStreamRef.current = stream
-      localStreamModeRef.current = expectedMode
-      const audioTrack = stream.getAudioTracks()[0]
-      const videoTrack = stream.getVideoTracks()[0]
-      setMicEnabled(audioTrack ? audioTrack.enabled : true)
-      setCameraEnabled(videoTrack ? videoTrack.enabled : false)
-      return stream
-    } catch (error) {
-      console.error("[call] getUserMedia failed", error)
-      toast.error(getMediaErrorMessage(audioOnly, error))
-      throw error
-    }
-  }, [])
+  const ensureLocalStream = useCallback(
+    async (
+      audioOnly: boolean,
+      options?: {
+        sfu?: {
+          url: string
+          token: string
+        }
+      }
+    ) => {
+      try {
+        const stream = await mediaAdapterRef.current.join({
+          audioOnly,
+          sfu: options?.sfu
+            ? {
+                ...options.sfu,
+                onRemoteStreamChanged: (streamValue) => {
+                  setRemoteStream(streamValue)
+                },
+                onParticipantIdsChanged: (participantIds) => {
+                  setActiveCall((prev) => {
+                    if (!prev) {
+                      return prev
+                    }
+                    return {
+                      ...prev,
+                      joinedUserIds: participantIds,
+                    }
+                  })
+                },
+              }
+            : undefined,
+        })
+        localStreamRef.current = stream
+        const audioTrack = stream.getAudioTracks()[0]
+        const videoTrack = stream.getVideoTracks()[0]
+        setMicEnabled(audioTrack ? audioTrack.enabled : true)
+        setCameraEnabled(videoTrack ? videoTrack.enabled : false)
+        return stream
+      } catch (error) {
+        console.error("[call] getUserMedia failed", error)
+        toast.error(getMediaErrorMessage(audioOnly, error))
+        throw error
+      }
+    },
+    []
+  )
 
   const attachLocalTracks = useCallback(
     (pc: RTCPeerConnection, stream: MediaStream, audioOnly: boolean) => {
@@ -402,9 +452,21 @@ export function useConversationCall({
   )
 
   const startCall = useCallback(
-    async (audioOnly: boolean) => {
-      if (!canStartAudioCall || !peerUserId || !conversationId) {
-        toast.info("Hiện chỉ hỗ trợ gọi cho hội thoại 1-1")
+    async (audioOnly: boolean, targetUserIds?: string[]) => {
+      if (!conversationId) {
+        toast.info("Hội thoại hiện tại chưa sẵn sàng để bắt đầu cuộc gọi")
+        return
+      }
+      if (isGroupConversation && audioOnly) {
+        toast.info("Cuộc gọi nhóm chỉ hỗ trợ gọi video")
+        return
+      }
+      if (audioOnly && !canStartAudioCall) {
+        toast.info("Hội thoại hiện tại chưa sẵn sàng để bắt đầu cuộc gọi thoại")
+        return
+      }
+      if (!audioOnly && !canStartVideoCall) {
+        toast.info("Hội thoại hiện tại chưa sẵn sàng để bắt đầu cuộc gọi video")
         return
       }
       if (phaseRef.current !== "idle") {
@@ -412,6 +474,43 @@ export function useConversationCall({
       }
       const callId = buildCallId()
       try {
+        setStatusMessage(null)
+        setPhase("outgoing")
+        setActiveCall({
+          conversationId,
+          callId,
+          peerUserId: peerUserId ?? undefined,
+          audioOnly,
+          joinedUserIds: currentUserId ? [currentUserId] : [],
+          ringingStartedAt: Date.now(),
+        })
+
+        if (isGroupConversation) {
+          const sfuResponse = await chatService.createConversationSfuToken(
+            conversationId,
+            callId
+          )
+          const sfuToken = sfuResponse.data
+          if (!sfuToken?.url || !sfuToken?.token) {
+            throw new Error("Thiếu thông tin kết nối SFU")
+          }
+          await ensureLocalStream(audioOnly, {
+            sfu: {
+              url: sfuToken.url,
+              token: sfuToken.token,
+            },
+          })
+
+          const offerSent = await sendSignal("OFFER", conversationId, callId, {
+            audioOnly,
+            targetUserIds,
+          })
+          if (!offerSent) {
+            throw new Error("Không gửi được tín hiệu cuộc gọi nhóm")
+          }
+          return
+        }
+
         const pc = createPeerConnection(conversationId, callId, audioOnly)
         const localStream = await ensureLocalStream(audioOnly)
         attachLocalTracks(pc, localStream, audioOnly)
@@ -425,20 +524,14 @@ export function useConversationCall({
         if (!localOfferSdp) {
           throw new Error("Không tạo được SDP offer hợp lệ")
         }
-
-        setStatusMessage(null)
-        setPhase("outgoing")
-        setActiveCall({
-          conversationId,
-          callId,
-          peerUserId,
+        const offerSent = await sendSignal("OFFER", conversationId, callId, {
           audioOnly,
-          ringingStartedAt: Date.now(),
-        })
-        sendSignal("OFFER", conversationId, callId, {
-          audioOnly,
+          targetUserIds,
           sdp: localOfferSdp,
         })
+        if (!offerSent) {
+          throw new Error("Không gửi được tín hiệu cuộc gọi")
+        }
       } catch (error) {
         console.error("[call] startCall failed", error)
         toast.error(audioOnly ? "Không thể bắt đầu cuộc gọi thoại" : "Không thể bắt đầu cuộc gọi video")
@@ -448,12 +541,15 @@ export function useConversationCall({
     [
       attachLocalTracks,
       canStartAudioCall,
+      canStartVideoCall,
       conversationId,
+      currentUserId,
       createPeerConnection,
       ensureLocalStream,
-      peerUserId,
+      isGroupConversation,
       resetCall,
       sendSignal,
+      peerUserId,
     ]
   )
 
@@ -461,83 +557,150 @@ export function useConversationCall({
     await startCall(true)
   }, [startCall])
 
-  const startVideoCall = useCallback(async () => {
-    await startCall(false)
+  const startVideoCall = useCallback(async (options?: StartVideoCallOptions) => {
+    await startCall(false, options?.targetUserIds)
   }, [startCall])
 
-  const acceptIncomingCallInternal = useCallback(async (startWithCameraOff: boolean) => {
-    const offer = pendingIncomingOfferRef.current
-    if (phaseRef.current !== "incoming" || !offer) {
-      return
-    }
-    try {
-      const pc = createPeerConnection(offer.conversationId, offer.callId, offer.audioOnly)
-      const localStream = await ensureLocalStream(offer.audioOnly)
-      if (!offer.audioOnly) {
-        const videoTracks = localStream.getVideoTracks()
-        if (videoTracks.length > 0) {
-          const enabled = !startWithCameraOff
-          videoTracks.forEach((track) => {
-            track.enabled = enabled
-          })
-          setCameraEnabled(enabled)
-        }
+  const acceptIncomingCallInternal = useCallback(
+    async (startWithCameraOff: boolean) => {
+      const offer = pendingIncomingOfferRef.current
+      if (phaseRef.current !== "incoming" || !offer) {
+        return
       }
-      attachLocalTracks(pc, localStream, offer.audioOnly)
-
-      await pc.setRemoteDescription(
-        new RTCSessionDescription({
-          type: "offer",
-          sdp: offer.sdp,
+      try {
+        setStatusMessage(null)
+        setActiveCall({
+          conversationId: offer.conversationId,
+          callId: offer.callId,
+          peerUserId: offer.fromUserId,
+          audioOnly: offer.audioOnly,
+          joinedUserIds: Array.from(
+            new Set(
+              [offer.fromUserId, currentUserId].filter(
+                (value): value is string => Boolean(value)
+              )
+            )
+          ),
+          ringingStartedAt: Date.now(),
         })
-      )
-      await flushPendingIceCandidates(pc)
-      const answer = await pc.createAnswer()
-      await pc.setLocalDescription(answer)
-      const localAnswerSdp = pc.localDescription?.sdp ?? answer.sdp ?? ""
-      if (!localAnswerSdp) {
-        throw new Error("Không tạo được SDP answer hợp lệ")
-      }
 
-      sendSignal("ACCEPT", offer.conversationId, offer.callId, {
-        audioOnly: offer.audioOnly,
-        sdp: localAnswerSdp,
-      })
-      setStatusMessage(null)
-      setPhase("connecting")
-      setActiveCall({
-        conversationId: offer.conversationId,
-        callId: offer.callId,
-        peerUserId: offer.fromUserId,
-        audioOnly: offer.audioOnly,
-        ringingStartedAt: Date.now(),
-      })
-      pendingIncomingOfferRef.current = null
-    } catch (error) {
-      console.error("[call] acceptIncomingCall failed", error, {
-        hasOfferSdp: Boolean(offer.sdp),
-        callId: offer.callId,
-        conversationId: offer.conversationId,
-      })
-      setPhase("incoming")
-      setActiveCall(
-        (prev) =>
-          prev ?? {
-            conversationId: offer.conversationId,
-            callId: offer.callId,
-            peerUserId: offer.fromUserId,
-            audioOnly: offer.audioOnly,
+        if (isGroupConversation) {
+          const sfuResponse = await chatService.createConversationSfuToken(
+            offer.conversationId,
+            offer.callId
+          )
+          const sfuToken = sfuResponse.data
+          if (!sfuToken?.url || !sfuToken?.token) {
+            throw new Error("Thiếu thông tin kết nối SFU")
           }
-      )
-      pendingIncomingOfferRef.current = offer
-    }
-  }, [
-    attachLocalTracks,
-    createPeerConnection,
-    ensureLocalStream,
-    flushPendingIceCandidates,
-    sendSignal,
-  ])
+          const localStream = await ensureLocalStream(offer.audioOnly, {
+            sfu: {
+              url: sfuToken.url,
+              token: sfuToken.token,
+            },
+          })
+          if (!offer.audioOnly) {
+            const videoTracks = localStream.getVideoTracks()
+            if (videoTracks.length > 0) {
+              const enabled = !startWithCameraOff
+              videoTracks.forEach((track) => {
+                track.enabled = enabled
+              })
+              setCameraEnabled(enabled)
+            }
+          }
+
+          const acceptedSignal = await sendSignal(
+            "ACCEPT",
+            offer.conversationId,
+            offer.callId,
+            {
+              audioOnly: offer.audioOnly,
+            }
+          )
+          if (!acceptedSignal) {
+            throw new Error("Không gửi được tín hiệu tham gia cuộc gọi nhóm")
+          }
+          setPhase("in-call")
+          pendingIncomingOfferRef.current = null
+          return
+        }
+
+        const pc = createPeerConnection(
+          offer.conversationId,
+          offer.callId,
+          offer.audioOnly
+        )
+        const localStream = await ensureLocalStream(offer.audioOnly)
+        if (!offer.audioOnly) {
+          const videoTracks = localStream.getVideoTracks()
+          if (videoTracks.length > 0) {
+            const enabled = !startWithCameraOff
+            videoTracks.forEach((track) => {
+              track.enabled = enabled
+            })
+            setCameraEnabled(enabled)
+          }
+        }
+        attachLocalTracks(pc, localStream, offer.audioOnly)
+
+        await pc.setRemoteDescription(
+          new RTCSessionDescription({
+            type: "offer",
+            sdp: offer.sdp ?? "",
+          })
+        )
+        await flushPendingIceCandidates(pc)
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        const localAnswerSdp = pc.localDescription?.sdp ?? answer.sdp ?? ""
+        if (!localAnswerSdp) {
+          throw new Error("Không tạo được SDP answer hợp lệ")
+        }
+
+        const acceptedSignal = await sendSignal(
+          "ACCEPT",
+          offer.conversationId,
+          offer.callId,
+          {
+            audioOnly: offer.audioOnly,
+            sdp: localAnswerSdp,
+          }
+        )
+        if (!acceptedSignal) {
+          throw new Error("Không gửi được tín hiệu chấp nhận cuộc gọi")
+        }
+        setPhase("connecting")
+        pendingIncomingOfferRef.current = null
+      } catch (error) {
+        console.error("[call] acceptIncomingCall failed", error, {
+          hasOfferSdp: Boolean(offer.sdp),
+          callId: offer.callId,
+          conversationId: offer.conversationId,
+        })
+        setPhase("incoming")
+        setActiveCall(
+          (prev) =>
+            prev ?? {
+              conversationId: offer.conversationId,
+              callId: offer.callId,
+              peerUserId: offer.fromUserId,
+              audioOnly: offer.audioOnly,
+            }
+        )
+        pendingIncomingOfferRef.current = offer
+      }
+    },
+    [
+      attachLocalTracks,
+      createPeerConnection,
+      currentUserId,
+      ensureLocalStream,
+      flushPendingIceCandidates,
+      isGroupConversation,
+      sendSignal,
+    ]
+  )
 
   const acceptIncomingCall = useCallback(async () => {
     await acceptIncomingCallInternal(false)
@@ -552,7 +715,7 @@ export function useConversationCall({
     if (phaseRef.current !== "incoming" || !call) {
       return
     }
-    sendSignal("REJECT", call.conversationId, call.callId, {
+    void sendSignal("REJECT", call.conversationId, call.callId, {
       audioOnly: call.audioOnly,
     })
     resetCall()
@@ -563,7 +726,7 @@ export function useConversationCall({
     if (!call || phaseRef.current === "idle") {
       return
     }
-    sendSignal("END", call.conversationId, call.callId, {
+    void sendSignal("END", call.conversationId, call.callId, {
       audioOnly: call.audioOnly,
     })
     resetCall()
@@ -579,9 +742,7 @@ export function useConversationCall({
       return
     }
     const nextEnabled = !audioTracks[0].enabled
-    audioTracks.forEach((track) => {
-      track.enabled = nextEnabled
-    })
+    void mediaAdapterRef.current.toggleMic(nextEnabled)
     setMicEnabled(nextEnabled)
   }, [])
 
@@ -599,9 +760,7 @@ export function useConversationCall({
       return
     }
     const nextEnabled = !videoTracks[0].enabled
-    videoTracks.forEach((track) => {
-      track.enabled = nextEnabled
-    })
+    void mediaAdapterRef.current.toggleCamera(nextEnabled)
     setCameraEnabled(nextEnabled)
   }, [])
 
@@ -620,7 +779,7 @@ export function useConversationCall({
           phaseRef.current === "outgoing" &&
           latest?.callId === currentCallId
         ) {
-          sendSignal("END", latest.conversationId, currentCallId, {
+          void sendSignal("END", latest.conversationId, currentCallId, {
             audioOnly: latest.audioOnly,
           })
           closeCallWithMessage("Người dùng không bắt máy")
@@ -700,7 +859,7 @@ export function useConversationCall({
       }
 
       if (signal.type === "OFFER") {
-        if (!signal.sdp) {
+        if (!isGroupConversation && !signal.sdp) {
           return
         }
         const currentCall = activeCallRef.current
@@ -711,7 +870,7 @@ export function useConversationCall({
           return
         }
         if (phaseRef.current !== "idle") {
-          sendSignal("REJECT", signal.conversationId, signal.callId, {
+          void sendSignal("REJECT", signal.conversationId, signal.callId, {
             audioOnly: signal.audioOnly,
           })
           return
@@ -737,7 +896,11 @@ export function useConversationCall({
 
       const active = activeCallRef.current
       if (!active || active.callId !== signal.callId) {
-        if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
+        if (
+          !isGroupConversation &&
+          signal.type === "ICE_CANDIDATE" &&
+          signal.candidate
+        ) {
           pendingIceCandidatesRef.current.push({
             candidate: signal.candidate,
             sdpMid: signal.sdpMid,
@@ -747,11 +910,26 @@ export function useConversationCall({
         return
       }
 
-      if (
-        signal.type === "ACCEPT" &&
-        signal.sdp &&
-        phaseRef.current === "outgoing"
-      ) {
+      if (signal.type === "ACCEPT" && phaseRef.current === "outgoing") {
+        if (isGroupConversation) {
+          clearRingTimeout()
+          setPhase("in-call")
+          setActiveCall((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  startedAt: prev.startedAt ?? Date.now(),
+                  joinedUserIds: Array.from(
+                    new Set([...(prev.joinedUserIds ?? []), signal.fromUserId])
+                  ),
+                }
+              : prev
+          )
+          return
+        }
+        if (!signal.sdp) {
+          return
+        }
         const pc = peerConnectionRef.current
         if (!pc) {
           return
@@ -767,7 +945,11 @@ export function useConversationCall({
         return
       }
 
-      if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
+      if (
+        !isGroupConversation &&
+        signal.type === "ICE_CANDIDATE" &&
+        signal.candidate
+      ) {
         const candidate: RTCIceCandidateInit = {
           candidate: signal.candidate,
           sdpMid: signal.sdpMid,
@@ -819,9 +1001,11 @@ export function useConversationCall({
       })
     }
   }, [
+    clearRingTimeout,
     currentUserId,
     flushPendingIceCandidates,
     isAuthenticated,
+    isGroupConversation,
     closeCallWithMessage,
     resetCall,
     sendSignal,

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -35,6 +36,12 @@ export default function MessagesScreen() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadConversations(false);
+    }, [loadConversations])
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +134,9 @@ export default function MessagesScreen() {
       <MessagesHeader
         onPressSearch={() => {
           router.push('/message/search');
+        }}
+        onPressCreateGroup={() => {
+          router.push('/message/create-group');
         }}
       />
 

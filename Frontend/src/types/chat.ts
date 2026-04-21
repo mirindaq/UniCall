@@ -54,7 +54,15 @@ export interface ConversationCallSignal {
   sentAt: string
 }
 
-export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL"
+export type SfuAccessTokenResponse = {
+  callId: string
+  roomName: string
+  url: string
+  token: string
+  expiresAt: string
+}
+
+export type UserRealtimeEventType = "MESSAGE_UPSERT" | "CALL_SIGNAL" | "CONVERSATION_UPSERT"
 
 export interface UserRealtimeEvent {
   eventType: UserRealtimeEventType
@@ -62,6 +70,7 @@ export interface UserRealtimeEvent {
   sentAt: string
   message?: ChatMessageResponse
   callSignal?: ConversationCallSignal
+  conversation?: ConversationResponse
 }
 
 export interface ChatAttachment {
@@ -93,6 +102,20 @@ export interface ChatParticipantInfo {
   dateJoin: string
 }
 
+export type GroupManagementSettings = {
+  allowMemberSendMessage: boolean
+  allowMemberPinMessage: boolean
+  allowMemberChangeAvatar: boolean
+  memberApprovalEnabled: boolean
+}
+
+export type PendingMemberRequestInfo = {
+  idRequest: string
+  requesterIdentityUserId: string
+  targetIdentityUserId: string
+  requestedAt: string
+}
+
 export interface ConversationResponse {
   idConversation: string
   type: ConversationType
@@ -106,6 +129,17 @@ export interface ConversationResponse {
   pinned?: boolean
   numberMember: number
   participantInfos: ChatParticipantInfo[]
+  groupManagementSettings?: GroupManagementSettings
+  pendingMemberRequestCount?: number
+}
+
+export interface ConversationBlockStatusResponse {
+  conversationId: string
+  directPeerId?: string
+  blocked: boolean
+  blockedByMe: boolean
+  blockedByOther: boolean
+  blockedAt?: string
 }
 
 export interface ConversationBlockStatusResponse {
@@ -141,7 +175,12 @@ export type ManageGroupParticipantsResponse = {
   idConversation: string
   name: string
   numberMember: number
+  groupManagementSettings: GroupManagementSettings
   participantInfos: GroupParticipantInfo[]
+  pendingMemberRequests?: PendingMemberRequestInfo[]
+  pendingMemberRequestCount?: number
+  addedMemberCount?: number
+  createdMemberRequestCount?: number
 }
 
 export type AddGroupMembersRequest = {
@@ -158,6 +197,12 @@ export type UpdateMemberNicknameRequest = {
 
 export type TransferGroupAdminRequest = {
   targetIdentityUserId: string
+}
+
+export type UpdateGroupManagementSettingsRequest = GroupManagementSettings
+
+export type UpdateGroupAvatarRequest = {
+  avatar: string
 }
 
 export type DissolveGroupConversationResponse = {
