@@ -1,6 +1,6 @@
 import type { AxiosError } from "axios"
-import { useEffect, useMemo, useState } from "react"
 import { Clock3, UsersRound, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -13,7 +13,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { friendRequestService, friendService, type RelationshipStatus } from "@/services/friend/friend.service"
+import {
+  friendRequestService,
+  friendService,
+  type RelationshipStatus,
+} from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
 import type { ResponseError } from "@/types/api-response"
 import type { UserSearchItem } from "@/types/user.type"
@@ -41,7 +45,9 @@ export function AddFriendDialog({
   const [phoneKeyword, setPhoneKeyword] = useState("")
   const [searchedUsers, setSearchedUsers] = useState<UserSearchItem[]>([])
   const [recentUsers, setRecentUsers] = useState<UserSearchItem[]>([])
-  const [relationshipMap, setRelationshipMap] = useState<Record<string, RelationshipStatus>>({})
+  const [relationshipMap, setRelationshipMap] = useState<
+    Record<string, RelationshipStatus>
+  >({})
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPage, setTotalPage] = useState(1)
   const [isSearching, setIsSearching] = useState(false)
@@ -53,12 +59,12 @@ export function AddFriendDialog({
 
   const canSearch = useMemo(
     () => phoneKeyword.trim().length > 0 && !isSearching && !isLoadingMore,
-    [phoneKeyword, isSearching, isLoadingMore],
+    [phoneKeyword, isSearching, isLoadingMore]
   )
   const hasMore = currentPage < totalPage
   const recentStorageKey = useMemo(
     () => `${RECENT_STORAGE_KEY_PREFIX}:${currentIdentityUserId ?? "guest"}`,
-    [currentIdentityUserId],
+    [currentIdentityUserId]
   )
 
   const loadRecentUsersFromStorage = () => {
@@ -73,7 +79,9 @@ export function AddFriendDialog({
         setRecentUsers([])
         return
       }
-      const normalized = parsed.filter((item) => item?.identityUserId).slice(0, RECENT_MAX)
+      const normalized = parsed
+        .filter((item) => item?.identityUserId)
+        .slice(0, RECENT_MAX)
       setRecentUsers(normalized)
     } catch {
       setRecentUsers([])
@@ -108,9 +116,17 @@ export function AddFriendDialog({
           return [user.identityUserId, "NONE"] as const
         }
         try {
-          const response = await friendService.checkRelationship(currentIdentityUserId, user.identityUserId)
+          const response = await friendService.checkRelationship(
+            currentIdentityUserId,
+            user.identityUserId
+          )
           const payload = response.data as
-            | { areFriends?: boolean; note?: string; isMeSent?: boolean; isYourself?: boolean }
+            | {
+                areFriends?: boolean
+                note?: string
+                isMeSent?: boolean
+                isYourself?: boolean
+              }
             | RelationshipStatus
 
           if (typeof payload === "string") {
@@ -123,20 +139,29 @@ export function AddFriendDialog({
             return [user.identityUserId, "FRIEND"] as const
           }
           if (payload?.note) {
-            return [user.identityUserId, payload.isMeSent ? "SENT" : "RECEIVED"] as const
+            return [
+              user.identityUserId,
+              payload.isMeSent ? "SENT" : "RECEIVED",
+            ] as const
           }
           return [user.identityUserId, "NONE"] as const
         } catch {
           return [user.identityUserId, "NONE"] as const
         }
-      }),
+      })
     )
-    setRelationshipMap((prev) => ({ ...prev, ...Object.fromEntries(relationshipEntries) }))
+    setRelationshipMap((prev) => ({
+      ...prev,
+      ...Object.fromEntries(relationshipEntries),
+    }))
   }
 
   const pushRecent = (user: UserSearchItem) => {
     setRecentUsers((prev) => {
-      const next = [user, ...prev.filter((item) => item.identityUserId !== user.identityUserId)]
+      const next = [
+        user,
+        ...prev.filter((item) => item.identityUserId !== user.identityUserId),
+      ]
       const trimmed = next.slice(0, RECENT_MAX)
       try {
         window.localStorage.setItem(recentStorageKey, JSON.stringify(trimmed))
@@ -162,7 +187,9 @@ export function AddFriendDialog({
       const merged = Array.from(map.values())
       const ranked = [
         ...users,
-        ...merged.filter((item) => !users.some((u) => u.identityUserId === item.identityUserId)),
+        ...merged.filter(
+          (item) => !users.some((u) => u.identityUserId === item.identityUserId)
+        ),
       ]
       const trimmed = ranked.slice(0, RECENT_MAX)
       try {
@@ -244,8 +271,12 @@ export function AddFriendDialog({
         limit: 8,
       })
       const incomingUsers = response.data.items ?? []
-      const existingIds = new Set(searchedUsers.map((user) => user.identityUserId))
-      const appended = incomingUsers.filter((user) => !existingIds.has(user.identityUserId))
+      const existingIds = new Set(
+        searchedUsers.map((user) => user.identityUserId)
+      )
+      const appended = incomingUsers.filter(
+        (user) => !existingIds.has(user.identityUserId)
+      )
 
       setSearchedUsers((prev) => [...prev, ...appended])
       setCurrentPage(response.data.page ?? nextPage)
@@ -301,10 +332,7 @@ export function AddFriendDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={handleDialogOpenChange}
-    >
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         showCloseButton={false}
         overlayClassName="bg-black/60"
@@ -328,7 +356,6 @@ export function AddFriendDialog({
 
         <div className="space-y-4 px-5 py-4">
           <div className="flex items-end gap-4">
-
             <div className="flex-1">
               <Input
                 value={phoneKeyword}
@@ -346,25 +373,31 @@ export function AddFriendDialog({
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-semibold text-slate-600">Kết quả gần nhất</p>
+            <p className="mb-2 text-sm font-semibold text-slate-600">
+              Kết quả gần nhất
+            </p>
 
             {isSearching ? (
               <p className="py-4 text-sm text-slate-500">Đang tìm kiếm...</p>
             ) : searchedUsers.length === 0 ? (
               recentUsers.length === 0 ? (
-                <p className="py-4 text-sm text-slate-500">Nhập số điện thoại để tìm bạn bè.</p>
+                <p className="py-4 text-sm text-slate-500">
+                  Nhập số điện thoại để tìm bạn bè.
+                </p>
               ) : (
                 <div className="space-y-2">
-                    <p className="flex items-center gap-1 text-sm text-slate-500">
-                      <Clock3 className="h-4 w-4" />
-                      Đã tìm kiếm gần đây
-                    </p>
+                  <p className="flex items-center gap-1 text-sm text-slate-500">
+                    <Clock3 className="h-4 w-4" />
+                    Đã tìm kiếm gần đây
+                  </p>
                   {recentUsers.map((user) => (
                     <UserRow
                       key={user.identityUserId}
                       currentIdentityUserId={currentIdentityUserId}
                       user={user}
-                      relationshipStatus={relationshipMap[user.identityUserId] ?? "NONE"}
+                      relationshipStatus={
+                        relationshipMap[user.identityUserId] ?? "NONE"
+                      }
                       isSending={isSendingToId === user.identityUserId}
                       onAddFriend={() => void handleAddFriend(user)}
                       onOpenProfile={() => openProfileDialog(user)}
@@ -379,7 +412,9 @@ export function AddFriendDialog({
                   <UserRow
                     currentIdentityUserId={currentIdentityUserId}
                     user={bestMatch}
-                    relationshipStatus={relationshipMap[bestMatch.identityUserId] ?? "NONE"}
+                    relationshipStatus={
+                      relationshipMap[bestMatch.identityUserId] ?? "NONE"
+                    }
                     isSending={isSendingToId === bestMatch.identityUserId}
                     onAddFriend={() => void handleAddFriend(bestMatch)}
                     onOpenProfile={() => openProfileDialog(bestMatch)}
@@ -398,7 +433,9 @@ export function AddFriendDialog({
                         key={user.identityUserId}
                         currentIdentityUserId={currentIdentityUserId}
                         user={user}
-                        relationshipStatus={relationshipMap[user.identityUserId] ?? "NONE"}
+                        relationshipStatus={
+                          relationshipMap[user.identityUserId] ?? "NONE"
+                        }
                         isSending={isSendingToId === user.identityUserId}
                         onAddFriend={() => void handleAddFriend(user)}
                         onOpenProfile={() => openProfileDialog(user)}
@@ -462,13 +499,15 @@ function UserRow({
   onOpenProfile: () => void
   showAddButton: boolean
 }) {
-  const fullName = user.fullName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
+  const fullName =
+    user.fullName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
   const fallback = toFallback(fullName)
-  const isSelf = currentIdentityUserId != null && user.identityUserId === currentIdentityUserId
-  const actionLabel =
-    isSelf
-      ? "Bạn"
-      : relationshipStatus === "FRIEND"
+  const isSelf =
+    currentIdentityUserId != null &&
+    user.identityUserId === currentIdentityUserId
+  const actionLabel = isSelf
+    ? "Bạn"
+    : relationshipStatus === "FRIEND"
       ? "Bạn bè"
       : relationshipStatus === "SENT"
         ? "Đã gửi"
@@ -491,8 +530,12 @@ function UserRow({
           <AvatarFallback>{fallback}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-slate-800">{fullName}</p>
-          <p className="truncate text-[12px] text-slate-500">{normalizePhone(user.phoneNumber)}</p>
+          <p className="truncate text-[14px] font-semibold text-slate-800">
+            {fullName}
+          </p>
+          <p className="truncate text-[12px] text-slate-500">
+            {normalizePhone(user.phoneNumber)}
+          </p>
         </div>
       </button>
       {showAddButton ? (
@@ -510,7 +553,10 @@ function UserRow({
   )
 }
 
-function parseVietnamPhone(input: string): { valid: boolean; normalized: string | null } {
+function parseVietnamPhone(input: string): {
+  valid: boolean
+  normalized: string | null
+} {
   const digits = input.replace(/\D/g, "")
   if (/^0\d{9}$/.test(digits)) {
     return { valid: true, normalized: digits }
@@ -538,7 +584,3 @@ function toFallback(fullName: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
-
-
-
-

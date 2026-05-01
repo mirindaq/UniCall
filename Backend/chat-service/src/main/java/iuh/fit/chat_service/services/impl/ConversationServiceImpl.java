@@ -1,12 +1,23 @@
 package iuh.fit.chat_service.services.impl;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
-import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
@@ -24,16 +35,6 @@ import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -56,9 +57,9 @@ public class ConversationServiceImpl implements ConversationService {
         List<String> normalizedMembers = request.getMemberIdentityUserIds() == null
                 ? List.of()
                 : request.getMemberIdentityUserIds().stream()
-                .map(identityUserId -> identityUserId == null ? "" : identityUserId.trim())
-                .filter(identityUserId -> !identityUserId.isBlank())
-                .toList();
+                        .map(identityUserId -> identityUserId == null ? "" : identityUserId.trim())
+                        .filter(identityUserId -> !identityUserId.isBlank())
+                        .toList();
 
         if (normalizedMembers.isEmpty()) {
             throw new InvalidParamException("At least one member is required");
@@ -79,8 +80,7 @@ public class ConversationServiceImpl implements ConversationService {
                     identityUserId,
                     identityUserId.equals(currentIdentityUserId) ? ParicipantRole.ADMIN : ParicipantRole.USER,
                     "",
-                    now
-            ));
+                    now));
         }
 
         Conversation conversation = new Conversation();
@@ -103,8 +103,7 @@ public class ConversationServiceImpl implements ConversationService {
     public ManageGroupParticipantsResponse addGroupMembers(
             String currentIdentityUserId,
             String conversationId,
-            AddGroupMembersRequest request
-    ) {
+            AddGroupMembersRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
         GroupManagementSettings groupManagementSettings = ensureGroupManagementSettings(conversation);
@@ -112,11 +111,11 @@ public class ConversationServiceImpl implements ConversationService {
         List<String> normalizedMembers = request.getMemberIdentityUserIds() == null
                 ? List.of()
                 : request.getMemberIdentityUserIds().stream()
-                .map(memberId -> memberId == null ? "" : memberId.trim())
-                .filter(memberId -> !memberId.isBlank())
-                .filter(memberId -> !memberId.equals(actorId))
-                .distinct()
-                .toList();
+                        .map(memberId -> memberId == null ? "" : memberId.trim())
+                        .filter(memberId -> !memberId.isBlank())
+                        .filter(memberId -> !memberId.equals(actorId))
+                        .distinct()
+                        .toList();
 
         if (normalizedMembers.isEmpty()) {
             throw new InvalidParamException("At least one valid member is required");
@@ -163,8 +162,7 @@ public class ConversationServiceImpl implements ConversationService {
                     UUID.randomUUID().toString(),
                     actorId,
                     memberId,
-                    now
-            ));
+                    now));
             createdPendingCount++;
         }
 
@@ -191,8 +189,7 @@ public class ConversationServiceImpl implements ConversationService {
     public Conversation removeGroupMember(
             String currentIdentityUserId,
             String conversationId,
-            String memberIdentityUserId
-    ) {
+            String memberIdentityUserId) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String targetId = normalizeIdentityUserId(memberIdentityUserId, "Member identity user id is required");
         if (actorId.equals(targetId)) {
@@ -239,8 +236,7 @@ public class ConversationServiceImpl implements ConversationService {
             String currentIdentityUserId,
             String conversationId,
             String memberIdentityUserId,
-            UpdateGroupMemberRoleRequest request
-    ) {
+            UpdateGroupMemberRoleRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String targetId = normalizeIdentityUserId(memberIdentityUserId, "Member identity user id is required");
         if (request.getRole() == null) {
@@ -279,8 +275,7 @@ public class ConversationServiceImpl implements ConversationService {
             String currentIdentityUserId,
             String conversationId,
             String memberIdentityUserId,
-            UpdateMemberNicknameRequest request
-    ) {
+            UpdateMemberNicknameRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String targetId = normalizeIdentityUserId(memberIdentityUserId, "Member identity user id is required");
         Conversation conversation = getConversationOrThrow(conversationId);
@@ -319,19 +314,18 @@ public class ConversationServiceImpl implements ConversationService {
     public Conversation updateGroupManagementSettings(
             String currentIdentityUserId,
             String conversationId,
-            UpdateGroupManagementSettingsRequest request
-    ) {
+            UpdateGroupManagementSettingsRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
         assertAdminOrDeputyActor(conversation, actorId);
-        GroupManagementSettings previousSettings = copyGroupManagementSettings(ensureGroupManagementSettings(conversation));
+        GroupManagementSettings previousSettings = copyGroupManagementSettings(
+                ensureGroupManagementSettings(conversation));
 
         GroupManagementSettings settings = new GroupManagementSettings(
                 request.getAllowMemberSendMessage(),
                 request.getAllowMemberPinMessage(),
                 request.getAllowMemberChangeAvatar(),
-                request.getMemberApprovalEnabled()
-        );
+                request.getMemberApprovalEnabled());
 
         conversation.setGroupManagementSettings(settings);
         conversation.setDateUpdateMessage(LocalDateTime.now());
@@ -342,8 +336,7 @@ public class ConversationServiceImpl implements ConversationService {
                 actorId,
                 savedConversation.getIdConversation(),
                 previousSettings,
-                settings
-        );
+                settings);
 
         return savedConversation;
     }
@@ -352,8 +345,7 @@ public class ConversationServiceImpl implements ConversationService {
     public Conversation updateGroupAvatar(
             String currentIdentityUserId,
             String conversationId,
-            UpdateGroupAvatarRequest request
-    ) {
+            UpdateGroupAvatarRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         Conversation conversation = getGroupConversationOrThrow(conversationId);
         assertMemberActor(conversation, actorId);
@@ -387,7 +379,8 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public Conversation approveGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId) {
+    public Conversation approveGroupMemberRequest(String currentIdentityUserId, String conversationId,
+            String requestId) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String normalizedRequestId = normalizeIdentityUserId(requestId, "Request id is required");
         Conversation conversation = getGroupConversationOrThrow(conversationId);
@@ -410,8 +403,7 @@ public class ConversationServiceImpl implements ConversationService {
                     targetIdentityUserId,
                     ParicipantRole.USER,
                     "",
-                    LocalDateTime.now()
-            ));
+                    LocalDateTime.now()));
         }
 
         pendingMemberRequests.removeIf(item -> normalizedRequestId.equals(item.getIdRequest())
@@ -425,7 +417,8 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public Conversation rejectGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId) {
+    public Conversation rejectGroupMemberRequest(String currentIdentityUserId, String conversationId,
+            String requestId) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String normalizedRequestId = normalizeIdentityUserId(requestId, "Request id is required");
         Conversation conversation = getGroupConversationOrThrow(conversationId);
@@ -446,13 +439,11 @@ public class ConversationServiceImpl implements ConversationService {
     public Conversation transferGroupAdmin(
             String currentIdentityUserId,
             String conversationId,
-            TransferGroupAdminRequest request
-    ) {
+            TransferGroupAdminRequest request) {
         String actorId = normalizeAuthenticatedUserId(currentIdentityUserId);
         String targetId = normalizeIdentityUserId(
                 request.getTargetIdentityUserId(),
-                "Target identity user id is required"
-        );
+                "Target identity user id is required");
         if (actorId.equals(targetId)) {
             throw new InvalidParamException("Cannot transfer admin role to yourself");
         }
@@ -502,6 +493,10 @@ public class ConversationServiceImpl implements ConversationService {
             throw new InvalidParamException("Admin must transfer role before leaving group");
         }
 
+        // Emit a system chat line before removing actor so message creation still
+        // passes permission checks.
+        sendGroupSystemNotification(actorId, conversation.getIdConversation(), "Đã rời nhóm !!!");
+
         participantInfos.removeIf(participant -> actorId.equals(participant.getIdAccount()));
         List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
         pendingMemberRequests.removeIf(request -> actorId.equals(request.getTargetIdentityUserId())
@@ -510,7 +505,9 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setNumberMember(participantInfos.size());
         conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(LocalDateTime.now());
-        return conversationRepository.save(conversation);
+        Conversation savedConversation = conversationRepository.save(conversation);
+        publishConversationRealtime(savedConversation);
+        return savedConversation;
     }
 
     @Override
@@ -645,8 +642,7 @@ public class ConversationServiceImpl implements ConversationService {
                 Boolean.TRUE.equals(safe.getAllowMemberSendMessage()),
                 Boolean.TRUE.equals(safe.getAllowMemberPinMessage()),
                 Boolean.TRUE.equals(safe.getAllowMemberChangeAvatar()),
-                Boolean.TRUE.equals(safe.getMemberApprovalEnabled())
-        );
+                Boolean.TRUE.equals(safe.getMemberApprovalEnabled()));
     }
 
     private void publishConversationRealtime(Conversation conversation) {
@@ -664,8 +660,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .forEach(userId -> realtimeEventPublisher.publishUserConversationEvent(
                         userId,
                         conversation.getIdConversation(),
-                        payload
-                ));
+                        payload));
     }
 
     private void sendGroupSystemNotification(String actorId, String conversationId, String content) {
@@ -678,7 +673,8 @@ public class ConversationServiceImpl implements ConversationService {
         try {
             chatMessageService.sendRest(actorId, conversationId, request);
         } catch (RuntimeException ignored) {
-            // Do not block the main management action if notification message cannot be created.
+            // Do not block the main management action if notification message cannot be
+            // created.
         }
     }
 
@@ -686,22 +682,21 @@ public class ConversationServiceImpl implements ConversationService {
             String actorId,
             String conversationId,
             GroupManagementSettings previousSettings,
-            GroupManagementSettings currentSettings
-    ) {
+            GroupManagementSettings currentSettings) {
         List<String> messages = buildGroupManagementChangeMessages(previousSettings, currentSettings);
         messages.forEach(content -> sendGroupSystemNotification(actorId, conversationId, content));
     }
 
     private List<String> buildGroupManagementChangeMessages(
             GroupManagementSettings previousSettings,
-            GroupManagementSettings currentSettings
-    ) {
+            GroupManagementSettings currentSettings) {
         List<String> messages = new ArrayList<>();
         if (previousSettings == null || currentSettings == null) {
             return messages;
         }
 
-        if (!Objects.equals(previousSettings.getAllowMemberSendMessage(), currentSettings.getAllowMemberSendMessage())) {
+        if (!Objects.equals(previousSettings.getAllowMemberSendMessage(),
+                currentSettings.getAllowMemberSendMessage())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberSendMessage())
                     ? "Đã cho phép tất cả thành viên gửi tin nhắn vào nhóm."
                     : "Đã giới hạn gửi tin nhắn: chỉ trưởng/phó nhóm được gửi.");
@@ -713,7 +708,8 @@ public class ConversationServiceImpl implements ConversationService {
                     : "Đã giới hạn ghim tin nhắn: chỉ trưởng/phó nhóm được ghim.");
         }
 
-        if (!Objects.equals(previousSettings.getAllowMemberChangeAvatar(), currentSettings.getAllowMemberChangeAvatar())) {
+        if (!Objects.equals(previousSettings.getAllowMemberChangeAvatar(),
+                currentSettings.getAllowMemberChangeAvatar())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberChangeAvatar())
                     ? "Đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm."
                     : "Đã giới hạn thay đổi ảnh đại diện: chỉ trưởng/phó nhóm được đổi.");
