@@ -32,6 +32,7 @@ public class MessageResponse {
     private boolean pinned;
     private String pinnedByAccountId;
     private LocalDateTime pinnedAt;
+    private List<String> mentionedUserIds;
     private CallMessageInfo callInfo;
 
     public static MessageResponse from(Message entity) {
@@ -56,6 +57,7 @@ public class MessageResponse {
                 .pinned(entity.isPinned())
                 .pinnedByAccountId(entity.getPinnedByAccountId())
                 .pinnedAt(entity.getPinnedAt())
+                .mentionedUserIds(entity.getMentionedUserIds())
                 .callInfo(entity.getCallInfo())
                 .build();
     }

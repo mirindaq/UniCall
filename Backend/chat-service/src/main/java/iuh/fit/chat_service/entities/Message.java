@@ -39,5 +39,6 @@ public class Message {
     private String pinnedByAccountId;
     private LocalDateTime pinnedAt;
     private List<String> hiddenForAccountIds;
+    private List<String> mentionedUserIds;
     private CallMessageInfo callInfo;
 }

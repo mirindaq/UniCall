@@ -165,6 +165,15 @@ type MentionCommand = {
   description: string
 }
 
+type MentionableMember = {
+  id: string
+  name: string
+}
+
+type MentionSuggestionItem =
+  | { kind: "ai"; command: MentionCommand }
+  | { kind: "member"; member: MentionableMember }
+
 type MentionSuggestionState = {
   replaceStart: number
   replaceEnd: number
@@ -570,6 +579,10 @@ function normalizeParticipantId(value?: string | null): string | null {
   return normalized || null
 }
 
+function buildMemberMentionToken(name: string): string {
+  return `@${name}`
+}
+
 function isGroupPinPermissionError(message?: string): boolean {
   if (!message) {
     return false
@@ -763,6 +776,27 @@ export default function ChatWindow() {
   }, [currentUserId, selectedConversation])
   const isCurrentUserGroupManager =
     currentGroupRole === "ADMIN" || currentGroupRole === "DEPUTY"
+  const mentionableMembers = useMemo<MentionableMember[]>(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return []
+    }
+    return selectedConversation.participantInfos
+      .filter(
+        (participant) =>
+          participant.idAccount !== currentUserId &&
+          !UNICALL_AI_BOT_IDS.includes(
+            participant.idAccount as (typeof UNICALL_AI_BOT_IDS)[number]
+          )
+      )
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount]
+        return {
+          id: participant.idAccount,
+          name: profile?.displayName?.trim() || participant.idAccount,
+        }
+      })
+      .sort((left, right) => left.name.localeCompare(right.name, "vi"))
+  }, [currentUserId, selectedConversation, senderProfiles])
   const isGroupSendRestricted =
     selectedConversation?.type === "GROUP" &&
     !selectedConversationSettings?.allowMemberSendMessage &&
@@ -2024,6 +2058,53 @@ export default function ChatWindow() {
   }, [currentUserId, displayMessages, selectedConversation, senderProfiles])
 
   useEffect(() => {
+    if (!selectedConversation || selectedConversation.type !== "GROUP") {
+      return
+    }
+    const participantIds = (selectedConversation.participantInfos ?? [])
+      .map((participant) => participant.idAccount)
+      .filter(
+        (id): id is string =>
+          !!id &&
+          id !== currentUserId &&
+          !UNICALL_AI_BOT_IDS.includes(id as (typeof UNICALL_AI_BOT_IDS)[number])
+      )
+    const missingIds = participantIds.filter((id) => !senderProfiles[id])
+    if (missingIds.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      missingIds.map(async (identityUserId) => {
+        try {
+          const response =
+            await userService.getProfileByIdentityUserId(identityUserId)
+          const profile = response.data
+          const displayName =
+            `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
+            identityUserId
+          return [
+            identityUserId,
+            { displayName, avatar: profile.avatar ?? undefined },
+          ] as const
+        } catch {
+          return [identityUserId, { displayName: identityUserId }] as const
+        }
+      })
+    ).then((entries) => {
+      if (cancelled || entries.length === 0) {
+        return
+      }
+      setSenderProfiles((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, selectedConversation, senderProfiles])
+
+  useEffect(() => {
     const peerId = conversationCall.activeCall?.peerUserId
     if (!peerId || !isAuthenticated) {
       setCallPeerProfile(null)
@@ -2260,9 +2341,14 @@ export default function ChatWindow() {
         return
       }
 
-      const hasCandidate = AI_MENTION_COMMANDS.some((command) =>
-        command.token.toLowerCase().slice(1).startsWith(rawQuery.toLowerCase())
+      const normalizedQuery = rawQuery.toLowerCase()
+      const hasAiCandidate = AI_MENTION_COMMANDS.some((command) =>
+        command.token.toLowerCase().slice(1).startsWith(normalizedQuery)
       )
+      const hasMemberCandidate = mentionableMembers.some((member) =>
+        member.name.toLowerCase().includes(normalizedQuery)
+      )
+      const hasCandidate = hasAiCandidate || hasMemberCandidate
       if (!hasCandidate) {
         setMentionSuggestion(null)
         return
@@ -2273,11 +2359,11 @@ export default function ChatWindow() {
         replaceEnd: safeCaret,
         query: rawQuery,
         highlightedIndex: prev
-          ? Math.min(prev.highlightedIndex, AI_MENTION_COMMANDS.length - 1)
+          ? prev.highlightedIndex
           : 0,
       }))
     },
-    []
+    [mentionableMembers]
   )
 
   const handleDraftChange = (value: string, caret?: number) => {
@@ -2290,14 +2376,18 @@ export default function ChatWindow() {
     updateMentionSuggestion(value, resolvedCaret)
   }
 
-  const applyMentionCommand = useCallback(
-    (command: MentionCommand) => {
+  const applyMentionItem = useCallback(
+    (item: MentionSuggestionItem) => {
       const suggestion = mentionSuggestion
       if (!suggestion) {
         return
       }
-      const nextDraft = `${draft.slice(0, suggestion.replaceStart)}${command.token} ${draft.slice(suggestion.replaceEnd)}`
-      const caretAfter = suggestion.replaceStart + command.token.length + 1
+      const mentionText =
+        item.kind === "ai"
+          ? `${item.command.token} `
+          : `${buildMemberMentionToken(item.member.name)} `
+      const nextDraft = `${draft.slice(0, suggestion.replaceStart)}${mentionText}${draft.slice(suggestion.replaceEnd)}`
+      const caretAfter = suggestion.replaceStart + mentionText.length
       setDraft(nextDraft)
       setMentionSuggestion(null)
       draftCaretRef.current = { start: caretAfter, end: caretAfter }
@@ -2314,35 +2404,38 @@ export default function ChatWindow() {
     [draft, mentionSuggestion]
   )
 
-  const visibleMentionCommands = useMemo(() => {
+  const visibleMentionItems = useMemo<MentionSuggestionItem[]>(() => {
     if (!mentionSuggestion) {
       return []
     }
     const query = mentionSuggestion.query.trim().toLowerCase()
-    if (!query) {
-      return AI_MENTION_COMMANDS
-    }
-    return AI_MENTION_COMMANDS.filter((command) =>
-      command.token.toLowerCase().slice(1).startsWith(query)
-    )
-  }, [mentionSuggestion])
+    const aiItems = AI_MENTION_COMMANDS.filter((command) =>
+      query ? command.token.toLowerCase().slice(1).startsWith(query) : true
+    ).map((command) => ({ kind: "ai", command }) as MentionSuggestionItem)
+    const memberItems = mentionableMembers
+      .filter((member) =>
+        query ? member.name.toLowerCase().includes(query) : true
+      )
+      .map((member) => ({ kind: "member", member }) as MentionSuggestionItem)
+    return [...aiItems, ...memberItems]
+  }, [mentionSuggestion, mentionableMembers])
 
   useEffect(() => {
     if (!mentionSuggestion) {
       return
     }
-    if (visibleMentionCommands.length === 0) {
+    if (visibleMentionItems.length === 0) {
       setMentionSuggestion(null)
       return
     }
-    if (mentionSuggestion.highlightedIndex >= visibleMentionCommands.length) {
+    if (mentionSuggestion.highlightedIndex >= visibleMentionItems.length) {
       setMentionSuggestion((prev) =>
         prev
-          ? { ...prev, highlightedIndex: visibleMentionCommands.length - 1 }
+          ? { ...prev, highlightedIndex: visibleMentionItems.length - 1 }
           : prev
       )
     }
-  }, [mentionSuggestion, visibleMentionCommands.length])
+  }, [mentionSuggestion, visibleMentionItems.length])
 
   const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
     if (allConversationImages.length > 0) {
@@ -2421,7 +2514,8 @@ export default function ChatWindow() {
     attachments?: Array<
       Pick<ChatAttachment, "type" | "url" | "size" | "order">
     >,
-    replyToMessageId?: string | null
+    replyToMessageId?: string | null,
+    mentionedUserIds?: string[]
   ) => {
     const normalized = content.trim()
     const hasAttachments = (attachments?.length ?? 0) > 0
@@ -2446,7 +2540,8 @@ export default function ChatWindow() {
           normalized,
           type,
           attachments,
-          replyToMessageId
+          replyToMessageId,
+          mentionedUserIds
         )
       } else {
         const res = await chatService.sendMessageRest(
@@ -2454,7 +2549,8 @@ export default function ChatWindow() {
           normalized,
           type,
           attachments,
-          replyToMessageId
+          replyToMessageId,
+          mentionedUserIds
         )
         onRealtimeMessage(res.data)
         setSocketExtras((prev) => {
@@ -2505,6 +2601,13 @@ export default function ChatWindow() {
       return
     }
 
+    const mentionedUserIds = mentionableMembers
+      .filter((member) => {
+        const token = buildMemberMentionToken(member.name)
+        return draft.includes(token)
+      })
+      .map((member) => member.id)
+
     const linkAttachments = extractUrlsFromText(normalizedDraft).map(
       (url, index) => ({
         type: "LINK" as const,
@@ -2517,7 +2620,8 @@ export default function ChatWindow() {
       draft,
       "TEXT",
       linkAttachments.length > 0 ? linkAttachments : undefined,
-      replyingTo?.idMessage
+      replyingTo?.idMessage,
+      mentionedUserIds
     )
     setDraft("")
     setMentionSuggestion(null)
@@ -4884,15 +4988,19 @@ export default function ChatWindow() {
 
             <div className="flex items-end gap-2">
               <div className="relative flex min-w-0 flex-1 items-end rounded-lg border bg-background pr-1">
-                {mentionSuggestion && visibleMentionCommands.length > 0 ? (
+                {mentionSuggestion && visibleMentionItems.length > 0 ? (
                   <div className="absolute bottom-full left-0 z-20 mb-2 w-[320px] max-w-[90vw] overflow-hidden rounded-xl border bg-popover shadow-lg">
                     <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-                      Gợi ý lệnh AI
+                      Gợi ý mention
                     </div>
                     <div className="p-1">
-                      {visibleMentionCommands.map((command, index) => (
+                      {visibleMentionItems.map((item, index) => (
                         <button
-                          key={command.token}
+                          key={
+                            item.kind === "ai"
+                              ? item.command.token
+                              : `member-${item.member.id}`
+                          }
                           type="button"
                           className={cn(
                             "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted/70",
@@ -4902,15 +5010,23 @@ export default function ChatWindow() {
                           onMouseDown={(event) => {
                             event.preventDefault()
                           }}
-                          onClick={() => applyMentionCommand(command)}
+                          onClick={() => applyMentionItem(item)}
                         >
-                          <Bot className="h-4 w-4 text-blue-600" />
+                          {item.kind === "ai" ? (
+                            <Bot className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <UserRound className="h-4 w-4 text-blue-600" />
+                          )}
                           <span className="min-w-0 flex-1">
                             <span className="block font-medium text-foreground">
-                              {command.token}
+                              {item.kind === "ai"
+                                ? item.command.token
+                                : `@${item.member.name}`}
                             </span>
                             <span className="block truncate text-xs text-muted-foreground">
-                              {command.description}
+                              {item.kind === "ai"
+                                ? item.command.description
+                                : "Nhắc tên thành viên"}
                             </span>
                           </span>
                         </button>
@@ -4943,7 +5059,7 @@ export default function ChatWindow() {
                   onKeyDown={(event) => {
                     if (
                       mentionSuggestion &&
-                      visibleMentionCommands.length > 0
+                      visibleMentionItems.length > 0
                     ) {
                       if (event.key === "ArrowDown") {
                         event.preventDefault()
@@ -4955,7 +5071,7 @@ export default function ChatWindow() {
                             ...prev,
                             highlightedIndex:
                               (prev.highlightedIndex + 1) %
-                              visibleMentionCommands.length,
+                              visibleMentionItems.length,
                           }
                         })
                         return
@@ -4971,8 +5087,8 @@ export default function ChatWindow() {
                             highlightedIndex:
                               (prev.highlightedIndex -
                                 1 +
-                                visibleMentionCommands.length) %
-                              visibleMentionCommands.length,
+                                visibleMentionItems.length) %
+                              visibleMentionItems.length,
                           }
                         })
                         return
@@ -4982,15 +5098,15 @@ export default function ChatWindow() {
                         (event.key === "Enter" && !event.shiftKey)
                       ) {
                         event.preventDefault()
-                        const selectedCommand =
-                          visibleMentionCommands[
+                        const selectedItem =
+                          visibleMentionItems[
                             Math.min(
                               mentionSuggestion.highlightedIndex,
-                              visibleMentionCommands.length - 1
+                              visibleMentionItems.length - 1
                             )
                           ]
-                        if (selectedCommand) {
-                          applyMentionCommand(selectedCommand)
+                        if (selectedItem) {
+                          applyMentionItem(selectedItem)
                         }
                         return
                       }

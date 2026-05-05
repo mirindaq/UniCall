@@ -13,4 +13,5 @@ public class SendChatMessageRequest {
     @Valid
     private List<MessageAttachmentRequest> attachments;
     private String replyToMessageId;
+    private List<String> mentionedUserIds;
 }

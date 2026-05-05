@@ -179,7 +179,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 request.getContent(),
                 request.getType(),
                 request.getAttachments(),
-                request.getReplyToMessageId()
+                request.getReplyToMessageId(),
+                request.getMentionedUserIds()
         );
     }
 
@@ -197,7 +198,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 content,
                 MessageType.TEXT,
                 List.of(),
-                null
+                null,
+                List.of()
         );
     }
 
@@ -215,7 +217,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 payload.getContent(),
                 type,
                 payload.getAttachments(),
-                payload.getReplyToMessageId()
+                payload.getReplyToMessageId(),
+                payload.getMentionedUserIds()
         );
     }
 
@@ -225,7 +228,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             String content,
             MessageType type,
             List<MessageAttachmentRequest> attachmentRequests,
-            String replyToMessageId
+            String replyToMessageId,
+            List<String> mentionedUserIds
     ) {
         if (!UNICALL_SYSTEM_BOT_ID.equals(identityUserId)) {
             conversationBlockService.assertCanSendMessage(identityUserId, conversationId);
@@ -238,6 +242,11 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
         attachments = appendAutoLinkAttachments(normalizedContent, attachments);
 
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        List<String> normalizedMentionedUserIds = normalizeMentionedUserIds(
+                conversation,
+                identityUserId,
+                mentionedUserIds);
         LocalDateTime now = LocalDateTime.now();
         Message message = new Message();
         message.setIdMessage(UUID.randomUUID().toString());
@@ -254,10 +263,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setPinnedByAccountId(null);
         message.setPinnedAt(null);
         message.setReplyToMessageId(resolveReplyToMessageId(conversationId, replyToMessageId));
+        message.setMentionedUserIds(normalizedMentionedUserIds.isEmpty() ? null : normalizedMentionedUserIds);
 
         Message saved = messageRepository.save(message);
-
-        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         if (conversation != null) {
             conversation.setLastMessageContent(buildLastMessagePreview(normalizedContent, attachments));
             conversation.setDateUpdateMessage(now);
@@ -549,7 +557,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                         note,
                         MessageType.TEXT,
                         List.of(),
-                        null
+                        null,
+                        List.of()
                 );
             }
 
@@ -559,7 +568,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                     sourceMessage.getContent(),
                     sourceType,
                     sourceAttachments,
-                    null
+                    null,
+                    sourceMessage.getMentionedUserIds()
             );
         }
 
@@ -708,6 +718,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         aiMessage.setPinnedByAccountId(null);
         aiMessage.setPinnedAt(null);
         aiMessage.setReplyToMessageId(null);
+        aiMessage.setMentionedUserIds(null);
 
         Message saved = messageRepository.save(aiMessage);
         conversation.setLastMessageContent(buildLastMessagePreview(normalizedContent, attachments));
@@ -767,6 +778,45 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         for (String participantId : participantIds) {
             realtimeEventPublisher.publishUserMessageEvent(participantId, conversation.getIdConversation(), message);
         }
+    }
+
+    private static List<String> normalizeMentionedUserIds(
+            Conversation conversation,
+            String senderIdentityUserId,
+            List<String> rawMentionedUserIds
+    ) {
+        if (rawMentionedUserIds == null || rawMentionedUserIds.isEmpty()) {
+            return List.of();
+        }
+        if (conversation == null || conversation.getParticipantInfos() == null) {
+            return List.of();
+        }
+
+        Set<String> participantIds = conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toSet());
+        if (participantIds.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashSet<String> mentioned = new LinkedHashSet<>();
+        for (String rawMentionedUserId : rawMentionedUserIds) {
+            if (!StringUtils.hasText(rawMentionedUserId)) {
+                continue;
+            }
+            String normalized = rawMentionedUserId.trim();
+            if (normalized.equals(senderIdentityUserId)) {
+                continue;
+            }
+            if (!participantIds.contains(normalized)) {
+                continue;
+            }
+            mentioned.add(normalized);
+        }
+
+        return mentioned.isEmpty() ? List.of() : new ArrayList<>(mentioned);
     }
 
     private static List<Attachment> toAttachments(List<MessageAttachmentRequest> requests) {
