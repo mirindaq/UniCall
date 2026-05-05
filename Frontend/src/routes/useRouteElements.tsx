@@ -18,6 +18,7 @@ import { HomePage } from "@/pages/home/HomePage"
 import { UserChatPage } from "@/pages/user/UserChatPage"
 import { UserFriendsPage } from "@/pages/user/UserFriendsPage"
 import { UserNotificationsPage } from "@/pages/user/UserNotificationsPage"
+import { UserPostsPage } from "@/pages/user/UserPostsPage"
 import GuestRoute from "@/routes/GuestRoute"
 import ProtectedRoute from "@/routes/ProtectedRoute"
 
@@ -62,6 +63,10 @@ export default function useRouteElements() {
         {
           path: USER_PATH.FRIENDS,
           element: <UserFriendsPage />,
+        },
+        {
+          path: USER_PATH.POSTS,
+          element: <UserPostsPage />,
         },
         {
           path: USER_PATH.NOTIFICATIONS,

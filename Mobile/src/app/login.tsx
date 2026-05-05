@@ -1,16 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { PhoneAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { authTokenStore } from '@/configurations/axios.config';
 import { authService } from '@/services/auth.service';
-import { getFirebaseAuth, getFirebaseConfig, toFirebasePhoneNumber } from '@/services/firebase-phone-auth.service';
+import { getFirebaseAuth, toFirebasePhoneNumber } from '@/services/firebase-phone-auth.service';
 import type { ResponseError } from '@/types/api-response';
 
 const normalizePhone = (value: string) => {
@@ -74,15 +72,6 @@ const isEmailNotVerifiedError = (message: string) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
-
-  const firebaseConfig = useMemo(() => {
-    try {
-      return getFirebaseConfig();
-    } catch {
-      return null;
-    }
-  }, []);
 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -100,7 +89,7 @@ export default function LoginScreen() {
   const [showForgotOtpModal, setShowForgotOtpModal] = useState(false);
   const [forgotOtpPhone, setForgotOtpPhone] = useState('');
   const [forgotOtpCode, setForgotOtpCode] = useState('');
-  const [forgotOtpVerificationId, setForgotOtpVerificationId] = useState('');
+  const [forgotOtpConfirmation, setForgotOtpConfirmation] = useState<any | null>(null);
   const [isSendingForgotOtp, setIsSendingForgotOtp] = useState(false);
   const [isVerifyingForgotOtp, setIsVerifyingForgotOtp] = useState(false);
   const [hasAutoSentForgotOtp, setHasAutoSentForgotOtp] = useState(false);
@@ -144,7 +133,7 @@ export default function LoginScreen() {
   const resetForgotOtpFlow = () => {
     setForgotOtpCode('');
     setForgotOtpPhone('');
-    setForgotOtpVerificationId('');
+    setForgotOtpConfirmation(null);
     setHasAutoSentForgotOtp(false);
     setPendingForgotPasswordPayload(null);
   };
@@ -252,25 +241,12 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!firebaseConfig) {
-      Toast.show({
-        type: 'error',
-        text1: 'Thieu cau hinh Firebase',
-        text2: 'Vui long them EXPO_PUBLIC_FIREBASE_* trong file .env.',
-      });
-      return;
-    }
-
     setIsSendingForgotOtp(true);
     try {
-      const provider = new PhoneAuthProvider(getFirebaseAuth());
       const firebasePhoneNumber = toFirebasePhoneNumber(targetPhone);
-      const newVerificationId = await provider.verifyPhoneNumber(
-        firebasePhoneNumber,
-        recaptchaVerifier.current as never
-      );
+      const nextConfirmation = await getFirebaseAuth().signInWithPhoneNumber(firebasePhoneNumber);
       setForgotOtpPhone(targetPhone);
-      setForgotOtpVerificationId(newVerificationId);
+      setForgotOtpConfirmation(nextConfirmation);
       Toast.show({
         type: 'success',
         text1: 'Da gui OTP',
@@ -288,7 +264,7 @@ export default function LoginScreen() {
   };
 
   const handleVerifyForgotOtpAndReset = async () => {
-    if (!forgotOtpVerificationId) {
+    if (!forgotOtpConfirmation) {
       Toast.show({
         type: 'error',
         text1: 'Chua gui OTP',
@@ -318,8 +294,7 @@ export default function LoginScreen() {
     setIsVerifyingForgotOtp(true);
     try {
       const auth = getFirebaseAuth();
-      const credential = PhoneAuthProvider.credential(forgotOtpVerificationId, forgotOtpCode.trim());
-      const credentialResult = await signInWithCredential(auth, credential);
+      const credentialResult = await forgotOtpConfirmation.confirm(forgotOtpCode.trim());
       const firebaseIdToken = await credentialResult.user.getIdToken();
 
       await authService.resetPasswordWithOtp({
@@ -328,7 +303,7 @@ export default function LoginScreen() {
         firebaseIdToken,
       });
 
-      await signOut(auth);
+      await auth.signOut();
 
       Toast.show({
         type: 'success',
@@ -393,7 +368,7 @@ export default function LoginScreen() {
     });
     setForgotOtpPhone(normalizedPhoneNumber);
     setForgotOtpCode('');
-    setForgotOtpVerificationId('');
+    setForgotOtpConfirmation(null);
     setHasAutoSentForgotOtp(false);
     setShowForgotOtpModal(true);
     setIsSubmittingForgotPassword(false);
@@ -403,14 +378,6 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-100" edges={['top', 'bottom']}>
-      {firebaseConfig ? (
-        <FirebaseRecaptchaVerifierModal
-          ref={recaptchaVerifier}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification
-        />
-      ) : null}
-
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <ScrollView className="flex-1 px-6" contentContainerClassName="grow pb-6" keyboardShouldPersistTaps="handled">
           <Pressable className="mt-1 h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white" onPress={() => router.back()}>
@@ -599,7 +566,7 @@ export default function LoginScreen() {
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isVerifyingForgotOtp ? 'bg-sky-300' : 'bg-sky-500'}`}
                 onPress={() => void handleVerifyForgotOtpAndReset()}
-                disabled={isVerifyingForgotOtp || !forgotOtpVerificationId || !forgotOtpCode.trim()}>
+                disabled={isVerifyingForgotOtp || !forgotOtpConfirmation || !forgotOtpCode.trim()}>
                 <Text className="font-semibold text-white">
                   {isVerifyingForgotOtp ? 'Dang xac thuc...' : 'Xac thuc'}
                 </Text>

@@ -3,13 +3,16 @@ package iuh.fit.chat_service.services;
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
+import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
 import iuh.fit.chat_service.entities.Conversation;
 
 public interface ConversationService {
     Conversation createGroupConversation(String currentIdentityUserId, CreateGroupConversationRequest request);
-    Conversation addGroupMembers(
+    ManageGroupParticipantsResponse addGroupMembers(
             String currentIdentityUserId,
             String conversationId,
             AddGroupMembersRequest request
@@ -32,6 +35,18 @@ public interface ConversationService {
             UpdateMemberNicknameRequest request
     );
     Conversation getGroupConversationDetails(String currentIdentityUserId, String conversationId);
+    Conversation updateGroupManagementSettings(
+            String currentIdentityUserId,
+            String conversationId,
+            UpdateGroupManagementSettingsRequest request
+    );
+    Conversation updateGroupAvatar(
+            String currentIdentityUserId,
+            String conversationId,
+            UpdateGroupAvatarRequest request
+    );
+    Conversation approveGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId);
+    Conversation rejectGroupMemberRequest(String currentIdentityUserId, String conversationId, String requestId);
     Conversation transferGroupAdmin(
             String currentIdentityUserId,
             String conversationId,

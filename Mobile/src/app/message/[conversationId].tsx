@@ -1,6 +1,7 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -9,67 +10,260 @@ import { ChatDetailHeader } from '@/components/chat-detail/chat-detail-header';
 import { AppStatusBarBlue } from '@/components/ui/app-status-bar-blue';
 import { useCall } from '@/contexts/call-context';
 import type { MockChatMessage } from '@/mock/chat-thread-messages';
-import { fileService } from '@/services/file.service';
 import { chatSocketService } from '@/services/chat-socket.service';
 import { chatService } from '@/services/chat.service';
+import { fileService } from '@/services/file.service';
 import { userService } from '@/services/user.service';
 import type {
   ChatAttachment,
   ChatMessageResponse,
   ConversationBlockStatusResponse,
   ConversationResponse,
+  MessageEnum,
   MessageType,
 } from '@/types/chat';
+import type { UserProfile } from '@/types/user';
+import {
+  buildMessagePreviewData,
+  messagePreviewSnippetText,
+  QUICK_MESSAGE_REACTIONS,
+  summarizeMessageReactions,
+  type MessagePreviewData,
+} from '@/utils/chat-message-preview';
 
 type UiMessage = {
   idMessage: string;
   idConversation: string;
   idAccountSent: string;
+  status: MessageEnum;
   content: string;
   type: MessageType;
   timeSent: string;
   attachments: ChatAttachment[];
   recalled: boolean;
   replyToMessageId?: string;
+  reactions?: Record<string, string>;
+  reactionStacks?: Record<string, string[]>;
+  pinned?: boolean;
+  pinnedByAccountId?: string;
+  pinnedAt?: string;
   optimisticStatus?: 'SENDING' | 'SENT';
 };
+
+const MESSAGE_PAGE_SIZE = 20;
+const GROUP_CALL_MAX_MEMBERS = 5;
+const GROUP_CALL_MAX_TARGETS = GROUP_CALL_MAX_MEMBERS - 1;
+const GROUP_MANAGER_ONLY_SEND_MESSAGE =
+  'Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m \u0111\u01B0\u1EE3c g\u1EEDi tin nh\u1EAFn v\u00E0o nh\u00F3m.';
+const GROUP_MANAGER_ONLY_PIN_MESSAGE =
+  'Ch\u1EC9 tr\u01B0\u1EDFng/ph\u00F3 nh\u00F3m m\u1EDBi c\u00F3 th\u1EC3 ghim tin nh\u1EAFn.';
 
 const toUiMessage = (message: ChatMessageResponse): UiMessage => ({
   idMessage: message.idMessage,
   idConversation: message.idConversation,
   idAccountSent: message.idAccountSent,
+  status: message.status,
   content: message.content ?? '',
   type: message.type,
   timeSent: message.timeSent,
   attachments: message.attachments ?? [],
   recalled: message.recalled ?? false,
   replyToMessageId: message.replyToMessageId,
+  reactions: message.reactions,
+  reactionStacks: message.reactionStacks,
+  pinned: message.pinned,
+  pinnedByAccountId: message.pinnedByAccountId,
+  pinnedAt: message.pinnedAt,
 });
 
-const waitForSocketConnected = async (timeoutMs = 5000) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const client = chatSocketService.getClient();
-    if (client?.connected) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 80));
+const normalizeId = (value?: string | number | null) => {
+  if (value == null) {
+    return null;
   }
-  return false;
+  const text = String(value).trim().toLowerCase();
+  return text || null;
 };
 
-const MESSAGE_PAGE_SIZE = 20;
-const UNICALL_AI_BOT_IDS = ['unicall-ai-bot', 'unicall-image-bot'] as const;
+const isMessageFromCurrentUser = (
+  message:
+    | Pick<UiMessage, 'idAccountSent' | 'status'>
+    | Pick<ChatMessageResponse, 'idAccountSent' | 'status'>,
+  myIdentityId: string | null,
+  myNumericAccountId: string | null
+) => {
+  const senderId = normalizeId(message.idAccountSent);
+  if (!senderId) {
+    return message.status === 'SENT';
+  }
+  if (senderId === normalizeId(myIdentityId) || senderId === normalizeId(myNumericAccountId)) {
+    return true;
+  }
+  return (
+    message.status === 'SENT' &&
+    normalizeId(myIdentityId) == null &&
+    normalizeId(myNumericAccountId) == null
+  );
+};
+
+const toDisplayName = (profile?: UserProfile | null, fallback?: string) => {
+  if (!profile) {
+    return fallback || '';
+  }
+  const fullName = `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim();
+  return fullName || fallback || profile.identityUserId;
+};
+
+const toInitials = (fullName: string) => {
+  const words = fullName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return 'U';
+  }
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return `${words[0][0] ?? ''}${words[words.length - 1][0] ?? ''}`.toUpperCase();
+};
+
+const dedupeMessagesById = (items: UiMessage[]) => {
+  const seen = new Set<string>();
+  const next: UiMessage[] = [];
+  items.forEach((item) => {
+    if (seen.has(item.idMessage)) {
+      return;
+    }
+    seen.add(item.idMessage);
+    next.push(item);
+  });
+  return next;
+};
+
+const getBackendErrorMessage = (error: unknown): string | undefined =>
+  (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+
+const isGroupPinPermissionError = (message?: string): boolean => {
+  if (!message) {
+    return false;
+  }
+  const normalized = message.toLowerCase();
+  const hasPinKeyword = /ghim|pin/.test(normalized);
+  const hasRoleKeyword = /truong nhom|pho nhom|deputy|admin|group admin/.test(normalized);
+  return hasPinKeyword && hasRoleKeyword;
+};
+
+type MessageActionItemProps = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color?: string;
+  danger?: boolean;
+  onPress: () => void;
+};
+
+type GroupCallMemberOption = {
+  id: string;
+  name: string;
+  avatar?: string | null;
+};
+
+function MessageActionItem({
+  label,
+  icon,
+  color = '#2563eb',
+  danger = false,
+  onPress,
+}: MessageActionItemProps) {
+  return (
+    <Pressable
+      className="mb-2 flex-row items-center rounded-xl border border-slate-200 bg-white px-3.5 py-3"
+      onPress={onPress}>
+      <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+        <Ionicons name={icon} size={19} color={danger ? '#dc2626' : color} />
+      </View>
+      <Text
+        className={`ml-3 text-[15px] font-medium ${
+          danger ? 'text-red-600' : 'text-slate-900'
+        }`}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const previewKindToIcon = (
+  kind: MessagePreviewData['kind']
+): keyof typeof Ionicons.glyphMap => {
+  switch (kind) {
+    case 'file':
+      return 'document-text-outline';
+    case 'audio':
+      return 'musical-notes-outline';
+    case 'link':
+      return 'link-outline';
+    case 'call':
+      return 'call-outline';
+    case 'video':
+      return 'videocam-outline';
+    default:
+      return 'image-outline';
+  }
+};
+
+function PinnedPreviewMedia({
+  preview,
+  size = 28,
+}: {
+  preview: MessagePreviewData;
+  size?: number;
+}) {
+  if (preview.kind === 'text' && !preview.thumbnailUrl) {
+    return null;
+  }
+
+  const sizeClass = size <= 24 ? 'h-6 w-6' : 'h-7 w-7';
+  const iconSize = size <= 24 ? 12 : 14;
+
+  if (preview.thumbnailUrl) {
+    return (
+      <Image
+        source={{ uri: preview.thumbnailUrl }}
+        className={`${sizeClass} rounded-md bg-amber-100`}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (preview.kind === 'file') {
+    return (
+      <View className={`${sizeClass} items-center justify-center rounded-md border border-amber-300 bg-white`}>
+        <Text className="text-[9px] font-bold uppercase text-amber-700">{preview.fileExt || 'FILE'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className={`${sizeClass} items-center justify-center rounded-md border border-amber-300 bg-white`}>
+      <Ionicons name={previewKindToIcon(preview.kind)} size={iconSize} color="#92400e" />
+    </View>
+  );
+}
 
 export default function ConversationDetailScreen() {
   const router = useRouter();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const { startAudioCall, startVideoCall } = useCall();
+  const {
+    phase: callPhase,
+    activeCall: activeConversationCall,
+    startAudioCall,
+    startVideoCall,
+    joinGroupCallFromConversation,
+  } = useCall();
+
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [conversation, setConversation] = useState<ConversationResponse | null>(null);
   const [conversationOptions, setConversationOptions] = useState<ConversationResponse[]>([]);
-  const [headerTitle, setHeaderTitle] = useState('Cuoc tro chuyen');
+  const [headerTitle, setHeaderTitle] = useState('Cuộc trò chuyện');
   const [myIdentityId, setMyIdentityId] = useState<string | null>(null);
+  const [myAccountNumericId, setMyAccountNumericId] = useState<string | null>(null);
+  const [senderProfiles, setSenderProfiles] = useState<Record<string, UserProfile>>({});
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -78,56 +272,123 @@ export default function ConversationDetailScreen() {
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
   const [blockStatus, setBlockStatus] = useState<ConversationBlockStatusResponse | null>(null);
   const [replyingToMessageId, setReplyingToMessageId] = useState<string | null>(null);
-  const [prefillDraftRequestId, setPrefillDraftRequestId] = useState<string | null>(null);
   const [forwardSourceMessage, setForwardSourceMessage] = useState<UiMessage | null>(null);
   const [forwardPickerOpen, setForwardPickerOpen] = useState(false);
+  const [messageActionTargetId, setMessageActionTargetId] = useState<string | null>(null);
+  const [activePinnedMessageId, setActivePinnedMessageId] = useState<string | null>(null);
+  const [isPinnedListExpanded, setIsPinnedListExpanded] = useState(false);
+  const [isGroupCallPickerOpen, setIsGroupCallPickerOpen] = useState(false);
+  const [groupCallSelectedUserIds, setGroupCallSelectedUserIds] = useState<string[]>([]);
 
   const peerInfo = useMemo(() => {
     const participants = conversation?.participantInfos ?? [];
     if (participants.length === 0) {
       return null;
     }
-    if (myIdentityId) {
-      return participants.find((item) => item.idAccount !== myIdentityId) ?? participants[0];
+    if (myIdentityId || myAccountNumericId) {
+      return (
+        participants.find(
+          (item) =>
+            normalizeId(item.idAccount) !== normalizeId(myIdentityId) &&
+            normalizeId(item.idAccount) !== normalizeId(myAccountNumericId)
+        ) ?? participants[0]
+      );
     }
     return participants[0];
-  }, [conversation, myIdentityId]);
+  }, [conversation, myIdentityId, myAccountNumericId]);
 
   const peerUserId = peerInfo?.idAccount ?? null;
+  const isGroupConversation = conversation?.type === 'GROUP';
+  const currentGroupRole = useMemo(() => {
+    if (!conversation) {
+      return null;
+    }
+    const normalizedIdentityId = normalizeId(myIdentityId);
+    const normalizedNumericId = normalizeId(myAccountNumericId);
+    return (
+      conversation.participantInfos.find((participant) => {
+        const participantId = normalizeId(participant.idAccount);
+        if (!participantId) {
+          return false;
+        }
+        return participantId === normalizedIdentityId || participantId === normalizedNumericId;
+      })?.role ?? null
+    );
+  }, [conversation, myAccountNumericId, myIdentityId]);
+  const isCurrentUserGroupManager = currentGroupRole === 'ADMIN' || currentGroupRole === 'DEPUTY';
+  const isGroupSendRestricted =
+    isGroupConversation &&
+    !conversation?.groupManagementSettings?.allowMemberSendMessage &&
+    !isCurrentUserGroupManager;
+  const isGroupPinRestricted =
+    isGroupConversation &&
+    !conversation?.groupManagementSettings?.allowMemberPinMessage &&
+    !isCurrentUserGroupManager;
   const isDirectConversation = conversation?.type === 'DOUBLE';
-  const isMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked);
+  const isDirectMessageBlocked = isDirectConversation && Boolean(blockStatus?.blocked);
+  const isComposerBlocked = isDirectMessageBlocked || isGroupSendRestricted;
   const blockedCallReasonText = blockStatus?.blockedByMe
-    ? 'Ban da chan nguoi nay. Hay bo chan de tiep tuc.'
-    : 'Khong the goi vi nguoi nay da chan ban.';
-  const blockedComposerReasonText = blockStatus?.blockedByMe
-    ? 'Ban da chan nguoi nay. Hay bo chan de tiep tuc nhan tin.'
-    : 'Nguoi nay da chan ban. Ban khong the nhan tin trong luc nay.';
+    ? 'B\u1EA1n \u0111\u00E3 ch\u1EB7n ng\u01B0\u1EDDi n\u00E0y. H\u00E3y b\u1ECF ch\u1EB7n \u0111\u1EC3 ti\u1EBFp t\u1EE5c.'
+    : 'Kh\u00F4ng th\u1EC3 g\u1ECDi v\u00EC ng\u01B0\u1EDDi n\u00E0y \u0111\u00E3 ch\u1EB7n b\u1EA1n.';
+  const blockedComposerReasonText = isGroupSendRestricted
+    ? GROUP_MANAGER_ONLY_SEND_MESSAGE
+    : blockStatus?.blockedByMe
+      ? 'B\u1EA1n \u0111\u00E3 ch\u1EB7n ng\u01B0\u1EDDi n\u00E0y. H\u00E3y b\u1ECF ch\u1EB7n \u0111\u1EC3 ti\u1EBFp t\u1EE5c nh\u1EAFn tin.'
+      : 'Ng\u01B0\u1EDDi n\u00E0y \u0111\u00E3 ch\u1EB7n b\u1EA1n. B\u1EA1n kh\u00F4ng th\u1EC3 nh\u1EAFn tin l\u00FAc n\u00E0y.';
+  const isCurrentConversationGroupCallOngoing = Boolean(
+    conversationId &&
+      callPhase !== 'idle' &&
+      activeConversationCall?.conversationId === conversationId &&
+      activeConversationCall?.isGroupCall
+  );
+  const groupCallSelectableMembers = useMemo<GroupCallMemberOption[]>(() => {
+    if (!isGroupConversation || !conversation) {
+      return [];
+    }
+    return conversation.participantInfos
+      .filter((participant) => {
+        const participantId = normalizeId(participant.idAccount);
+        return (
+          participantId != null &&
+          participantId !== normalizeId(myIdentityId) &&
+          participantId !== normalizeId(myAccountNumericId)
+        );
+      })
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount];
+        return {
+          id: participant.idAccount,
+          name: toDisplayName(profile, participant.idAccount),
+          avatar: profile?.avatar ?? null,
+        };
+      });
+  }, [conversation, isGroupConversation, myAccountNumericId, myIdentityId, senderProfiles]);
+  const groupCallMembers = useMemo<GroupCallMemberOption[]>(() => {
+    if (!isGroupConversation || !conversation) {
+      return [];
+    }
+    return conversation.participantInfos.map((participant) => {
+      const profile = senderProfiles[participant.idAccount];
+      return {
+        id: participant.idAccount,
+        name: toDisplayName(profile, participant.idAccount),
+        avatar: profile?.avatar ?? null,
+      };
+    });
+  }, [conversation, isGroupConversation, senderProfiles]);
 
-  const getMessagePreviewText = useCallback((message: UiMessage) => {
-    if (message.recalled) {
-      return 'Tin nhan da thu hoi';
-    }
-    if (message.content?.trim()) {
-      return message.content.trim();
-    }
-    const firstAttachment = message.attachments[0];
-    if (!firstAttachment) {
-      return 'Tin nhan';
-    }
-    if (firstAttachment.type === 'IMAGE') {
-      return 'Hinh anh';
-    }
-    if (firstAttachment.type === 'VIDEO') {
-      return 'Video';
-    }
-    if (firstAttachment.type === 'AUDIO') {
-      return 'Am thanh';
-    }
-    if (firstAttachment.type === 'STICKER' || firstAttachment.type === 'GIF') {
-      return 'Sticker';
-    }
-    return 'Tep dinh kem';
-  }, []);
+  const resolveSenderName = useCallback(
+    (message: UiMessage) => {
+      if (isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId)) {
+        return 'Bạn';
+      }
+      const senderProfile = senderProfiles[message.idAccountSent];
+      const fallback =
+        conversation?.type === 'GROUP' ? message.idAccountSent : headerTitle || message.idAccountSent;
+      return toDisplayName(senderProfile, fallback);
+    },
+    [conversation?.type, headerTitle, myAccountNumericId, myIdentityId, senderProfiles]
+  );
 
   const refreshBlockStatus = useCallback(async () => {
     if (!conversationId || !isDirectConversation) {
@@ -159,25 +420,59 @@ export default function ConversationDetailScreen() {
         if (!mounted) {
           return;
         }
-        setMessages((messagesResponse.data.items ?? []).map(toUiMessage));
+        setMessages(dedupeMessagesById((messagesResponse.data.items ?? []).map(toUiMessage)));
         setPage(1);
         setHasMore((messagesResponse.data.page ?? 1) < (messagesResponse.data.totalPage ?? 1));
         setMyIdentityId(myProfileResponse.data.identityUserId ?? null);
+        setMyAccountNumericId(myProfileResponse.data.id != null ? String(myProfileResponse.data.id) : null);
         setShouldScrollToBottom(true);
 
-        const matched = (conversationsResponse.data ?? []).find(
-          (item) => item.idConversation === conversationId
-        );
+        const matched =
+          (conversationsResponse.data ?? []).find((item) => item.idConversation === conversationId) ??
+          null;
         setConversationOptions(conversationsResponse.data ?? []);
-        setConversation(matched ?? null);
-        setHeaderTitle(matched?.name?.trim() || 'Cuoc tro chuyen');
+        setConversation(matched);
+
+        if (!matched) {
+          setHeaderTitle('Cuộc trò chuyện');
+          setSenderProfiles({});
+          return;
+        }
+
+        if (matched.type === 'GROUP') {
+          setHeaderTitle(matched.name?.trim() || 'Nhóm chat');
+          setSenderProfiles({});
+          return;
+        }
+
+        const peerIdentityId =
+          matched.participantInfos.find(
+            (item) => item.idAccount !== (myProfileResponse.data.identityUserId ?? '')
+          )?.idAccount ?? null;
+        if (!peerIdentityId) {
+          setHeaderTitle(matched.name?.trim() || 'Cuộc trò chuyện');
+          setSenderProfiles({});
+          return;
+        }
+
+        try {
+          const peerProfileResponse = await userService.getProfileByIdentityUserId(peerIdentityId);
+          const peerName = toDisplayName(peerProfileResponse.data, matched.name?.trim() || peerIdentityId);
+          setHeaderTitle(peerName || 'Cuộc trò chuyện');
+          setSenderProfiles((prev) => ({
+            ...prev,
+            [peerIdentityId]: peerProfileResponse.data,
+          }));
+        } catch {
+          setHeaderTitle(matched.name?.trim() || 'Cuộc trò chuyện');
+        }
       } catch {
         if (!mounted) {
           return;
         }
         Toast.show({
           type: 'error',
-          text1: 'Khong tai duoc hoi thoai',
+          text1: 'Không tải được hội thoại',
         });
       } finally {
         if (!mounted) {
@@ -206,14 +501,13 @@ export default function ConversationDetailScreen() {
       const nextPage = page + 1;
       const res = await chatService.listMessages(conversationId, nextPage, MESSAGE_PAGE_SIZE);
       const moreItems = (res.data.items ?? []).map(toUiMessage);
-
-      setMessages((prev) => [...prev, ...moreItems]);
+      setMessages((prev) => dedupeMessagesById([...prev, ...moreItems]));
       setPage(nextPage);
       setHasMore((res.data.page ?? nextPage) < (res.data.totalPage ?? nextPage));
     } catch {
       Toast.show({
         type: 'error',
-        text1: 'Khong tai them duoc tin nhan',
+        text1: 'Không tải thêm được tin nhắn',
       });
     } finally {
       setIsLoadingMore(false);
@@ -234,14 +528,54 @@ export default function ConversationDetailScreen() {
       }
       subscription?.unsubscribe();
       subscription = chatSocketService.subscribeUserEvents((event) => {
-        if (event.eventType !== 'MESSAGE_UPSERT' || event.conversationId !== conversationId) {
+        if (event.conversationId !== conversationId) {
+          return;
+        }
+
+        if (event.eventType === 'CONVERSATION_UPSERT' && event.conversation) {
+          const incomingConversation = event.conversation;
+          setConversation((prev) => {
+            if (!prev) {
+              return incomingConversation;
+            }
+            return {
+              ...prev,
+              ...incomingConversation,
+              pinned: prev.pinned,
+              unreadCount: prev.unreadCount,
+            };
+          });
+          setConversationOptions((prev) => {
+            const index = prev.findIndex(
+              (item) => item.idConversation === incomingConversation.idConversation
+            );
+            if (index < 0) {
+              return prev;
+            }
+            const next = [...prev];
+            next[index] = {
+              ...next[index],
+              ...incomingConversation,
+              pinned: next[index]?.pinned,
+              unreadCount: next[index]?.unreadCount,
+            };
+            return next;
+          });
+          if (incomingConversation.type === 'GROUP') {
+            setHeaderTitle(incomingConversation.name?.trim() || 'Nhóm chat');
+          }
+          return;
+        }
+
+        if (event.eventType !== 'MESSAGE_UPSERT') {
           return;
         }
         const incoming = event.message;
         if (!incoming) {
           return;
         }
-        const isMine = myIdentityId != null && incoming.idAccountSent === myIdentityId;
+
+        const isMine = isMessageFromCurrentUser(incoming, myIdentityId, myAccountNumericId);
         setMessages((prev) => {
           const incomingUi = toUiMessage(incoming);
           const existingIndex = prev.findIndex((message) => message.idMessage === incoming.idMessage);
@@ -254,7 +588,7 @@ export default function ConversationDetailScreen() {
             const pendingIdx = prev.findIndex(
               (message) =>
                 message.optimisticStatus != null &&
-                message.idAccountSent === incoming.idAccountSent &&
+                isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId) &&
                 message.content === incoming.content
             );
             if (pendingIdx >= 0) {
@@ -264,7 +598,7 @@ export default function ConversationDetailScreen() {
             }
           }
           setShouldScrollToBottom(true);
-          return [incomingUi, ...prev];
+          return dedupeMessagesById([incomingUi, ...prev]);
         });
       });
     };
@@ -278,17 +612,75 @@ export default function ConversationDetailScreen() {
       cancelled = true;
       subscription?.unsubscribe();
     };
-  }, [conversationId, myIdentityId]);
+  }, [conversationId, myIdentityId, myAccountNumericId]);
+
+  useEffect(() => {
+    if (conversation?.type !== 'GROUP' || messages.length === 0) {
+      return;
+    }
+
+    const missingSenderIds = Array.from(
+      new Set(
+        messages
+          .filter((message) => !isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId))
+          .map((message) => message.idAccountSent)
+          .filter((senderId) => Boolean(senderId?.trim()))
+      )
+    ).filter((senderId) => !senderProfiles[senderId]);
+
+    if (missingSenderIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all(
+      missingSenderIds.map(async (senderId) => {
+        try {
+          const response = await userService.getProfileByIdentityUserId(senderId);
+          return [senderId, response.data] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((resolved) => {
+      if (cancelled) {
+        return;
+      }
+      const next: Record<string, UserProfile> = {};
+      resolved.forEach((item) => {
+        if (!item) {
+          return;
+        }
+        next[item[0]] = item[1];
+      });
+      if (Object.keys(next).length === 0) {
+        return;
+      }
+      setSenderProfiles((prev) => ({
+        ...prev,
+        ...next,
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation?.type, messages, myIdentityId, myAccountNumericId, senderProfiles]);
+
+  const handleOpenForwardPicker = useCallback((message: UiMessage) => {
+    setForwardSourceMessage(message);
+    setForwardPickerOpen(true);
+  }, []);
 
   const handleRecallMessage = useCallback(
     (messageId: string) => {
       if (!conversationId) {
         return;
       }
-      Alert.alert('Thu hoi tin nhan', 'Ban co chac chan muon thu hoi tin nhan nay?', [
-        { text: 'Huy', style: 'cancel' },
+      Alert.alert('Thu hồi tin nhắn', 'Bạn có chắc chắn muốn thu hồi tin nhắn này?', [
+        { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Thu hoi',
+          text: 'Thu hồi',
           style: 'destructive',
           onPress: () => {
             void (async () => {
@@ -298,10 +690,11 @@ export default function ConversationDetailScreen() {
                 setMessages((prev) =>
                   prev.map((item) => (item.idMessage === messageId ? recalledMessage : item))
                 );
+                setMessageActionTargetId(null);
               } catch {
                 Toast.show({
                   type: 'error',
-                  text1: 'Thu hoi tin nhan that bai',
+                  text1: 'Thu hồi tin nhắn thất bại',
                 });
               }
             })();
@@ -312,18 +705,108 @@ export default function ConversationDetailScreen() {
     [conversationId]
   );
 
-  const handleStartReply = useCallback((messageId: string) => {
-    setReplyingToMessageId(messageId);
-    const sourceMessage = messages.find((item) => item.idMessage === messageId);
-    if (sourceMessage && UNICALL_AI_BOT_IDS.includes(sourceMessage.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number])) {
-      setPrefillDraftRequestId(`${Date.now()}-${messageId}`);
-    }
-  }, [messages]);
+  const handleHideMessageForMe = useCallback(
+    (messageId: string) => {
+      if (!conversationId) {
+        return;
+      }
+      Alert.alert('Xóa ở phía tôi', 'Tin nhắn này sẽ bị xóa chỉ ở phía bạn.', [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await chatService.hideMessageForMe(conversationId, messageId);
+                setMessages((prev) => prev.filter((item) => item.idMessage !== messageId));
+                setReplyingToMessageId((prev) => (prev === messageId ? null : prev));
+                setMessageActionTargetId(null);
+                Toast.show({
+                  type: 'success',
+                  text1: 'Đã xóa tin nhắn ở phía bạn',
+                });
+              } catch {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Xóa tin nhắn ở phía bạn thất bại',
+                });
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [conversationId]
+  );
 
-  const handleOpenForwardPicker = useCallback((message: UiMessage) => {
-    setForwardSourceMessage(message);
-    setForwardPickerOpen(true);
-  }, []);
+  const handleTogglePinMessage = useCallback(
+    async (message: UiMessage) => {
+      if (!conversationId) {
+        return;
+      }
+      if (isGroupPinRestricted) {
+        setMessageActionTargetId(null);
+        Toast.show({
+          type: 'error',
+          text1: GROUP_MANAGER_ONLY_PIN_MESSAGE,
+        });
+        return;
+      }
+      try {
+        const response = message.pinned
+          ? await chatService.unpinMessage(conversationId, message.idMessage)
+          : await chatService.pinMessage(conversationId, message.idMessage);
+        const updated = toUiMessage(response.data);
+        setMessages((prev) => prev.map((item) => (item.idMessage === message.idMessage ? updated : item)));
+        setMessageActionTargetId(null);
+        Toast.show({
+          type: 'success',
+          text1: message.pinned ? '\u0110\u00E3 b\u1ECF ghim tin nh\u1EAFn' : '\u0110\u00E3 ghim tin nh\u1EAFn',
+        });
+      } catch (error) {
+        const backendMessage = getBackendErrorMessage(error);
+        if (isGroupPinPermissionError(backendMessage)) {
+          Toast.show({
+            type: 'error',
+            text1: GROUP_MANAGER_ONLY_PIN_MESSAGE,
+          });
+          return;
+        }
+        Toast.show({
+          type: 'error',
+          text1:
+            backendMessage ||
+            (message.pinned
+              ? 'B\u1ECF ghim tin nh\u1EAFn th\u1EA5t b\u1EA1i'
+              : 'Ghim tin nh\u1EAFn th\u1EA5t b\u1EA1i'),
+        });
+      }
+    },
+    [conversationId, isGroupPinRestricted]
+  );
+
+  const handleReactMessage = useCallback(
+    async (messageId: string, reaction: string | null) => {
+      if (!conversationId) {
+        return;
+      }
+      try {
+        const response = reaction
+          ? await chatService.reactMessage(conversationId, messageId, reaction)
+          : await chatService.clearReaction(conversationId, messageId);
+        const updated = toUiMessage(response.data);
+        setMessages((prev) => prev.map((item) => (item.idMessage === messageId ? updated : item)));
+        setMessageActionTargetId(null);
+      } catch {
+        Toast.show({
+          type: 'error',
+          text1: 'Cập nhật cảm xúc thất bại',
+        });
+      }
+    },
+    [conversationId]
+  );
 
   const handleForwardToConversation = useCallback(
     async (targetConversationId: string) => {
@@ -338,12 +821,12 @@ export default function ConversationDetailScreen() {
         setForwardSourceMessage(null);
         Toast.show({
           type: 'success',
-          text1: 'Da chuyen tiep tin nhan',
+          text1: 'Đã chuyển tiếp tin nhắn',
         });
       } catch {
         Toast.show({
           type: 'error',
-          text1: 'Chuyen tiep that bai',
+          text1: 'Chuyển tiếp thất bại',
         });
       }
     },
@@ -352,50 +835,100 @@ export default function ConversationDetailScreen() {
 
   const mappedMessages = useMemo<MockChatMessage[]>(() => {
     const messageById = new Map(messages.map((item) => [item.idMessage, item] as const));
-    const lastMineIndex = [...messages]
-      .map((message, index) => ({ message, index }))
-      .filter(({ message }) => myIdentityId != null && message.idAccountSent === myIdentityId)
-      .at(-1)?.index ?? -1;
+    const lastMineIndex =
+      [...messages]
+        .map((message, index) => ({ message, index }))
+        .filter(({ message }) => isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId))
+        .at(-1)?.index ?? -1;
 
     return messages.map((message, index) => {
       const prev = messages[index - 1];
-      const isMine = myIdentityId != null && message.idAccountSent === myIdentityId;
+      const isMine = isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId);
+      const senderProfile = senderProfiles[message.idAccountSent];
+      const senderDisplayName = resolveSenderName(message);
       const date = message.timeSent ? new Date(message.timeSent) : null;
       const timeLabel =
         date && !Number.isNaN(date.getTime())
           ? `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
           : undefined;
-      const repliedMessage = message.replyToMessageId
-        ? messageById.get(message.replyToMessageId)
+      const repliedMessage = message.replyToMessageId ? messageById.get(message.replyToMessageId) : undefined;
+      const repliedSenderName = repliedMessage ? resolveSenderName(repliedMessage) : undefined;
+      const replyPreview = repliedMessage
+        ? buildMessagePreviewData(
+            {
+              type: repliedMessage.type,
+              content: repliedMessage.content,
+              attachments: repliedMessage.attachments,
+              recalled: repliedMessage.recalled,
+            },
+            repliedSenderName
+          )
         : undefined;
+
+      const reactionSummary = summarizeMessageReactions({
+        reactionStacks: message.reactionStacks,
+        reactions: message.reactions,
+      });
 
       return {
         id: message.idMessage,
         sender: isMine ? 'me' : 'other',
         kind: message.recalled
           ? 'text'
-          : message.attachments.some((attachment) => attachment.type === 'STICKER')
-            ? 'sticker'
-            : message.attachments.length > 0 || message.type !== 'TEXT'
-              ? 'attachment'
-              : 'text',
+          : message.attachments.some(
+              (attachment) => attachment.type === 'STICKER' || attachment.type === 'GIF'
+            )
+          ? 'sticker'
+          : message.attachments.length > 0 || message.type !== 'TEXT'
+          ? 'attachment'
+          : 'text',
         content: message.content || '',
         rawType: message.type,
         attachments: message.attachments,
         recalled: message.recalled,
-        replyPreviewText: repliedMessage ? getMessagePreviewText(repliedMessage) : undefined,
-        senderName: !isMine && (!prev || prev.idAccountSent !== message.idAccountSent) ? headerTitle : undefined,
+        replyPreview,
+        senderName:
+          !isMine && (!prev || prev.idAccountSent !== message.idAccountSent)
+            ? conversation?.type === 'GROUP'
+              ? senderDisplayName
+              : headerTitle
+            : undefined,
+        senderAvatarUrl: !isMine ? senderProfile?.avatar ?? conversation?.avatar ?? null : null,
+        senderAvatarText: !isMine ? toInitials(senderDisplayName || headerTitle) : undefined,
         timeLabel,
         showAvatar: prev ? prev.idAccountSent !== message.idAccountSent && !isMine : !isMine,
+        reactionSummary: reactionSummary.items,
+        reactionTotal: reactionSummary.total,
+        pinned: message.pinned,
+        callActionLabel:
+          conversation?.type === 'GROUP' && message.type === 'CALL'
+            ? isCurrentConversationGroupCallOngoing
+              ? 'Tham gia'
+              : 'Tham gia'
+            : undefined,
+        callActionDisabled:
+          conversation?.type === 'GROUP' && message.type === 'CALL'
+            ? false
+            : undefined,
         statusText:
           isMine && index === lastMineIndex
             ? message.optimisticStatus === 'SENDING'
-              ? 'Dang gui...'
-              : 'Da gui'
+              ? 'Đang gửi...'
+              : 'Đã gửi'
             : undefined,
       };
     });
-  }, [messages, myIdentityId, headerTitle, getMessagePreviewText]);
+  }, [
+    conversation?.avatar,
+    conversation?.type,
+    headerTitle,
+    messages,
+    myAccountNumericId,
+    myIdentityId,
+    resolveSenderName,
+    senderProfiles,
+    isCurrentConversationGroupCallOngoing,
+  ]);
 
   const conversationGalleryImages = useMemo(() => {
     return messages.flatMap((message) =>
@@ -412,71 +945,150 @@ export default function ConversationDetailScreen() {
     return messages.find((item) => item.idMessage === replyingToMessageId) ?? null;
   }, [messages, replyingToMessageId]);
 
-  const forwardTargets = useMemo(() => {
-    return conversationOptions.filter((item) => item.idConversation !== conversationId);
-  }, [conversationId, conversationOptions]);
+  const replyingPreview = useMemo(() => {
+    if (!replyingToMessage) {
+      return null;
+    }
+    return buildMessagePreviewData(
+      {
+        type: replyingToMessage.type,
+        content: replyingToMessage.content,
+        recalled: replyingToMessage.recalled,
+        attachments: replyingToMessage.attachments,
+      },
+      resolveSenderName(replyingToMessage)
+    );
+  }, [replyingToMessage, resolveSenderName]);
+
+  const forwardTargets = useMemo(
+    () => conversationOptions.filter((item) => item.idConversation !== conversationId),
+    [conversationId, conversationOptions]
+  );
+
+  const selectedActionMessage = useMemo(
+    () => messages.find((item) => item.idMessage === messageActionTargetId) ?? null,
+    [messageActionTargetId, messages]
+  );
+
+  const selectedActionPreview = useMemo(() => {
+    if (!selectedActionMessage) {
+      return null;
+    }
+    return buildMessagePreviewData(
+      {
+        type: selectedActionMessage.type,
+        content: selectedActionMessage.content,
+        recalled: selectedActionMessage.recalled,
+        attachments: selectedActionMessage.attachments,
+      },
+      resolveSenderName(selectedActionMessage)
+    );
+  }, [resolveSenderName, selectedActionMessage]);
+
+  const pinnedMessages = useMemo(() => {
+    return [...messages]
+      .filter((item) => item.pinned && !item.recalled)
+      .sort((a, b) => {
+        const timeA = new Date(a.pinnedAt ?? a.timeSent).getTime();
+        const timeB = new Date(b.pinnedAt ?? b.timeSent).getTime();
+        return timeB - timeA;
+      });
+  }, [messages]);
+
+  useEffect(() => {
+    if (pinnedMessages.length === 0) {
+      setActivePinnedMessageId(null);
+      setIsPinnedListExpanded(false);
+      return;
+    }
+    setActivePinnedMessageId((prev) => {
+      if (prev && pinnedMessages.some((item) => item.idMessage === prev)) {
+        return prev;
+      }
+      return pinnedMessages[0]?.idMessage ?? null;
+    });
+  }, [pinnedMessages]);
+
+  const activePinnedMessage = useMemo(() => {
+    if (pinnedMessages.length === 0) {
+      return null;
+    }
+    return (
+      pinnedMessages.find((item) => item.idMessage === activePinnedMessageId) ??
+      pinnedMessages[0] ??
+      null
+    );
+  }, [activePinnedMessageId, pinnedMessages]);
+
+  const pinnedPreviewMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildMessagePreviewData>>();
+    pinnedMessages.forEach((item) => {
+      map.set(
+        item.idMessage,
+        buildMessagePreviewData(
+          {
+            type: item.type,
+            content: item.content,
+            recalled: item.recalled,
+            attachments: item.attachments,
+          },
+          resolveSenderName(item)
+        )
+      );
+    });
+    return map;
+  }, [pinnedMessages, resolveSenderName]);
+
+  const activePinnedPreview = useMemo(() => {
+    if (!activePinnedMessage) {
+      return null;
+    }
+    return pinnedPreviewMap.get(activePinnedMessage.idMessage) ?? null;
+  }, [activePinnedMessage, pinnedPreviewMap]);
 
   const handleSendMessage = async (content: string) => {
-    if (!conversationId || !myIdentityId || isSending) {
+    const mySenderId = myIdentityId ?? myAccountNumericId;
+    if (!conversationId || !mySenderId || isSending) {
+      return;
+    }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
+      return;
+    }
+
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
       return;
     }
 
     const replyToMessageId = replyingToMessageId;
-    const nowIso = new Date().toISOString();
-    const tempMessage: UiMessage = {
-      idMessage: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      idConversation: conversationId,
-      idAccountSent: myIdentityId,
-      content,
-      type: 'TEXT',
-      timeSent: nowIso,
-      attachments: [],
-      recalled: false,
-      replyToMessageId: replyToMessageId ?? undefined,
-      optimisticStatus: 'SENDING',
-    };
-    setMessages((prev) => [tempMessage, ...prev]);
-    setShouldScrollToBottom(true);
     setIsSending(true);
 
     try {
-      await chatSocketService.connect();
-      const connected = await waitForSocketConnected();
-      if (!connected) {
-        const response = await chatService.sendMessageRest(
-          conversationId,
-          content,
-          'TEXT',
-          undefined,
-          replyToMessageId ?? undefined
-        );
-        setMessages((prev) =>
-          prev.map((item) =>
-            item.idMessage === tempMessage.idMessage ? toUiMessage(response.data) : item
-          )
-        );
-        setReplyingToMessageId(null);
-        return;
-      }
-      chatSocketService.sendMessage(
+      const response = await chatService.sendMessageRest(
         conversationId,
-        content,
+        normalizedContent,
         'TEXT',
         undefined,
         replyToMessageId ?? undefined
       );
-      setMessages((prev) =>
-        prev.map((item) =>
-          item.idMessage === tempMessage.idMessage ? { ...item, optimisticStatus: 'SENT' } : item
-        )
-      );
+      const incoming = toUiMessage(response.data);
+      setMessages((prev) => {
+        if (prev.some((message) => message.idMessage === incoming.idMessage)) {
+          return prev;
+        }
+        return [incoming, ...prev];
+      });
+      setShouldScrollToBottom(true);
       setReplyingToMessageId(null);
     } catch (error) {
-      console.log(error);
-      setMessages((prev) => prev.filter((item) => item.idMessage !== tempMessage.idMessage));
+      const backendMessage = getBackendErrorMessage(error);
       Toast.show({
         type: 'error',
-        text1: 'Gui tin nhan that bai',
+        text1: backendMessage || 'G\u1EEDi tin nh\u1EAFn th\u1EA5t b\u1EA1i',
       });
     } finally {
       setIsSending(false);
@@ -484,7 +1096,15 @@ export default function ConversationDetailScreen() {
   };
 
   const handleSendImages = async (imageUris: string[], mixedText?: string) => {
-    if (!conversationId || !myIdentityId || isSending || imageUris.length === 0) {
+    const mySenderId = myIdentityId ?? myAccountNumericId;
+    if (!conversationId || !mySenderId || isSending || imageUris.length === 0) {
+      return;
+    }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
       return;
     }
 
@@ -522,11 +1142,51 @@ export default function ConversationDetailScreen() {
       });
       setShouldScrollToBottom(true);
       setReplyingToMessageId(null);
-    } catch (error) {
-      console.log(error);
+    } catch {
       Toast.show({
         type: 'error',
-        text1: 'Gui anh that bai',
+        text1: 'Gửi ảnh thất bại',
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendGif = async (gifUrl: string) => {
+    const mySenderId = myIdentityId ?? myAccountNumericId;
+    if (!conversationId || !mySenderId || isSending || !gifUrl) {
+      return;
+    }
+    if (isComposerBlocked) {
+      Toast.show({
+        type: 'error',
+        text1: blockedComposerReasonText,
+      });
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const response = await chatService.sendMessageRest(
+        conversationId,
+        '\u0110\u00E3 g\u1EEDi GIF',
+        'NONTEXT',
+        [{ type: 'GIF', url: gifUrl, order: 0 }],
+        replyingToMessageId ?? undefined
+      );
+      const incoming = toUiMessage(response.data);
+      setMessages((prev) => {
+        if (prev.some((message) => message.idMessage === incoming.idMessage)) {
+          return prev;
+        }
+        return [incoming, ...prev];
+      });
+      setShouldScrollToBottom(true);
+      setReplyingToMessageId(null);
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'G\u1EEDi GIF th\u1EA5t b\u1EA1i',
       });
     } finally {
       setIsSending(false);
@@ -539,6 +1199,111 @@ export default function ConversationDetailScreen() {
     backgroundColor: '#94a3b8',
   };
 
+  const closeForwardPicker = () => {
+    setForwardPickerOpen(false);
+    setForwardSourceMessage(null);
+  };
+
+  const openGroupCallPicker = () => {
+    if (!isGroupConversation || !conversationId) {
+      return;
+    }
+    if (groupCallSelectableMembers.length === 0) {
+      Toast.show({
+        type: 'info',
+        text1: 'Nhóm hiện không có thành viên khả dụng để gọi',
+      });
+      return;
+    }
+    setGroupCallSelectedUserIds([]);
+    setIsGroupCallPickerOpen(true);
+  };
+
+  const toggleGroupCallMember = (userId: string) => {
+    setGroupCallSelectedUserIds((prev) => {
+      if (prev.includes(userId)) {
+        return prev.filter((id) => id !== userId);
+      }
+      if (prev.length >= GROUP_CALL_MAX_TARGETS) {
+        Toast.show({
+          type: 'info',
+          text1: `Tối đa ${GROUP_CALL_MAX_MEMBERS} người trong cuộc gọi (bao gồm bạn)`,
+        });
+        return prev;
+      }
+      return [...prev, userId];
+    });
+  };
+
+  const startGroupVideoCall = () => {
+    if (!conversationId || !isGroupConversation) {
+      return;
+    }
+    if (groupCallSelectedUserIds.length === 0) {
+      Toast.show({
+        type: 'info',
+        text1: 'Chọn ít nhất 1 người để bắt đầu cuộc gọi nhóm',
+      });
+      return;
+    }
+
+    const selectedNormalizedIds: string[] = groupCallSelectedUserIds.reduce<string[]>((acc, id) => {
+      const normalized = normalizeId(id);
+      if (normalized) {
+        acc.push(normalized);
+      }
+      return acc;
+    }, []);
+    const selectedUserIdSet = new Set(selectedNormalizedIds);
+    const selfId = normalizeId(myIdentityId) ?? normalizeId(myAccountNumericId);
+    const groupMembersForCall = groupCallMembers.filter((member) => {
+      const normalizedMemberId = normalizeId(member.id);
+      if (!normalizedMemberId) {
+        return false;
+      }
+      return normalizedMemberId === selfId || selectedUserIdSet.has(normalizedMemberId);
+    });
+
+    setIsGroupCallPickerOpen(false);
+    void startVideoCall({
+      conversationId,
+      conversationType: 'GROUP',
+      peerUserId: groupCallSelectedUserIds[0] ?? 'group',
+      peerName: headerTitle,
+      peerAvatar: conversation?.avatar ?? null,
+      targetUserIds: groupCallSelectedUserIds,
+      groupMembers: groupMembersForCall,
+    });
+  };
+
+  const handleJoinGroupCallFromMessage = useCallback(async () => {
+    if (!conversationId) {
+      return;
+    }
+    const joined = await joinGroupCallFromConversation(conversationId);
+    if (joined) {
+      return;
+    }
+
+    Alert.alert(
+      'Cuộc gọi nhóm đã kết thúc. Gọi lại cho nhóm?',
+      '',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Gọi lại',
+          onPress: () => {
+            openGroupCallPicker();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [conversationId, joinGroupCallFromConversation]);
+
   return (
     <View className="flex-1 bg-[#d9dde8]">
       <AppStatusBarBlue />
@@ -549,7 +1314,14 @@ export default function ConversationDetailScreen() {
           router.back();
         }}
         onStartAudioCall={() => {
-          if (isMessageBlocked) {
+          if (isGroupConversation) {
+            Toast.show({
+              type: 'info',
+              text1: 'Cuộc gọi nhóm chỉ hỗ trợ gọi video',
+            });
+            return;
+          }
+          if (isDirectMessageBlocked) {
             Toast.show({
               type: 'error',
               text1: blockedCallReasonText,
@@ -559,7 +1331,7 @@ export default function ConversationDetailScreen() {
           if (!conversationId || !peerUserId) {
             Toast.show({
               type: 'error',
-              text1: 'Khong the bat dau cuoc goi',
+              text1: 'Không thể bắt đầu cuộc gọi',
             });
             return;
           }
@@ -568,20 +1340,25 @@ export default function ConversationDetailScreen() {
             peerUserId,
             peerName: headerTitle,
             peerAvatar: conversation?.avatar ?? null,
+            conversationType: 'DOUBLE',
           });
         }}
         onStartVideoCall={() => {
-          if (isMessageBlocked) {
+          if (isDirectMessageBlocked) {
             Toast.show({
               type: 'error',
               text1: blockedCallReasonText,
             });
             return;
           }
+          if (isGroupConversation) {
+            openGroupCallPicker();
+            return;
+          }
           if (!conversationId || !peerUserId) {
             Toast.show({
               type: 'error',
-              text1: 'Khong the bat dau cuoc goi',
+              text1: 'Không thể bắt đầu cuộc gọi',
             });
             return;
           }
@@ -590,39 +1367,125 @@ export default function ConversationDetailScreen() {
             peerUserId,
             peerName: headerTitle,
             peerAvatar: conversation?.avatar ?? null,
+            conversationType: 'DOUBLE',
           });
         }}
         onOpenOptions={() => {
-          if (conversationId) {
-            router.push(`/message/options/${conversationId}`);
+          if (!conversationId) {
             return;
           }
-          router.push('/message/options/hung');
+          router.push(`/message/options/${conversationId}`);
         }}
-        audioCallDisabled={isMessageBlocked || !peerUserId}
-        videoCallDisabled={isMessageBlocked || !peerUserId}
+        audioCallDisabled={isGroupConversation || isDirectMessageBlocked || !peerUserId}
+        videoCallDisabled={
+          isDirectMessageBlocked ||
+          (isGroupConversation ? groupCallSelectableMembers.length === 0 : !peerUserId)
+        }
       />
+
+      {activePinnedMessage && activePinnedPreview ? (
+        <View className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <View className="flex-row items-center justify-between">
+            <Pressable
+              className="flex-row items-center"
+              disabled={pinnedMessages.length <= 1}
+              onPress={() => {
+                if (pinnedMessages.length <= 1) {
+                  return;
+                }
+                setIsPinnedListExpanded((prev) => !prev);
+              }}>
+              <Ionicons name="pin" size={14} color="#b45309" />
+              <Text className="ml-1 text-[12px] font-semibold text-amber-700">
+                {`Tin nhắn ghim${pinnedMessages.length > 1 ? ` (${pinnedMessages.length})` : ''}`}
+              </Text>
+              {pinnedMessages.length > 1 ? (
+                <Ionicons
+                  name={isPinnedListExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color="#92400e"
+                />
+              ) : null}
+            </Pressable>
+            <Pressable
+              className="h-7 w-7 items-center justify-center rounded-full bg-amber-100"
+              onPress={() => void handleTogglePinMessage(activePinnedMessage)}>
+              <Ionicons name="close" size={14} color="#92400e" />
+            </Pressable>
+          </View>
+          <Pressable
+            className="mt-1 flex-row items-center"
+            disabled={pinnedMessages.length <= 1}
+            onPress={() => {
+              if (pinnedMessages.length > 1) {
+                setIsPinnedListExpanded((prev) => !prev);
+              }
+            }}>
+            {activePinnedPreview.kind !== 'text' ? <PinnedPreviewMedia preview={activePinnedPreview} /> : null}
+            <View className={`${activePinnedPreview.kind !== 'text' ? 'ml-2' : ''} flex-1`}>
+              <Text className="text-[11px] font-semibold text-amber-900" numberOfLines={1}>
+                {activePinnedPreview.senderName || 'Tin nhắn'}
+              </Text>
+              <Text className="text-[12px] text-amber-800" numberOfLines={1}>
+                {messagePreviewSnippetText(activePinnedPreview)}
+              </Text>
+            </View>
+          </Pressable>
+
+          {isPinnedListExpanded && pinnedMessages.length > 1 ? (
+            <View className="mt-2 border-t border-amber-200 pt-2">
+              {pinnedMessages.map((item) => {
+                const preview = pinnedPreviewMap.get(item.idMessage);
+                if (!preview) {
+                  return null;
+                }
+                return (
+                  <Pressable
+                    key={`pinned-item-${item.idMessage}`}
+                    className={`mb-1 rounded-lg px-2 py-1.5 ${
+                      item.idMessage === activePinnedMessage.idMessage ? 'bg-amber-100' : 'bg-transparent'
+                    }`}
+                    onPress={() => {
+                      setActivePinnedMessageId(item.idMessage);
+                      setIsPinnedListExpanded(false);
+                    }}>
+                    <View className="flex-row items-center">
+                      {preview.kind !== 'text' ? <PinnedPreviewMedia preview={preview} size={24} /> : null}
+                      <View className={`${preview.kind !== 'text' ? 'ml-2' : ''} flex-1`}>
+                        <Text className="text-[11px] font-medium text-amber-900" numberOfLines={1}>
+                          {preview.senderName || 'Tin nhắn'}
+                        </Text>
+                        <Text className="text-[11px] text-amber-700" numberOfLines={1}>
+                          {messagePreviewSnippetText(preview)}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <ChatDetailContent
         messages={mappedMessages}
         galleryImages={conversationGalleryImages}
         otherAvatar={avatar}
         otherAvatarUrl={conversation?.avatar ?? null}
-        inputPlaceholder="Tin nhan"
+        inputPlaceholder="Tin nhắn"
         isSending={isSending}
         isLoadingMore={isLoadingMore}
         hasMore={hasMore}
         shouldScrollToBottom={shouldScrollToBottom}
-        isInputBlocked={isMessageBlocked}
+        isInputBlocked={isComposerBlocked}
         blockedReasonText={blockedComposerReasonText}
-        prefillDraftText="@Unicall "
-        prefillDraftRequestId={prefillDraftRequestId}
-        replyPreviewText={replyingToMessage ? getMessagePreviewText(replyingToMessage) : null}
+        replyPreview={replyingPreview}
         onCancelReply={() => setReplyingToMessageId(null)}
         onSend={handleSendMessage}
         onSendImages={handleSendImages}
+        onSendGif={handleSendGif}
         onLongPressMessage={(message) => {
-          const isMyMessage = message.sender === 'me';
           if (message.recalled || message.rawType === 'CALL') {
             return;
           }
@@ -630,51 +1493,222 @@ export default function ConversationDetailScreen() {
           if (!idMessage) {
             return;
           }
-          const sourceMessage = messages.find((item) => item.idMessage === idMessage);
-          if (!sourceMessage) {
+          setMessageActionTargetId(idMessage);
+        }}
+        onPressCallMessage={(message) => {
+          if (conversation?.type !== 'GROUP' || message.rawType !== 'CALL') {
             return;
           }
-          const options: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
-            {
-              text: 'Tra loi',
-              onPress: () => handleStartReply(idMessage),
-            },
-            {
-              text: 'Chuyen tiep',
-              onPress: () => handleOpenForwardPicker(sourceMessage),
-            },
-          ];
-          if (isMyMessage) {
-            options.push({
-              text: 'Thu hoi',
-              style: 'destructive',
-              onPress: () => handleRecallMessage(idMessage),
-            });
-          }
-          options.push({ text: 'Huy', style: 'cancel' });
-          Alert.alert('Tuy chon tin nhan', 'Chon thao tac', options);
+          void handleJoinGroupCallFromMessage();
         }}
         onLoadMore={loadMoreMessages}
         onScrolledToBottom={() => setShouldScrollToBottom(false)}
       />
 
       <Modal
+        visible={isGroupCallPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsGroupCallPickerOpen(false)}>
+        <Pressable
+          className="flex-1 justify-end bg-black/35"
+          onPress={() => setIsGroupCallPickerOpen(false)}>
+          <Pressable
+            className="max-h-[70%] rounded-t-2xl bg-white px-4 pb-4 pt-3"
+            onPress={(event) => event.stopPropagation()}>
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-slate-900">Chọn người tham gia</Text>
+              <Pressable
+                onPress={() => setIsGroupCallPickerOpen(false)}
+                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
+                <Text className="text-slate-600">x</Text>
+              </Pressable>
+            </View>
+            <Text className="mb-2 text-xs text-slate-500">
+              Tối đa {GROUP_CALL_MAX_MEMBERS} người trong cuộc gọi (bao gồm bạn).
+            </Text>
+            <FlatList
+              data={groupCallSelectableMembers}
+              keyExtractor={(item) => item.id}
+              ListEmptyComponent={
+                <View className="py-8">
+                  <Text className="text-center text-sm text-slate-500">
+                    Không có thành viên phù hợp
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const isChecked = groupCallSelectedUserIds.includes(item.id);
+                return (
+                  <Pressable
+                    className="mb-2 flex-row items-center rounded-lg border border-slate-200 px-3 py-2.5"
+                    onPress={() => toggleGroupCallMember(item.id)}>
+                    <View
+                      className={`h-5 w-5 items-center justify-center rounded border ${
+                        isChecked ? 'border-blue-500 bg-blue-500' : 'border-slate-300 bg-white'
+                      }`}>
+                      {isChecked ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
+                    </View>
+                    {item.avatar ? (
+                      <Image
+                        source={{ uri: item.avatar }}
+                        className="ml-2.5 h-9 w-9 rounded-full"
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="ml-2.5 h-9 w-9 items-center justify-center rounded-full bg-slate-300">
+                        <Text className="text-xs font-semibold text-white">
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <Text className="ml-2.5 flex-1 text-[14px] text-slate-900" numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="text-xs text-slate-500">
+                Đã chọn {groupCallSelectedUserIds.length}/{GROUP_CALL_MAX_TARGETS}
+              </Text>
+              <View className="flex-row gap-2">
+                <Pressable
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                  onPress={() => setIsGroupCallPickerOpen(false)}>
+                  <Text className="text-sm text-slate-700">Hủy</Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-lg bg-[#1e98f3] px-3 py-2"
+                  onPress={startGroupVideoCall}>
+                  <Text className="text-sm font-medium text-white">Bắt đầu gọi</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={Boolean(selectedActionMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMessageActionTargetId(null)}>
+        <Pressable
+          className="flex-1 justify-end bg-black/45"
+          onPress={() => setMessageActionTargetId(null)}>
+          <Pressable
+            className="rounded-t-3xl bg-white px-4 pb-5 pt-4"
+            onPress={(event) => event.stopPropagation()}>
+            {selectedActionPreview ? (
+              <View className="mb-3 rounded-xl bg-sky-50 px-3 py-2">
+                <Text className="text-[11px] font-semibold text-sky-700">
+                  {selectedActionPreview.senderName || 'Tin nhắn'}
+                </Text>
+                <Text className="mt-1 text-[13px] text-slate-700" numberOfLines={2}>
+                  {messagePreviewSnippetText(selectedActionPreview)}
+                </Text>
+              </View>
+            ) : null}
+
+            <View className="mb-3 rounded-2xl bg-slate-100 px-2 py-2">
+              <View className="flex-row items-center justify-between">
+                {QUICK_MESSAGE_REACTIONS.map((emoji) => (
+                  <Pressable
+                    key={`message-action-reaction-${emoji}`}
+                    className="h-10 w-10 items-center justify-center rounded-full bg-white"
+                    onPress={() => {
+                      if (!selectedActionMessage) {
+                        return;
+                      }
+                      void handleReactMessage(selectedActionMessage.idMessage, emoji);
+                    }}>
+                    <Text className="text-[22px]">{emoji}</Text>
+                  </Pressable>
+                ))}
+                <Pressable
+                  className="h-10 w-10 items-center justify-center rounded-full bg-white"
+                  onPress={() => {
+                    if (!selectedActionMessage) {
+                      return;
+                    }
+                    void handleReactMessage(selectedActionMessage.idMessage, null);
+                  }}>
+                  <Ionicons name="close" size={18} color="#475569" />
+                </Pressable>
+              </View>
+            </View>
+
+            <MessageActionItem
+              icon="return-up-back-outline"
+              label="Trả lời"
+              onPress={() => {
+                if (!selectedActionMessage) {
+                  return;
+                }
+                setReplyingToMessageId(selectedActionMessage.idMessage);
+                setMessageActionTargetId(null);
+              }}
+            />
+            <MessageActionItem
+              icon="arrow-redo-outline"
+              label="Chuyển tiếp"
+              onPress={() => {
+                if (!selectedActionMessage) {
+                  return;
+                }
+                handleOpenForwardPicker(selectedActionMessage);
+                setMessageActionTargetId(null);
+              }}
+            />
+            <MessageActionItem
+              icon={selectedActionMessage?.pinned ? 'pin-outline' : 'pin'}
+              label={selectedActionMessage?.pinned ? 'Bỏ ghim tin nhắn' : 'Ghim tin nhắn'}
+              onPress={() => {
+                if (!selectedActionMessage) {
+                  return;
+                }
+                void handleTogglePinMessage(selectedActionMessage);
+              }}
+            />
+            <MessageActionItem
+              icon="eye-off-outline"
+              label="Xóa ở phía tôi"
+              danger
+              onPress={() => {
+                if (!selectedActionMessage) {
+                  return;
+                }
+                handleHideMessageForMe(selectedActionMessage.idMessage);
+              }}
+            />
+            {selectedActionMessage &&
+            isMessageFromCurrentUser(selectedActionMessage, myIdentityId, myAccountNumericId) ? (
+              <MessageActionItem
+                icon="trash-outline"
+                label="Thu hồi"
+                danger
+                onPress={() => handleRecallMessage(selectedActionMessage.idMessage)}
+              />
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={forwardPickerOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          setForwardPickerOpen(false);
-          setForwardSourceMessage(null);
-        }}>
-        <View className="flex-1 justify-end bg-black/35">
-          <View className="max-h-[70%] rounded-t-2xl bg-white px-4 pb-4 pt-3">
+        onRequestClose={closeForwardPicker}>
+        <Pressable className="flex-1 justify-end bg-black/35" onPress={closeForwardPicker}>
+          <Pressable
+            className="max-h-[70%] rounded-t-2xl bg-white px-4 pb-4 pt-3"
+            onPress={(event) => event.stopPropagation()}>
             <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-base font-semibold text-slate-900">Chuyen tiep tin nhan</Text>
+              <Text className="text-base font-semibold text-slate-900">Chuyển tiếp tin nhắn</Text>
               <Pressable
-                onPress={() => {
-                  setForwardPickerOpen(false);
-                  setForwardSourceMessage(null);
-                }}
+                onPress={closeForwardPicker}
                 className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
                 <Text className="text-slate-600">x</Text>
               </Pressable>
@@ -684,7 +1718,9 @@ export default function ConversationDetailScreen() {
               keyExtractor={(item) => item.idConversation}
               ListEmptyComponent={
                 <View className="py-8">
-                  <Text className="text-center text-sm text-slate-500">Khong co cuoc tro chuyen de chuyen tiep</Text>
+                  <Text className="text-center text-sm text-slate-500">
+                    Không có cuộc trò chuyện để chuyển tiếp
+                  </Text>
                 </View>
               }
               renderItem={({ item }) => (
@@ -695,13 +1731,13 @@ export default function ConversationDetailScreen() {
                     {item.name?.trim() || item.idConversation}
                   </Text>
                   <Text className="mt-0.5 text-xs text-slate-500">
-                    {item.type === 'GROUP' ? 'Nhom' : 'Ca nhan'}
+                    {item.type === 'GROUP' ? 'Nhóm' : 'Cá nhân'}
                   </Text>
                 </Pressable>
               )}
             />
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );

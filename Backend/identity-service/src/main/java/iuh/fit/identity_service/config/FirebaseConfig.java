@@ -17,7 +17,7 @@ public class FirebaseConfig {
     @Value("${app.firebase.enabled:false}")
     private boolean firebaseEnabled;
 
-    @Value("${app.firebase.credentials-path:}")
+    @Value("${app.firebase.credentials-path:C:/Users/gvhoa/Downloads/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}")
     private String firebaseCredentialsPath;
 
     @PostConstruct

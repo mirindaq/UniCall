@@ -236,6 +236,7 @@ export const chatSocketService = {
     type: CallSignalType,
     extras?: {
       audioOnly?: boolean;
+      targetUserIds?: string[];
       sdp?: string;
       candidate?: string;
       sdpMid?: string;
@@ -253,6 +254,7 @@ export const chatSocketService = {
         callId,
         type,
         audioOnly: extras?.audioOnly ?? true,
+        targetUserIds: extras?.targetUserIds,
         sdp: extras?.sdp,
         candidate: extras?.candidate,
         sdpMid: extras?.sdpMid,

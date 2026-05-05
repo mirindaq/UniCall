@@ -1,15 +1,20 @@
 package iuh.fit.chat_service.controllers;
 
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
+import iuh.fit.chat_service.dtos.request.CreateSfuTokenRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupMemberRoleRequest;
+import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
 import iuh.fit.chat_service.dtos.request.UpdateMemberNicknameRequest;
 import iuh.fit.chat_service.dtos.response.CreateGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.DissolveGroupConversationResponse;
 import iuh.fit.chat_service.dtos.response.ManageGroupParticipantsResponse;
+import iuh.fit.chat_service.dtos.response.SfuAccessTokenResponse;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.services.ConversationService;
+import iuh.fit.chat_service.services.SfuTokenService;
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +39,7 @@ public class ConversationController {
     private static final String USER_ID_HEADER = "X-User-Id";
 
     private final ConversationService conversationService;
+    private final SfuTokenService sfuTokenService;
 
     @PostMapping("/groups")
     public ResponseEntity<ResponseSuccess<CreateGroupConversationResponse>> createGroupConversation(
@@ -56,12 +62,16 @@ public class ConversationController {
             @PathVariable String conversationId,
             @Valid @RequestBody AddGroupMembersRequest request
     ) {
-        Conversation conversation = conversationService.addGroupMembers(currentIdentityUserId, conversationId, request);
+        ManageGroupParticipantsResponse result = conversationService.addGroupMembers(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
         return ResponseEntity.ok(
                 new ResponseSuccess<>(
                         HttpStatus.OK,
                         "Add group members success",
-                        ManageGroupParticipantsResponse.from(conversation)
+                        result
                 )
         );
     }
@@ -145,6 +155,86 @@ public class ConversationController {
         );
     }
 
+    @PatchMapping("/{conversationId}/management-settings")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> updateGroupManagementSettings(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @Valid @RequestBody UpdateGroupManagementSettingsRequest request
+    ) {
+        Conversation conversation = conversationService.updateGroupManagementSettings(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Update group management settings success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PatchMapping("/{conversationId}/avatar")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> updateGroupAvatar(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @Valid @RequestBody UpdateGroupAvatarRequest request
+    ) {
+        Conversation conversation = conversationService.updateGroupAvatar(
+                currentIdentityUserId,
+                conversationId,
+                request
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Update group avatar success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PostMapping("/{conversationId}/member-requests/{requestId}/approve")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> approveGroupMemberRequest(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String requestId
+    ) {
+        Conversation conversation = conversationService.approveGroupMemberRequest(
+                currentIdentityUserId,
+                conversationId,
+                requestId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Approve group member request success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @DeleteMapping("/{conversationId}/member-requests/{requestId}")
+    public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> rejectGroupMemberRequest(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @PathVariable String requestId
+    ) {
+        Conversation conversation = conversationService.rejectGroupMemberRequest(
+                currentIdentityUserId,
+                conversationId,
+                requestId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Reject group member request success",
+                        ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
     @PatchMapping("/{conversationId}/transfer-admin")
     public ResponseEntity<ResponseSuccess<ManageGroupParticipantsResponse>> transferGroupAdmin(
             @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
@@ -172,6 +262,27 @@ public class ConversationController {
                         HttpStatus.OK,
                         "Leave group conversation success",
                         ManageGroupParticipantsResponse.from(conversation)
+                )
+        );
+    }
+
+    @PostMapping("/{conversationId}/calls/sfu-token")
+    public ResponseEntity<ResponseSuccess<SfuAccessTokenResponse>> createSfuAccessToken(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
+            @PathVariable String conversationId,
+            @RequestBody(required = false) CreateSfuTokenRequest request
+    ) {
+        String callId = request == null ? null : request.getCallId();
+        SfuAccessTokenResponse response = sfuTokenService.createConversationCallToken(
+                currentIdentityUserId,
+                conversationId,
+                callId
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(
+                        HttpStatus.OK,
+                        "Create SFU token success",
+                        response
                 )
         );
     }

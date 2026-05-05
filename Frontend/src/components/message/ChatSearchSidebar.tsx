@@ -506,8 +506,11 @@ export default function ChatSearchSidebar() {
             .slice(0, ATTACHMENT_PREVIEW_LIMIT)
         }
 
+        const imageItems = (imagesRes.data ?? []).filter(
+          (item) => item.type === "IMAGE" || item.type === "VIDEO"
+        )
         setAttachments({
-          images: sortByLatest(imagesRes.data ?? []),
+          images: sortByLatest(imageItems),
           files: sortByLatest(filesRes.data ?? []),
           links: sortByLatest(linksRes.data ?? []),
         })

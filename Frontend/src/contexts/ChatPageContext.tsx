@@ -24,8 +24,8 @@ type ChatPageContextValue = {
   conversationAvatar: (c: ConversationResponse) => string | undefined
   selectedConversation: ConversationResponse | null
   selectedPeerProfile: UserProfile | null
-  detailsView: "main" | "storage" | "group-members" | "search"
-  setDetailsView: (view: "main" | "storage" | "group-members" | "search") => void
+  detailsView: "main" | "storage" | "group-members" | "group-manage" | "search"
+  setDetailsView: (view: "main" | "storage" | "group-members" | "group-manage" | "search") => void
   isDetailsPanelOpen: boolean
   setDetailsPanelOpen: (open: boolean) => void
   toggleDetailsPanel: () => void
@@ -33,6 +33,7 @@ type ChatPageContextValue = {
   requestMessageFocus: (messageId: string) => void
   clearMessageFocusRequest: () => void
   onRealtimeMessage: (message: ChatMessageResponse) => void
+  onRealtimeConversation: (conversation: ConversationResponse) => void
 }
 
 const normalizeConversationPreviewContent = (value: string | null | undefined): string => {
@@ -100,7 +101,7 @@ const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
-  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "search">("main")
+  const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "group-manage" | "search">("main")
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
   const [messageFocusRequestId, setMessageFocusRequestId] = useState<string | null>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
@@ -285,6 +286,40 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     })
   }, [currentUserId, markConversationAsRead, refetchConversationsSafely, selectedConversationId])
 
+  const onRealtimeConversation = useCallback((conversation: ConversationResponse) => {
+    if (!conversation?.idConversation) {
+      return
+    }
+
+    let found = false
+    setConversations((prev) => {
+      const index = prev.findIndex((item) => item.idConversation === conversation.idConversation)
+      if (index < 0) {
+        return prev
+      }
+
+      found = true
+      const existing = prev[index]
+      const next = [...prev]
+      next[index] = {
+        ...existing,
+        ...conversation,
+        pinned: existing.pinned,
+        unreadCount: existing.unreadCount,
+        lastMessageContent: normalizeConversationPreviewContent(
+          conversation.lastMessageContent ?? existing.lastMessageContent
+        ),
+        lastMessageSenderId:
+          conversation.lastMessageSenderId ?? existing.lastMessageSenderId,
+      }
+      return sortConversationsByPinnedAndTime(next)
+    })
+
+    if (!found) {
+      void refetchConversationsSafely()
+    }
+  }, [refetchConversationsSafely])
+
   const selectConversation = useCallback((id: string | null) => {
     setSelectedConversationId(id)
     setDetailsView("main")
@@ -351,6 +386,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       requestMessageFocus,
       clearMessageFocusRequest,
       onRealtimeMessage,
+      onRealtimeConversation,
     }),
     [
       conversationAvatar,
@@ -373,6 +409,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
       requestMessageFocus,
       clearMessageFocusRequest,
       onRealtimeMessage,
+      onRealtimeConversation,
       selectedConversationId,
       startChatWithUser,
     ],

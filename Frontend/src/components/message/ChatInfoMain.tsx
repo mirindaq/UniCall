@@ -2,6 +2,7 @@
   AlertTriangle,
   Ban,
   BellOff,
+  Camera,
   ChevronDown,
   Clock,
   Download,
@@ -11,10 +12,11 @@
   Link as LinkIcon,
   LogOut,
   Pin,
+  Settings,
   Trash2,
-  Users,
+  UserPlus,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { toast } from "sonner"
 
 import {
@@ -29,7 +31,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
@@ -38,10 +46,16 @@ import { useChatPage } from "@/contexts/ChatPageContext"
 import { useMutation } from "@/hooks/useMutation"
 import { useQuery } from "@/hooks/useQuery"
 import { chatService } from "@/services/chat/chat.service"
-import { fileService, type AttachmentResponse } from "@/services/file/file.service"
+import {
+  fileService,
+  type AttachmentResponse,
+} from "@/services/file/file.service"
 import { formatChatSidebarTime } from "@/utils/chat-display.util"
 import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
-import { extractUrlsFromText, getDomainFromUrl } from "@/utils/link-display.util"
+import {
+  extractUrlsFromText,
+  getDomainFromUrl,
+} from "@/utils/link-display.util"
 
 import ImageGalleryViewer, { type ImageViewerItem } from "./ImageGalleryViewer"
 
@@ -51,6 +65,9 @@ interface ChatInfoMainProps {
   avatarSrc?: string
   avatarFallback: string
   isGroup?: boolean
+  onOpenGroupMembers?: () => void
+  canManageGroupSettings?: boolean
+  onOpenGroupManage?: () => void
   canDissolveGroup?: boolean
   onLeaveGroup?: () => Promise<void>
   onDissolveGroup?: () => Promise<void>
@@ -111,6 +128,9 @@ export default function ChatInfoMain({
   avatarSrc,
   avatarFallback,
   isGroup = false,
+  onOpenGroupMembers,
+  canManageGroupSettings = false,
+  onOpenGroupManage,
   canDissolveGroup = false,
   onLeaveGroup,
   onDissolveGroup,
@@ -129,68 +149,120 @@ export default function ChatInfoMain({
   const [filesPreview, setFilesPreview] = useState<AttachmentResponse[]>([])
   const [linksPreview, setLinksPreview] = useState<LinkPreviewItem[]>([])
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [allImageAttachments, setAllImageAttachments] = useState<AttachmentResponse[]>([])
-  const [imagePreview, setImagePreview] = useState<{ images: ImageViewerItem[]; initialIndex: number } | null>(null)
+  const [allImageAttachments, setAllImageAttachments] = useState<
+    AttachmentResponse[]
+  >([])
+  const [imagePreview, setImagePreview] = useState<{
+    images: ImageViewerItem[]
+    initialIndex: number
+  } | null>(null)
   const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false)
   const [nicknameDraft, setNicknameDraft] = useState("")
   const [isSavingNickname, setIsSavingNickname] = useState(false)
   const [isPinningConversation, setIsPinningConversation] = useState(false)
+  const [isUpdatingGroupAvatar, setIsUpdatingGroupAvatar] = useState(false)
+  const groupAvatarInputRef = useRef<HTMLInputElement | null>(null)
 
-  const { selectedConversationId, selectedConversation, currentUserId, refetchConversations } = useChatPage()
+  const {
+    selectedConversationId,
+    selectedConversation,
+    currentUserId,
+    refetchConversations,
+  } = useChatPage()
 
   const directPeer = useMemo(() => {
-    if (!selectedConversation || selectedConversation.type !== "DOUBLE" || !currentUserId) {
+    if (
+      !selectedConversation ||
+      selectedConversation.type !== "DOUBLE" ||
+      !currentUserId
+    ) {
       return null
     }
     return (
-      selectedConversation.participantInfos.find((participant) => participant.idAccount !== currentUserId) ?? null
+      selectedConversation.participantInfos.find(
+        (participant) => participant.idAccount !== currentUserId
+      ) ?? null
     )
   }, [currentUserId, selectedConversation])
 
-  const canManageBlockMessaging = Boolean(selectedConversationId) && selectedConversation?.type === "DOUBLE"
+  const currentGroupRole = useMemo(() => {
+    if (
+      !selectedConversation ||
+      selectedConversation.type !== "GROUP" ||
+      !currentUserId
+    ) {
+      return null
+    }
+    return (
+      selectedConversation.participantInfos.find(
+        (participant) => participant.idAccount === currentUserId
+      )?.role ?? null
+    )
+  }, [currentUserId, selectedConversation])
+  const isCurrentUserGroupManager =
+    currentGroupRole === "ADMIN" || currentGroupRole === "DEPUTY"
+  const allowMemberChangeGroupAvatar =
+    selectedConversation?.groupManagementSettings?.allowMemberChangeAvatar ??
+    true
+  const canChangeGroupAvatar = Boolean(
+    selectedConversationId &&
+    selectedConversation?.type === "GROUP" &&
+    (isCurrentUserGroupManager || allowMemberChangeGroupAvatar)
+  )
+
+  const canManageBlockMessaging =
+    Boolean(selectedConversationId) && selectedConversation?.type === "DOUBLE"
   const {
     data: blockStatusResponse,
     isLoading: isLoadingBlockStatus,
     refetch: refetchBlockStatus,
   } = useQuery(
-    () => chatService.getConversationBlockStatus(selectedConversationId as string),
+    () =>
+      chatService.getConversationBlockStatus(selectedConversationId as string),
     {
       enabled: canManageBlockMessaging,
       deps: [selectedConversationId, selectedConversation?.type],
       onError: () => {
         toast.error("Không thể tải trạng thái chặn nhắn tin.")
       },
-    },
+    }
   )
   const blockStatus = blockStatusResponse?.data ?? null
 
-  const { mutate: mutateBlockMessaging, isLoading: isTogglingBlock } = useMutation(
-    () => {
-      if (!selectedConversationId) {
-        throw new Error("Missing conversation id")
-      }
-      return blockStatus?.blockedByMe
-        ? chatService.unblockConversation(selectedConversationId)
-        : chatService.blockConversation(selectedConversationId)
-    },
-    {
-      onSuccess: () => {
-        void refetchBlockStatus()
-        if (selectedConversationId) {
-          window.dispatchEvent(
-            new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
-              detail: { conversationId: selectedConversationId },
-            }),
-          )
+  const { mutate: mutateBlockMessaging, isLoading: isTogglingBlock } =
+    useMutation(
+      () => {
+        if (!selectedConversationId) {
+          throw new Error("Missing conversation id")
         }
-        toast.success(blockStatus?.blockedByMe ? "Đã bỏ chặn nhắn tin." : "Đã chặn nhắn tin.")
+        return blockStatus?.blockedByMe
+          ? chatService.unblockConversation(selectedConversationId)
+          : chatService.blockConversation(selectedConversationId)
       },
-      onError: (error: unknown) => {
-        const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-        toast.error(backendMessage || "Cập nhật trạng thái chặn thất bại.")
-      },
-    },
-  )
+      {
+        onSuccess: () => {
+          void refetchBlockStatus()
+          if (selectedConversationId) {
+            window.dispatchEvent(
+              new CustomEvent(CHAT_BLOCK_STATUS_CHANGED_EVENT, {
+                detail: { conversationId: selectedConversationId },
+              })
+            )
+          }
+          toast.success(
+            blockStatus?.blockedByMe
+              ? "Đã bỏ chặn nhắn tin."
+              : "Đã chặn nhắn tin."
+          )
+        },
+        onError: (error: unknown) => {
+          const backendMessage = (
+            error as { response?: { data?: { message?: string } } }
+          )?.response?.data?.message
+          toast.error(backendMessage || "Cập nhật trạng thái chặn thất bại.")
+        },
+      }
+    )
 
   useEffect(() => {
     if (!isNicknameDialogOpen) {
@@ -220,7 +292,9 @@ export default function ChatInfoMain({
         ])
 
         let linksCollected: LinkPreviewItem[] = (linksRes.data ?? [])
-          .filter((attachment) => attachment.type === "LINK" && !!attachment.url)
+          .filter(
+            (attachment) => attachment.type === "LINK" && !!attachment.url
+          )
           .map((attachment) => ({
             id: attachment.idAttachment,
             url: attachment.url,
@@ -234,7 +308,11 @@ export default function ChatInfoMain({
           let totalPage = 1
 
           do {
-            const messagesRes = await chatService.listMessages(selectedConversationId, page, LINK_PAGE_LIMIT)
+            const messagesRes = await chatService.listMessages(
+              selectedConversationId,
+              page,
+              LINK_PAGE_LIMIT
+            )
             const paged = messagesRes.data
             const items = paged.items ?? []
             totalPage = paged.totalPage ?? page
@@ -262,13 +340,19 @@ export default function ChatInfoMain({
           return
         }
 
-        linksCollected.sort((a, b) => new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime())
+        linksCollected.sort(
+          (a, b) =>
+            new Date(b.timeSent).getTime() - new Date(a.timeSent).getTime()
+        )
 
-        const sortedImages = (imagesRes.data ?? []).slice().sort((a, b) => {
-          const right = new Date(b.timeSent ?? b.timeUpload).getTime()
-          const left = new Date(a.timeSent ?? a.timeUpload).getTime()
-          return right - left
-        })
+        const sortedImages = (imagesRes.data ?? [])
+          .filter((item) => item.type === "IMAGE" || item.type === "VIDEO")
+          .slice()
+          .sort((a, b) => {
+            const right = new Date(b.timeSent ?? b.timeUpload).getTime()
+            const left = new Date(a.timeSent ?? a.timeUpload).getTime()
+            return right - left
+          })
         const onlyImages = sortedImages.filter((item) => item.type === "IMAGE")
 
         setAllImageAttachments(onlyImages)
@@ -294,8 +378,11 @@ export default function ChatInfoMain({
   }, [selectedConversationId])
 
   const imageIndexById = useMemo(
-    () => new Map(allImageAttachments.map((item, index) => [item.idAttachment, index])),
-    [allImageAttachments],
+    () =>
+      new Map(
+        allImageAttachments.map((item, index) => [item.idAttachment, index])
+      ),
+    [allImageAttachments]
   )
 
   const getFileExtension = useMemo(() => {
@@ -313,8 +400,10 @@ export default function ChatInfoMain({
       if (lowerExt.includes("doc")) return "bg-blue-500"
       if (lowerExt.includes("xls")) return "bg-green-500"
       if (lowerExt.includes("ppt")) return "bg-orange-500"
-      if (lowerExt.includes("zip") || lowerExt.includes("rar")) return "bg-yellow-600"
-      if (lowerExt.includes("mp3") || lowerExt.includes("wav")) return "bg-purple-500"
+      if (lowerExt.includes("zip") || lowerExt.includes("rar"))
+        return "bg-yellow-600"
+      if (lowerExt.includes("mp3") || lowerExt.includes("wav"))
+        return "bg-purple-500"
       return "bg-gray-500"
     }
   }, [])
@@ -358,9 +447,13 @@ export default function ChatInfoMain({
     }
     setIsSavingNickname(true)
     try {
-      await chatService.updateMemberNickname(selectedConversationId, directPeer.idAccount, {
-        nickname: nicknameDraft.trim(),
-      })
+      await chatService.updateMemberNickname(
+        selectedConversationId,
+        directPeer.idAccount,
+        {
+          nickname: nicknameDraft.trim(),
+        }
+      )
       toast.success("Đã cập nhật biệt danh.")
       setIsNicknameDialogOpen(false)
       await refetchConversations()
@@ -372,7 +465,11 @@ export default function ChatInfoMain({
   }
 
   const handleToggleConversationPin = async () => {
-    if (!selectedConversationId || !selectedConversation || isPinningConversation) {
+    if (
+      !selectedConversationId ||
+      !selectedConversation ||
+      isPinningConversation
+    ) {
       return
     }
     setIsPinningConversation(true)
@@ -384,7 +481,9 @@ export default function ChatInfoMain({
       }
       await refetchConversations()
     } catch (error) {
-      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      const backendMessage = (
+        error as { response?: { data?: { message?: string } } }
+      )?.response?.data?.message
       toast.error(backendMessage || "Cập nhật ghim hội thoại thất bại.")
     } finally {
       setIsPinningConversation(false)
@@ -398,6 +497,50 @@ export default function ChatInfoMain({
     void mutateBlockMessaging(null)
   }
 
+  const handleGroupAvatarFileChanged = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    if (
+      !file ||
+      !selectedConversationId ||
+      !canChangeGroupAvatar ||
+      isUpdatingGroupAvatar
+    ) {
+      if (event.target) {
+        event.target.value = ""
+      }
+      return
+    }
+
+    setIsUpdatingGroupAvatar(true)
+    try {
+      const uploadResponse = await fileService.uploadFile(file)
+      await chatService.updateGroupAvatar(selectedConversationId, {
+        avatar: uploadResponse.data.url,
+      })
+      toast.success("Đã cập nhật ảnh đại diện nhóm.")
+      await refetchConversations()
+    } catch (error) {
+      const backendMessage = (
+        error as { response?: { data?: { message?: string } } }
+      )?.response?.data?.message
+      toast.error(backendMessage || "Không thể cập nhật ảnh đại diện nhóm.")
+    } finally {
+      setIsUpdatingGroupAvatar(false)
+      if (event.target) {
+        event.target.value = ""
+      }
+    }
+  }
+
+  const handleOpenInNewTab = (url: string) => {
+    const openedWindow = window.open(url, "_blank", "noopener,noreferrer")
+    if (!openedWindow) {
+      toast.error("Không thể mở file. Vui lòng kiểm tra cài đặt trình duyệt.")
+    }
+  }
+
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-background">
       <div className="flex shrink-0 items-center justify-center border-b px-4 py-5">
@@ -409,13 +552,41 @@ export default function ChatInfoMain({
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
         <div className="flex w-full flex-col">
           <div className="flex flex-col items-center border-b p-4">
-            <Avatar className="mb-2 h-16 w-16">
-              <AvatarImage src={avatarSrc} alt={title} />
-              <AvatarFallback>{avatarFallback}</AvatarFallback>
-            </Avatar>
+            <input
+              ref={groupAvatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleGroupAvatarFileChanged(event)}
+            />
+            <button
+              type="button"
+              className="group relative mb-2 rounded-full border-0 bg-transparent p-0"
+              disabled={!canChangeGroupAvatar || isUpdatingGroupAvatar}
+              onClick={() => {
+                if (!canChangeGroupAvatar || isUpdatingGroupAvatar) {
+                  return
+                }
+                groupAvatarInputRef.current?.click()
+              }}
+            >
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={avatarSrc} alt={title} />
+                <AvatarFallback>{avatarFallback}</AvatarFallback>
+              </Avatar>
+              {canChangeGroupAvatar ? (
+                <span className="absolute -right-1 -bottom-1 inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white text-slate-600 shadow-sm group-hover:text-blue-600">
+                  {isUpdatingGroupAvatar ? (
+                    <Spinner className="h-3.5 w-3.5" />
+                  ) : (
+                    <Camera className="h-3.5 w-3.5" />
+                  )}
+                </span>
+              ) : null}
+            </button>
 
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
-              <h4 className="ml-6 max-w-[220px] truncate text-base font-medium">
+              <h4 className="max-w-[220px] truncate text-base font-medium">
                 {title}
               </h4>
               {directPeer ? (
@@ -430,7 +601,15 @@ export default function ChatInfoMain({
               ) : null}
             </div>
 
-            <div className="mt-4 grid w-full min-w-0 grid-cols-3 gap-2">
+            <div
+              className={`mt-4 grid w-full min-w-0 gap-2 ${
+                isGroup
+                  ? canManageGroupSettings
+                    ? "grid-cols-4"
+                    : "grid-cols-3"
+                  : "grid-cols-3"
+              }`}
+            >
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
                 <Button variant="secondary" size="icon">
                   <BellOff className="h-4 w-4" />
@@ -442,7 +621,9 @@ export default function ChatInfoMain({
 
               <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
                 <Button
-                  variant={selectedConversation?.pinned ? "default" : "secondary"}
+                  variant={
+                    selectedConversation?.pinned ? "default" : "secondary"
+                  }
                   size="icon"
                   disabled={isPinningConversation || !selectedConversationId}
                   onClick={() => void handleToggleConversationPin()}
@@ -450,18 +631,52 @@ export default function ChatInfoMain({
                   <Pin className="h-4 w-4" />
                 </Button>
                 <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                  {selectedConversation?.pinned ? "Bỏ ghim hội thoại" : "Ghim hội thoại"}
+                  {selectedConversation?.pinned
+                    ? "Bỏ ghim hội thoại"
+                    : "Ghim hội thoại"}
                 </span>
               </div>
 
-              <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
-                <Button variant="secondary" size="icon">
-                  <Users className="h-4 w-4" />
-                </Button>
-                <span className="w-full text-center text-xs leading-tight text-muted-foreground">
-                  Tạo nhóm
-                </span>
-              </div>
+              {isGroup ? (
+                <>
+                  <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => onOpenGroupMembers?.()}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                      Thành viên
+                    </span>
+                  </div>
+
+                  {canManageGroupSettings ? (
+                    <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={() => onOpenGroupManage?.()}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                      <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                        Quản lý nhóm
+                      </span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex min-w-0 cursor-pointer flex-col items-center gap-1">
+                  <Button variant="secondary" size="icon">
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-full text-center text-xs leading-tight text-muted-foreground">
+                    Tạo nhóm
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -484,11 +699,14 @@ export default function ChatInfoMain({
                 ) : (
                   <div className="grid grid-cols-3 gap-1">
                     {imagesPreview.map((item) => (
-                      <div key={item.idAttachment} className="aspect-square w-full overflow-hidden rounded">
+                      <div
+                        key={item.idAttachment}
+                        className="aspect-square w-full overflow-hidden rounded"
+                      >
                         {item.type === "VIDEO" ? (
                           <video
                             src={item.url}
-                            className="aspect-square h-full w-full object-cover bg-black"
+                            className="aspect-square h-full w-full bg-black object-cover"
                             preload="metadata"
                             muted
                           />
@@ -498,9 +716,15 @@ export default function ChatInfoMain({
                             alt="attachment"
                             className="aspect-square h-full w-full cursor-pointer object-cover"
                             onClick={() => {
-                              const index = imageIndexById.get(item.idAttachment) ?? 0
+                              const index =
+                                imageIndexById.get(item.idAttachment) ?? 0
                               setImagePreview({
-                                images: allImageAttachments.map((attachment) => ({ url: attachment.url, alt: "Image" })),
+                                images: allImageAttachments.map(
+                                  (attachment) => ({
+                                    url: attachment.url,
+                                    alt: "Image",
+                                  })
+                                ),
                                 initialIndex: index,
                               })
                             }}
@@ -532,13 +756,18 @@ export default function ChatInfoMain({
                     <Spinner className="size-4 text-muted-foreground" />
                   </div>
                 ) : filesPreview.length === 0 ? (
-                  <div className="text-center text-xs text-muted-foreground">Chưa có file</div>
+                  <div className="text-center text-xs text-muted-foreground">
+                    Chưa có file
+                  </div>
                 ) : (
                   filesPreview.map((file) => {
                     const ext = getFileExtension(file.url)
                     const color = getExtensionColor(ext)
                     return (
-                      <div key={file.idAttachment} className="flex items-center gap-3 py-2">
+                      <div
+                        key={file.idAttachment}
+                        className="flex items-center gap-3 py-2"
+                      >
                         <div
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded p-2 text-[10px] font-bold text-white ${color}`}
                         >
@@ -551,7 +780,14 @@ export default function ChatInfoMain({
                           </p>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <span>{file.size || "Unknown size"}</span>
-                            <Download className="h-3 w-3 text-blue-500" />
+                            <button
+                              type="button"
+                              className="rounded p-0.5 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                              title="Tải file"
+                              onClick={() => handleOpenInNewTab(file.url)}
+                            >
+                              <Download className="h-3 w-3" />
+                            </button>
                           </div>
                         </div>
 
@@ -584,7 +820,9 @@ export default function ChatInfoMain({
                     <Spinner className="size-4 text-muted-foreground" />
                   </div>
                 ) : linksPreview.length === 0 ? (
-                  <div className="text-center text-xs text-muted-foreground">Chưa có link</div>
+                  <div className="text-center text-xs text-muted-foreground">
+                    Chưa có link
+                  </div>
                 ) : (
                   linksPreview.map((link) => (
                     <a
@@ -599,8 +837,12 @@ export default function ChatInfoMain({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">{link.url}</p>
-                        <p className="truncate text-xs text-muted-foreground">{link.domain}</p>
+                        <p className="truncate text-sm text-foreground">
+                          {link.url}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {link.domain}
+                        </p>
                       </div>
 
                       <span className="ml-2 w-[56px] shrink-0 truncate text-right text-xs text-muted-foreground">
@@ -655,7 +897,9 @@ export default function ChatInfoMain({
                       <Ban className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0">
                         <p className="text-sm text-foreground">
-                          {blockStatus?.blockedByMe ? "Đã chặn nhắn tin" : "Chặn nhắn tin"}
+                          {blockStatus?.blockedByMe
+                            ? "Đã chặn nhắn tin"
+                            : "Chặn nhắn tin"}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {blockStatus?.blockedByMe
@@ -668,12 +912,18 @@ export default function ChatInfoMain({
                     </div>
                     <Button
                       type="button"
-                      variant={blockStatus?.blockedByMe ? "outline" : "destructive"}
+                      variant={
+                        blockStatus?.blockedByMe ? "outline" : "destructive"
+                      }
                       size="sm"
                       disabled={isLoadingBlockStatus || isTogglingBlock}
                       onClick={() => void handleToggleBlockMessaging()}
                     >
-                      {isTogglingBlock ? "Đang xử lý..." : blockStatus?.blockedByMe ? "Bỏ chặn" : "Chặn"}
+                      {isTogglingBlock
+                        ? "Đang xử lý..."
+                        : blockStatus?.blockedByMe
+                          ? "Bỏ chặn"
+                          : "Chặn"}
                     </Button>
                   </div>
                 ) : null}
@@ -732,14 +982,20 @@ export default function ChatInfoMain({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLeavingGroup}>Hủy</AlertDialogCancel>
-            <AlertDialogAction disabled={isLeavingGroup} onClick={() => void handleConfirmLeaveGroup()}>
+            <AlertDialogAction
+              disabled={isLeavingGroup}
+              onClick={() => void handleConfirmLeaveGroup()}
+            >
               {isLeavingGroup ? "Đang xử lý..." : "Rời nhóm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={isDissolveDialogOpen} onOpenChange={setIsDissolveDialogOpen}>
+      <AlertDialog
+        open={isDissolveDialogOpen}
+        onOpenChange={setIsDissolveDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận giải tán nhóm</AlertDialogTitle>
@@ -748,7 +1004,9 @@ export default function ChatInfoMain({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDissolvingGroup}>Hủy</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDissolvingGroup}>
+              Hủy
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isDissolvingGroup}
               className="bg-red-600 hover:bg-red-700"
@@ -760,7 +1018,10 @@ export default function ChatInfoMain({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
+      <Dialog
+        open={isNicknameDialogOpen}
+        onOpenChange={setIsNicknameDialogOpen}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Đổi biệt danh</DialogTitle>
@@ -783,7 +1044,10 @@ export default function ChatInfoMain({
               >
                 Hủy
               </Button>
-              <Button disabled={isSavingNickname} onClick={() => void handleSaveNickname()}>
+              <Button
+                disabled={isSavingNickname}
+                onClick={() => void handleSaveNickname()}
+              >
                 {isSavingNickname ? "Đang lưu..." : "Lưu"}
               </Button>
             </div>

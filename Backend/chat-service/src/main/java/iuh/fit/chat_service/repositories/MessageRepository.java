@@ -28,17 +28,14 @@ public interface MessageRepository extends MongoRepository<Message, String> {
     @Query(value = "{ 'idConversation': ?0, 'idAccountSent': { $ne: ?1 }, 'timeSent': { $gt: ?2 }, $or: [ { 'hiddenForAccountIds': { $exists: false } }, { 'hiddenForAccountIds': null }, { 'hiddenForAccountIds': { $nin: [?1] } } ] }", count = true)
     long countUnreadForParticipantSince(String idConversation, String identityUserId, LocalDateTime seenAt);
 
-    long countByIdConversation(String idConversation);
-
     long countByIdConversationAndIdAccountSent(String idConversation, String idAccountSent);
 
-    long countByIdConversationAndTimeSentGreaterThanEqual(String idConversation, LocalDateTime fromTime);
+    long countByIdConversationAndIdAccountSentAndTimeSentGreaterThanEqual(String idConversation, String idAccountSent, LocalDateTime timeSentIsGreaterThan);
 
-    long countByIdConversationAndIdAccountSentAndTimeSentGreaterThanEqual(
-            String idConversation,
-            String idAccountSent,
-            LocalDateTime fromTime
-    );
+    long countByIdConversation(String idConversation);
+
+    long countByIdConversationAndTimeSentGreaterThanEqual(String idConversation, LocalDateTime timeSentIsGreaterThan);
+
 
     Optional<Message> findTopByIdConversationOrderByTimeSentAsc(String idConversation);
 

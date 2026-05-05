@@ -1,9 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { PhoneAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -20,7 +18,6 @@ import Toast from 'react-native-toast-message';
 
 import {
   getFirebaseAuth,
-  getFirebaseConfig,
   toFirebasePhoneNumber,
 } from '@/services/firebase-phone-auth.service';
 import { authService } from '@/services/auth.service';
@@ -95,15 +92,6 @@ const getFirebaseErrorMessage = (error: unknown, fallbackMessage: string) => {
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
-
-  const firebaseConfig = useMemo(() => {
-    try {
-      return getFirebaseConfig();
-    } catch {
-      return null;
-    }
-  }, []);
 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('@gmail.com');
@@ -121,7 +109,7 @@ export default function RegisterScreen() {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
-  const [verificationId, setVerificationId] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<any | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [hasAutoSentOtp, setHasAutoSentOtp] = useState(false);
@@ -156,7 +144,7 @@ export default function RegisterScreen() {
   const resetOtpFlow = () => {
     setOtpCode('');
     setOtpPhoneNumber('');
-    setVerificationId('');
+    setConfirmationResult(null);
     setHasAutoSentOtp(false);
     setPendingRegisterPayload(null);
   };
@@ -172,25 +160,12 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (!firebaseConfig) {
-      Toast.show({
-        type: 'error',
-        text1: 'Thieu cau hinh Firebase',
-        text2: 'Vui long them EXPO_PUBLIC_FIREBASE_* trong file .env.',
-      });
-      return;
-    }
-
     setIsSendingOtp(true);
     try {
-      const provider = new PhoneAuthProvider(getFirebaseAuth());
       const firebasePhoneNumber = toFirebasePhoneNumber(targetPhone);
-      const newVerificationId = await provider.verifyPhoneNumber(
-        firebasePhoneNumber,
-        recaptchaVerifier.current as never
-      );
+      const nextConfirmation = await getFirebaseAuth().signInWithPhoneNumber(firebasePhoneNumber);
       setOtpPhoneNumber(targetPhone);
-      setVerificationId(newVerificationId);
+      setConfirmationResult(nextConfirmation);
       Toast.show({
         type: 'success',
         text1: 'Da gui OTP',
@@ -208,7 +183,7 @@ export default function RegisterScreen() {
   };
 
   const handleVerifyOtpAndRegister = async () => {
-    if (!verificationId) {
+    if (!confirmationResult) {
       Toast.show({
         type: 'error',
         text1: 'Chua gui OTP',
@@ -236,8 +211,7 @@ export default function RegisterScreen() {
     setIsVerifyingOtp(true);
     try {
       const auth = getFirebaseAuth();
-      const credential = PhoneAuthProvider.credential(verificationId, otpCode.trim());
-      const credentialResult = await signInWithCredential(auth, credential);
+      const credentialResult = await confirmationResult.confirm(otpCode.trim());
       const firebaseIdToken = await credentialResult.user.getIdToken();
 
       await authService.register({
@@ -245,7 +219,7 @@ export default function RegisterScreen() {
         firebaseIdToken,
       });
 
-      await signOut(auth);
+      await auth.signOut();
 
       Toast.show({
         type: 'success',
@@ -374,7 +348,7 @@ export default function RegisterScreen() {
     });
     setOtpPhoneNumber(normalizedPhoneNumber);
     setOtpCode('');
-    setVerificationId('');
+    setConfirmationResult(null);
     setHasAutoSentOtp(false);
     setShowOtpModal(true);
   };
@@ -383,14 +357,6 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-100" edges={['top', 'bottom']}>
-      {firebaseConfig ? (
-        <FirebaseRecaptchaVerifierModal
-          ref={recaptchaVerifier}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification
-        />
-      ) : null}
-
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <ScrollView className="flex-1 px-6" contentContainerClassName="grow pb-6" keyboardShouldPersistTaps="handled">
           <Pressable
@@ -560,7 +526,7 @@ export default function RegisterScreen() {
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isVerifyingOtp ? 'bg-sky-300' : 'bg-sky-500'}`}
                 onPress={() => void handleVerifyOtpAndRegister()}
-                disabled={isVerifyingOtp || !verificationId || !otpCode.trim()}>
+                disabled={isVerifyingOtp || !confirmationResult || !otpCode.trim()}>
                 <Text className="font-semibold text-white">
                   {isVerifyingOtp ? 'Dang xac thuc...' : 'Xac thuc'}
                 </Text>

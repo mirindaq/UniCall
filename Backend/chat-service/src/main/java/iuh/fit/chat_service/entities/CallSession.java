@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Document(collection = "call_sessions")
 @CompoundIndex(name = "conversation_time", def = "{'conversationId': 1, 'initiatedAt': -1}")
@@ -29,4 +30,5 @@ public class CallSession {
     private Long durationSeconds;
     private CallOutcome outcome;
     private String summaryMessageId;
+    private List<String> participantUserIds;
 }

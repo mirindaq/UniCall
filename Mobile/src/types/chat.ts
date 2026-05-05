@@ -1,5 +1,5 @@
 export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX' | 'CALL';
-export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI';
+export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI' | 'LINK';
 
 export type MessageEnum = 'SENT' | 'RECEIVED' | 'DELETED' | 'FAILED';
 
@@ -15,6 +15,11 @@ export interface ChatMessageResponse {
   replyToMessageId?: string;
   edited: boolean;
   recalled?: boolean;
+  reactions?: Record<string, string>;
+  reactionStacks?: Record<string, string[]>;
+  pinned?: boolean;
+  pinnedByAccountId?: string;
+  pinnedAt?: string;
   attachments?: ChatAttachment[];
 }
 
@@ -53,13 +58,22 @@ export interface ConversationCallSignalResponse {
   sentAt?: string;
 }
 
-export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL';
+export type SfuAccessTokenResponse = {
+  callId: string;
+  roomName: string;
+  url: string;
+  token: string;
+  expiresAt: string;
+};
+
+export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL' | 'CONVERSATION_UPSERT';
 
 export interface UserRealtimeEvent {
   eventType: UserRealtimeEventType;
   conversationId: string;
   message?: ChatMessageResponse;
   callSignal?: ConversationCallSignalResponse;
+  conversation?: ConversationResponse;
 }
 
 export type ConversationType = 'DOUBLE' | 'GROUP';
@@ -72,6 +86,20 @@ export interface ChatParticipantInfo {
   dateJoin: string;
 }
 
+export type GroupManagementSettings = {
+  allowMemberSendMessage: boolean;
+  allowMemberPinMessage: boolean;
+  allowMemberChangeAvatar: boolean;
+  memberApprovalEnabled: boolean;
+};
+
+export type PendingMemberRequestInfo = {
+  idRequest: string;
+  requesterIdentityUserId: string;
+  targetIdentityUserId: string;
+  requestedAt: string;
+};
+
 export interface ConversationResponse {
   idConversation: string;
   type: ConversationType;
@@ -80,8 +108,13 @@ export interface ConversationResponse {
   dateCreate: string;
   dateUpdateMessage: string;
   lastMessageContent?: string;
+  lastMessageSenderId?: string;
+  unreadCount?: number;
+  pinned?: boolean;
   numberMember: number;
   participantInfos: ChatParticipantInfo[];
+  groupManagementSettings?: GroupManagementSettings;
+  pendingMemberRequestCount?: number;
 }
 
 export interface ConversationBlockStatusResponse {
@@ -117,7 +150,12 @@ export type ManageGroupParticipantsResponse = {
   idConversation: string;
   name: string;
   numberMember: number;
+  groupManagementSettings: GroupManagementSettings;
   participantInfos: GroupParticipantInfo[];
+  pendingMemberRequests?: PendingMemberRequestInfo[];
+  pendingMemberRequestCount?: number;
+  addedMemberCount?: number;
+  createdMemberRequestCount?: number;
 };
 
 export type AddGroupMembersRequest = {
@@ -128,8 +166,18 @@ export type UpdateGroupMemberRoleRequest = {
   role: GroupParticipantRole;
 };
 
+export type UpdateMemberNicknameRequest = {
+  nickname?: string;
+};
+
 export type TransferGroupAdminRequest = {
   targetIdentityUserId: string;
+};
+
+export type UpdateGroupManagementSettingsRequest = GroupManagementSettings;
+
+export type UpdateGroupAvatarRequest = {
+  avatar: string;
 };
 
 export type DissolveGroupConversationResponse = {
