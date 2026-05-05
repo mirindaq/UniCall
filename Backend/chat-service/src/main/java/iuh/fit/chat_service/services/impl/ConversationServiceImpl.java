@@ -2,6 +2,7 @@ package iuh.fit.chat_service.services.impl;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -11,9 +12,9 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import iuh.fit.chat_service.clients.GrpcUserServiceClient;
 import iuh.fit.chat_service.dtos.request.AddGroupMembersRequest;
 import iuh.fit.chat_service.dtos.request.CreateGroupConversationRequest;
-import iuh.fit.chat_service.dtos.request.SendChatMessageRequest;
 import iuh.fit.chat_service.dtos.request.TransferGroupAdminRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupAvatarRequest;
 import iuh.fit.chat_service.dtos.request.UpdateGroupManagementSettingsRequest;
@@ -25,11 +26,14 @@ import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.GroupManagementSettings;
 import iuh.fit.chat_service.entities.GroupMemberJoinRequest;
 import iuh.fit.chat_service.entities.ParticipantInfo;
+import iuh.fit.chat_service.events.GroupNotificationEvent;
+import iuh.fit.chat_service.events.GroupNotificationEventType;
 import iuh.fit.chat_service.enums.ConversationType;
 import iuh.fit.chat_service.enums.ParicipantRole;
 import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.chat_service.services.ConversationService;
+import iuh.fit.chat_service.services.GroupNotificationEventPublisher;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
@@ -42,6 +46,8 @@ public class ConversationServiceImpl implements ConversationService {
     private final ConversationRepository conversationRepository;
     private final ChatMessageService chatMessageService;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final GroupNotificationEventPublisher groupNotificationEventPublisher;
+    private final GrpcUserServiceClient grpcUserServiceClient;
 
     @Override
     public Conversation createGroupConversation(String currentIdentityUserId, CreateGroupConversationRequest request) {
@@ -96,7 +102,10 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setGroupManagementSettings(GroupManagementSettings.defaults());
         conversation.setPendingMemberRequests(new ArrayList<>());
 
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        String actorName = resolveMemberLabel(saved.getParticipantInfos(), currentIdentityUserId);
+        sendGroupSystemNotification(saved.getIdConversation(), actorName + " đã tạo nhóm.");
+        return saved;
     }
 
     @Override
@@ -137,6 +146,7 @@ public class ConversationServiceImpl implements ConversationService {
         LocalDateTime now = LocalDateTime.now();
         int addedCount = 0;
         int createdPendingCount = 0;
+        List<String> addedMemberIds = new ArrayList<>();
         boolean memberApprovalEnabled = Boolean.TRUE.equals(groupManagementSettings.getMemberApprovalEnabled());
         boolean canAddDirectly = !memberApprovalEnabled || isAdminOrDeputy(actorParticipant);
 
@@ -148,6 +158,7 @@ public class ConversationServiceImpl implements ConversationService {
             if (canAddDirectly) {
                 participantInfos.add(new ParticipantInfo(memberId, ParicipantRole.USER, "", now));
                 existingIdentityUserIds.add(memberId);
+                addedMemberIds.add(memberId);
                 addedCount++;
                 continue;
             }
@@ -182,6 +193,19 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(now);
         Conversation saved = conversationRepository.save(conversation);
+        if (!addedMemberIds.isEmpty()) {
+            String actorName = resolveMemberLabel(saved.getParticipantInfos(), actorId);
+            String content = actorName + " đã thêm " + buildTargetSummary(saved.getParticipantInfos(), addedMemberIds)
+                    + " vào nhóm.";
+            sendGroupSystemNotification(saved.getIdConversation(), content);
+            publishGroupNotificationEvent(
+                    GroupNotificationEventType.GROUP_MEMBER_ADDED,
+                    actorId,
+                    addedMemberIds,
+                    collectParticipantIds(saved),
+                    saved,
+                    content);
+        }
         return ManageGroupParticipantsResponse.from(saved, addedCount, createdPendingCount);
     }
 
@@ -228,7 +252,23 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setNumberMember(participantInfos.size());
         conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(now);
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        String actorName = resolveMemberLabel(participantInfos, actorId);
+        String targetName = resolveMemberLabel(List.of(targetParticipant), targetId);
+        String content = actorName + " đã xóa " + targetName + " khỏi nhóm.";
+        sendGroupSystemNotification(saved.getIdConversation(), content);
+        List<String> recipients = new ArrayList<>(collectParticipantIds(saved));
+        if (!recipients.contains(targetId)) {
+            recipients.add(targetId);
+        }
+        publishGroupNotificationEvent(
+                GroupNotificationEventType.GROUP_MEMBER_KICKED,
+                actorId,
+                List.of(targetId),
+                recipients,
+                saved,
+                content);
+        return saved;
     }
 
     @Override
@@ -267,7 +307,17 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setParticipantInfos(participantInfos);
         conversation.setNumberMember(participantInfos.size());
         conversation.setDateUpdateMessage(LocalDateTime.now());
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        String actorName = resolveMemberLabel(participantInfos, actorId);
+        String targetName = resolveMemberLabel(participantInfos, targetId);
+        String roleName = switch (newRole) {
+            case ADMIN -> "trưởng nhóm";
+            case DEPUTY -> "phó nhóm";
+            default -> "thành viên";
+        };
+        sendGroupSystemNotification(saved.getIdConversation(),
+                actorName + " đã cập nhật vai trò của " + targetName + " thành " + roleName + ".");
+        return saved;
     }
 
     @Override
@@ -373,7 +423,9 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation savedConversation = conversationRepository.save(conversation);
 
         publishConversationRealtime(savedConversation);
-        sendGroupSystemNotification(actorId, savedConversation.getIdConversation(), "Đã thay đổi ảnh đại diện nhóm.");
+        String actorName = resolveMemberLabel(savedConversation.getParticipantInfos(), actorId);
+        sendGroupSystemNotification(savedConversation.getIdConversation(),
+                actorName + " đã thay đổi ảnh đại diện nhóm.");
 
         return savedConversation;
     }
@@ -413,7 +465,12 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setNumberMember(participantInfos.size());
         conversation.setPendingMemberRequests(pendingMemberRequests);
         conversation.setDateUpdateMessage(LocalDateTime.now());
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        String actorName = resolveMemberLabel(saved.getParticipantInfos(), actorId);
+        String targetName = resolveMemberLabel(saved.getParticipantInfos(), targetIdentityUserId);
+        sendGroupSystemNotification(saved.getIdConversation(),
+                actorName + " đã duyệt yêu cầu tham gia nhóm của " + targetName + ".");
+        return saved;
     }
 
     @Override
@@ -470,7 +527,12 @@ public class ConversationServiceImpl implements ConversationService {
         targetParticipant.setRole(ParicipantRole.ADMIN);
         conversation.setParticipantInfos(participantInfos);
         conversation.setDateUpdateMessage(LocalDateTime.now());
-        return conversationRepository.save(conversation);
+        Conversation saved = conversationRepository.save(conversation);
+        String actorName = resolveMemberLabel(participantInfos, actorId);
+        String targetName = resolveMemberLabel(participantInfos, targetId);
+        sendGroupSystemNotification(saved.getIdConversation(),
+                actorName + " đã chuyển quyền trưởng nhóm cho " + targetName + ".");
+        return saved;
     }
 
     @Override
@@ -495,7 +557,8 @@ public class ConversationServiceImpl implements ConversationService {
 
         // Emit a system chat line before removing actor so message creation still
         // passes permission checks.
-        sendGroupSystemNotification(actorId, conversation.getIdConversation(), "Đã rời nhóm !!!");
+        String actorName = resolveMemberLabel(participantInfos, actorId);
+        sendGroupSystemNotification(conversation.getIdConversation(), actorName + " đã rời nhóm.");
 
         participantInfos.removeIf(participant -> actorId.equals(participant.getIdAccount()));
         List<GroupMemberJoinRequest> pendingMemberRequests = normalizePendingMemberRequests(conversation);
@@ -507,6 +570,13 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setDateUpdateMessage(LocalDateTime.now());
         Conversation savedConversation = conversationRepository.save(conversation);
         publishConversationRealtime(savedConversation);
+        publishGroupNotificationEvent(
+                GroupNotificationEventType.GROUP_MEMBER_LEFT,
+                actorId,
+                List.of(actorId),
+                collectParticipantIds(savedConversation),
+                savedConversation,
+                actorName + " đã rời nhóm.");
         return savedConversation;
     }
 
@@ -663,15 +733,13 @@ public class ConversationServiceImpl implements ConversationService {
                         payload));
     }
 
-    private void sendGroupSystemNotification(String actorId, String conversationId, String content) {
+    private void sendGroupSystemNotification(String conversationId, String content) {
         if (content == null || content.isBlank()) {
             return;
         }
 
-        SendChatMessageRequest request = new SendChatMessageRequest();
-        request.setContent(content.trim());
         try {
-            chatMessageService.sendRest(actorId, conversationId, request);
+            chatMessageService.sendSystemMessage(conversationId, content.trim());
         } catch (RuntimeException ignored) {
             // Do not block the main management action if notification message cannot be
             // created.
@@ -683,42 +751,44 @@ public class ConversationServiceImpl implements ConversationService {
             String conversationId,
             GroupManagementSettings previousSettings,
             GroupManagementSettings currentSettings) {
-        List<String> messages = buildGroupManagementChangeMessages(previousSettings, currentSettings);
-        messages.forEach(content -> sendGroupSystemNotification(actorId, conversationId, content));
+        List<String> messages = buildGroupManagementChangeMessages(actorId, previousSettings, currentSettings);
+        messages.forEach(content -> sendGroupSystemNotification(conversationId, content));
     }
 
     private List<String> buildGroupManagementChangeMessages(
+            String actorId,
             GroupManagementSettings previousSettings,
             GroupManagementSettings currentSettings) {
         List<String> messages = new ArrayList<>();
         if (previousSettings == null || currentSettings == null) {
             return messages;
         }
+        String actorLabel = resolveMemberLabel(null, actorId);
 
         if (!Objects.equals(previousSettings.getAllowMemberSendMessage(),
                 currentSettings.getAllowMemberSendMessage())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberSendMessage())
-                    ? "Đã cho phép tất cả thành viên gửi tin nhắn vào nhóm."
-                    : "Đã giới hạn gửi tin nhắn: chỉ trưởng/phó nhóm được gửi.");
+                    ? actorLabel + " đã cho phép tất cả thành viên gửi tin nhắn vào nhóm."
+                    : actorLabel + " đã giới hạn gửi tin nhắn: chỉ trưởng/phó nhóm được gửi.");
         }
 
         if (!Objects.equals(previousSettings.getAllowMemberPinMessage(), currentSettings.getAllowMemberPinMessage())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberPinMessage())
-                    ? "Đã cho phép tất cả thành viên ghim tin nhắn."
-                    : "Đã giới hạn ghim tin nhắn: chỉ trưởng/phó nhóm được ghim.");
+                    ? actorLabel + " đã cho phép tất cả thành viên ghim tin nhắn."
+                    : actorLabel + " đã giới hạn ghim tin nhắn: chỉ trưởng/phó nhóm được ghim.");
         }
 
         if (!Objects.equals(previousSettings.getAllowMemberChangeAvatar(),
                 currentSettings.getAllowMemberChangeAvatar())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getAllowMemberChangeAvatar())
-                    ? "Đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm."
-                    : "Đã giới hạn thay đổi ảnh đại diện: chỉ trưởng/phó nhóm được đổi.");
+                    ? actorLabel + " đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm."
+                    : actorLabel + " đã giới hạn thay đổi ảnh đại diện: chỉ trưởng/phó nhóm được đổi.");
         }
 
         if (!Objects.equals(previousSettings.getMemberApprovalEnabled(), currentSettings.getMemberApprovalEnabled())) {
             messages.add(Boolean.TRUE.equals(currentSettings.getMemberApprovalEnabled())
-                    ? "Đã bật chế độ phê duyệt thành viên mới."
-                    : "Đã tắt chế độ phê duyệt thành viên mới.");
+                    ? actorLabel + " đã bật chế độ phê duyệt thành viên mới."
+                    : actorLabel + " đã tắt chế độ phê duyệt thành viên mới.");
         }
 
         return messages;
@@ -741,5 +811,76 @@ public class ConversationServiceImpl implements ConversationService {
         return participantInfos.stream()
                 .filter(participant -> participant.getRole() == ParicipantRole.ADMIN)
                 .count();
+    }
+
+    private List<String> collectParticipantIds(Conversation conversation) {
+        if (conversation == null || conversation.getParticipantInfos() == null) {
+            return Collections.emptyList();
+        }
+        return conversation.getParticipantInfos().stream()
+                .map(ParticipantInfo::getIdAccount)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(id -> !id.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private void publishGroupNotificationEvent(
+            GroupNotificationEventType type,
+            String actorId,
+            List<String> targetUserIds,
+            List<String> recipientUserIds,
+            Conversation conversation,
+            String content) {
+        try {
+            GroupNotificationEvent event = GroupNotificationEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .type(type)
+                    .occurredAt(LocalDateTime.now())
+                    .actorId(actorId)
+                    .targetUserIds(targetUserIds == null ? Collections.emptyList() : targetUserIds)
+                    .recipientUserIds(recipientUserIds == null ? Collections.emptyList() : recipientUserIds)
+                    .conversationId(conversation == null ? null : conversation.getIdConversation())
+                    .conversationName(conversation == null ? null : conversation.getName())
+                    .content(content)
+                    .build();
+            groupNotificationEventPublisher.publish(event);
+        } catch (RuntimeException ignored) {
+            // Do not block core chat operation.
+        }
+    }
+
+    private String resolveMemberLabel(List<ParticipantInfo> participantInfos, String identityUserId) {
+        if (identityUserId == null || identityUserId.isBlank()) {
+            return "";
+        }
+        ParticipantInfo participant = findParticipant(participantInfos, identityUserId);
+        if (participant != null && participant.getNickname() != null && !participant.getNickname().isBlank()) {
+            return participant.getNickname().trim();
+        }
+        return grpcUserServiceClient.getUserDisplayInfo(identityUserId)
+                .map(GrpcUserServiceClient.UserDisplayInfo::displayName)
+                .filter(displayName -> displayName != null && !displayName.isBlank())
+                .orElse(identityUserId);
+    }
+
+    private String buildTargetSummary(List<ParticipantInfo> participantInfos, List<String> targetUserIds) {
+        if (targetUserIds == null || targetUserIds.isEmpty()) {
+            return "thành viên mới";
+        }
+
+        if (targetUserIds.size() == 1) {
+            return resolveMemberLabel(participantInfos, targetUserIds.get(0));
+        }
+
+        if (targetUserIds.size() <= 3) {
+            List<String> labels = targetUserIds.stream()
+                    .map(userId -> resolveMemberLabel(participantInfos, userId))
+                    .toList();
+            return String.join(", ", labels);
+        }
+
+        return targetUserIds.size() + " thành viên";
     }
 }

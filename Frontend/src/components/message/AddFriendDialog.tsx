@@ -294,7 +294,7 @@ export function AddFriendDialog({
       return
     }
     setIsSendingToId(user.identityUserId)
-    const defaultMessage = `Xin chào ${user.firstName || "bạn"}. Mình là ${myFirstName} ${myLastName}. Mình tìm thấy bạn qua số điện thoại!`
+    const defaultMessage = `Xin chào ${user.firstName || "bạn"}. Mình là ${myLastName} ${myFirstName}. Mình tìm thấy bạn qua số điện thoại!`
     try {
       await friendRequestService.createFriendRequest({
         idAccountSent: currentIdentityUserId,
@@ -500,7 +500,7 @@ function UserRow({
   showAddButton: boolean
 }) {
   const fullName =
-    user.fullName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
+    user.fullName || `${user.lastName ?? ""} ${user.firstName ?? ""}`.trim()
   const fallback = toFallback(fullName)
   const isSelf =
     currentIdentityUserId != null &&
@@ -584,3 +584,4 @@ function toFallback(fullName: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+

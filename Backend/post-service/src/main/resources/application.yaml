@@ -7,8 +7,8 @@ spring:
       max-request-size: 100MB
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_post_service?createDatabaseIfNotExist=true
-    username: root
-    password: 1234
+    username: springstudent
+    password: springstudent
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:

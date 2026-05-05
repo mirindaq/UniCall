@@ -300,7 +300,7 @@ function displayName(profile: UserProfile | undefined, fallback: string) {
   if (!profile) {
     return fallback
   }
-  const name = `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+  const name = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim()
   return name || fallback
 }
 
@@ -314,3 +314,4 @@ function toFallback(name: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+

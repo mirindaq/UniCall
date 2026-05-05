@@ -88,7 +88,7 @@ import type {
   ConversationResponse,
   UserRealtimeEvent,
 } from "@/types/chat"
-import { UNICALL_AI_BOT_IDS } from "@/types/chat"
+import { UNICALL_AI_BOT_IDS, UNICALL_SYSTEM_BOT_ID } from "@/types/chat"
 import {
   displayNameFromProfile,
   formatChatMessageTime,
@@ -202,6 +202,38 @@ const AI_MENTION_COMMANDS: MentionCommand[] = [
     description: "Yêu cầu UniCall AI tạo hình ảnh.",
   },
 ]
+
+function isCenteredGroupSystemNotice(msg: ChatMessageResponse): boolean {
+  if (msg.idAccountSent !== "unicall-system-bot") {
+    return false
+  }
+  if (msg.type !== "TEXT") {
+    return false
+  }
+  if ((msg.attachments?.length ?? 0) > 0 || msg.callInfo != null) {
+    return false
+  }
+
+  const text = normalizeFileMessageContent(msg.content).toLowerCase()
+  return (
+    text.includes("đã rời nhóm") ||
+    text.includes("đã tạo nhóm") ||
+    (text.includes("đã thêm") && text.includes("vào nhóm")) ||
+    (text.includes("đã xóa") && text.includes("khỏi nhóm")) ||
+    text.includes("đã chuyển quyền trưởng nhóm cho") ||
+    text.includes("đã duyệt yêu cầu tham gia nhóm của") ||
+    text.includes("đã cập nhật vai trò của") ||
+    text.includes("đã thay đổi ảnh đại diện nhóm") ||
+    text.includes("đã cho phép tất cả thành viên gửi tin nhắn vào nhóm") ||
+    text.includes("đã giới hạn gửi tin nhắn") ||
+    text.includes("đã cho phép tất cả thành viên ghim tin nhắn") ||
+    text.includes("đã giới hạn ghim tin nhắn") ||
+    text.includes("đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm") ||
+    text.includes("đã giới hạn thay đổi ảnh đại diện") ||
+    text.includes("đã bật chế độ phê duyệt thành viên mới") ||
+    text.includes("đã tắt chế độ phê duyệt thành viên mới")
+  )
+}
 
 function renderHighlightedSearchText(
   content: string,
@@ -1190,7 +1222,7 @@ export default function ChatWindow() {
                 await userService.getProfileByIdentityUserId(peerId)
               const profile = profileResponse.data
               const displayName =
-                `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() ||
+                `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
                 peerId
               return {
                 userId: peerId,
@@ -3821,7 +3853,13 @@ export default function ChatWindow() {
                   </div>
                 )}
                 {displayMessages.map((msg) => {
+                  const normalizedMessageContent = normalizeFileMessageContent(
+                    msg.content
+                  )
                   const isMe = msg.idAccountSent === currentUserId
+                  const isSystemSender =
+                    msg.idAccountSent === UNICALL_SYSTEM_BOT_ID
+                  const isCenteredSystemNotice = isCenteredGroupSystemNotice(msg)
                   const isAiMessage = UNICALL_AI_BOT_IDS.includes(
                     msg.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number]
                   )
@@ -3830,7 +3868,9 @@ export default function ChatWindow() {
                     (!isMe && selectedConversation.type === "GROUP") ||
                     isAiMessage
                   const senderInfo = senderProfiles[msg.idAccountSent]
-                  const aiDisplayName = "UniCall AI"
+                  const aiDisplayName = isSystemSender
+                    ? "Hệ thống"
+                    : "UniCall AI"
                   const senderName = isAiMessage
                     ? aiDisplayName
                     : selectedConversation.type === "GROUP"
@@ -3889,16 +3929,15 @@ export default function ChatWindow() {
                       : UNICALL_AI_BOT_IDS.includes(
                             replyParent.idAccountSent as (typeof UNICALL_AI_BOT_IDS)[number]
                           )
-                        ? "UniCall AI"
+                        ? replyParent.idAccountSent === UNICALL_SYSTEM_BOT_ID
+                          ? "Hệ thống"
+                          : "UniCall AI"
                         : selectedConversation.type === "GROUP"
                           ? (senderProfiles[replyParent.idAccountSent]
                               ?.displayName ?? replyParent.idAccountSent)
                           : (senderProfiles[replyParent.idAccountSent]
                               ?.displayName ?? headerTitle)
                     : "Tin nhắn"
-                  const normalizedMessageContent = normalizeFileMessageContent(
-                    msg.content
-                  )
                   const fileNameFromMessage = extractFileNameFromFileMessage(
                     normalizedMessageContent
                   )
@@ -3923,10 +3962,14 @@ export default function ChatWindow() {
                           "bg-primary/10 ring-1 ring-primary/40",
                         highlightedMessageId === msg.idMessage &&
                           "bg-primary/10",
-                        isMe ? "justify-end" : "justify-start"
+                        isCenteredSystemNotice
+                          ? "justify-center"
+                          : isMe
+                            ? "justify-end"
+                            : "justify-start"
                       )}
                     >
-                      {showAvatar && (
+                      {showAvatar && !isCenteredSystemNotice && (
                         <Avatar
                           size="sm"
                           className={cn(
@@ -3951,7 +3994,11 @@ export default function ChatWindow() {
                       <div
                         className={cn(
                           "flex max-w-[min(78%,36rem)] items-end gap-2",
-                          isMe ? "flex-row-reverse" : "flex-row"
+                          isCenteredSystemNotice
+                            ? "flex-row"
+                            : isMe
+                              ? "flex-row-reverse"
+                              : "flex-row"
                         )}
                       >
                         {multiSelectActive ? (
@@ -3980,10 +4027,14 @@ export default function ChatWindow() {
                           <div
                             className={cn(
                               "flex min-w-0 flex-col",
-                              isMe ? "items-end" : "items-start"
+                              isCenteredSystemNotice
+                                ? "items-center"
+                                : isMe
+                                ? "items-end"
+                                : "items-start"
                             )}
                           >
-                            {showSenderName ? (
+                            {showSenderName && !isCenteredSystemNotice ? (
                               <p
                                 className={cn(
                                   "mb-1 px-1 text-xs font-medium",
@@ -4056,7 +4107,16 @@ export default function ChatWindow() {
                                 </div>
                               </div>
                             ) : null}
-                            {msg.recalled ? (
+                            {isCenteredSystemNotice ? (
+                              <span className="mb-1 text-[11px] text-muted-foreground">
+                                {formatChatMessageTime(msg.timeSent)}
+                              </span>
+                            ) : null}
+                            {isCenteredSystemNotice ? (
+                              <div className="rounded-full bg-slate-200 px-3 py-1 text-xs text-slate-600">
+                                {normalizedMessageContent}
+                              </div>
+                            ) : msg.recalled ? (
                               <div
                                 className={cn(
                                   "rounded-2xl px-4 py-2 text-sm break-all whitespace-pre-wrap text-muted-foreground italic",
@@ -4072,7 +4132,9 @@ export default function ChatWindow() {
                                 className={cn(
                                   "rounded-2xl px-4 py-2 text-sm break-all whitespace-pre-wrap",
                                   isAiMessage
-                                    ? "rounded-bl-sm border border-cyan-200 bg-cyan-50 text-slate-800"
+                                    ? isSystemSender
+                                      ? "rounded-bl-sm border border-slate-300 bg-slate-100 text-slate-800"
+                                      : "rounded-bl-sm border border-cyan-200 bg-cyan-50 text-slate-800"
                                     : isMe
                                       ? "rounded-br-sm bg-primary/10 text-foreground"
                                       : "rounded-bl-sm border bg-background text-foreground shadow-xs"
@@ -4339,9 +4401,11 @@ export default function ChatWindow() {
                                 Đã ghim
                               </span>
                             ) : null}
-                            <span className="mt-1 text-[11px] text-muted-foreground">
-                              {formatChatMessageTime(msg.timeSent)}
-                            </span>
+                            {!isCenteredSystemNotice ? (
+                              <span className="mt-1 text-[11px] text-muted-foreground">
+                                {formatChatMessageTime(msg.timeSent)}
+                              </span>
+                            ) : null}
                             {totalReactionCount > 0 ? (
                               <div className="mt-1 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
                                 <span>
@@ -4354,7 +4418,8 @@ export default function ChatWindow() {
                             ) : null}
                           </div>
 
-                          {!msg.recalled &&
+                          {!isCenteredSystemNotice &&
+                          !msg.recalled &&
                           !multiSelectActive &&
                           !isCallMessage ? (
                             <div
@@ -5204,3 +5269,4 @@ export default function ChatWindow() {
     </div>
   )
 }
+

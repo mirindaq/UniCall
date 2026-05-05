@@ -61,6 +61,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ChatMessageServiceImpl implements ChatMessageService {
+    private static final String UNICALL_SYSTEM_BOT_ID = "unicall-system-bot";
 
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+", Pattern.CASE_INSENSITIVE);
     private static final Pattern UUID_FILE_PREFIX_REGEX = Pattern.compile(
@@ -183,6 +184,24 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     }
 
     @Override
+    public MessageResponse sendSystemMessage(String conversationId, String content) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+        if (conversation.getType() != ConversationType.GROUP) {
+            throw new InvalidParamException("Only group conversation is supported");
+        }
+
+        return persistAndBroadcast(
+                UNICALL_SYSTEM_BOT_ID,
+                conversationId,
+                content,
+                MessageType.TEXT,
+                List.of(),
+                null
+        );
+    }
+
+    @Override
     public void sendFromStomp(String identityUserId, ChatSendStompPayload payload) {
         if (payload == null || payload.getConversationId() == null || payload.getConversationId().isBlank()) {
             throw new InvalidParamException("Thiếu conversationId");
@@ -208,7 +227,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             List<MessageAttachmentRequest> attachmentRequests,
             String replyToMessageId
     ) {
-        conversationBlockService.assertCanSendMessage(identityUserId, conversationId);
+        if (!UNICALL_SYSTEM_BOT_ID.equals(identityUserId)) {
+            conversationBlockService.assertCanSendMessage(identityUserId, conversationId);
+        }
 
         String normalizedContent = content == null ? "" : content.trim();
         List<Attachment> attachments = toAttachments(attachmentRequests);

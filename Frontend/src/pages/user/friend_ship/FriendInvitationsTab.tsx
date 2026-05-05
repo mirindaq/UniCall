@@ -118,7 +118,7 @@ export function FriendInvitationsTab() {
     const profile = profileMap[peerId]
     const displayName =
       profile?.fullName
-      || `${request.firstName ?? ""} ${request.lastName ?? ""}`.trim()
+      || `${request.lastName ?? ""} ${request.firstName ?? ""}`.trim()
       || peerId
     const fallback = toFallback(displayName)
     return {

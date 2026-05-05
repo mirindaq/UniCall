@@ -136,7 +136,7 @@ export function SearchUserAccountDialog({
   const handleAddFriend = () => {
     if (!selectedUser?.identityUserId || !currentIdentityUserId) return
 
-    const defaultMessage = `Xin chào ${selectedUser?.firstName ?? "bạn"}. Mình là ${myFirstName} ${myLastName}. Mình tìm thấy bạn qua số điện thoại!`
+    const defaultMessage = `Xin chào ${selectedUser?.firstName ?? "bạn"}. Mình là ${myLastName} ${myFirstName}. Mình tìm thấy bạn qua số điện thoại!`
     setFriendRequestMessage(defaultMessage)
     setIsEditingMessage(true)
   }

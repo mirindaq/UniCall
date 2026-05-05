@@ -20,6 +20,7 @@ public interface ChatMessageService {
     MessageResponse getMessageById(String identityUserId, String conversationId, String messageId);
 
     MessageResponse sendRest(String identityUserId, String conversationId, SendChatMessageRequest request);
+    MessageResponse sendSystemMessage(String conversationId, String content);
 
     void sendFromStomp(String identityUserId, ChatSendStompPayload payload);
 

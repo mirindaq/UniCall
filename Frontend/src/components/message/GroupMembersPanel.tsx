@@ -30,6 +30,26 @@ type GroupMembersPanelProps = {
   onBack: () => void
 }
 
+const resolveLeaveGroupErrorMessage = (error: unknown) => {
+  const backendMessage = (
+    error as { response?: { data?: { message?: string } } }
+  )?.response?.data?.message
+
+  if (!backendMessage) {
+    return "Rời nhóm thất bại, vui lòng thử lại."
+  }
+
+  if (backendMessage === "Admin must transfer role before leaving group") {
+    return "Bạn đang là trưởng nhóm. Vui lòng chuyển quyền trưởng nhóm trước khi rời nhóm."
+  }
+
+  if (backendMessage === "Last member cannot leave group. Please dissolve group instead") {
+    return "Bạn là thành viên cuối cùng. Hãy giải tán nhóm thay vì rời nhóm."
+  }
+
+  return backendMessage
+}
+
 export default function GroupMembersPanel({ conversationId, onBack }: GroupMembersPanelProps) {
   const { currentUserId, refetchConversations, selectConversation, setDetailsView } = useChatPage()
   const [participants, setParticipants] = useState<GroupParticipantInfo[]>([])
@@ -96,7 +116,7 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
     return participants.map((participant) => {
       const profile = profiles[participant.idAccount]
       const displayName = profile
-        ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || participant.idAccount
+        ? `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || participant.idAccount
         : participant.idAccount
       const fallback = toFallback(displayName)
       const roleLabel =
@@ -134,7 +154,7 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
       .map((participant) => {
         const profile = profiles[participant.idAccount]
         const displayName = profile
-          ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || participant.idAccount
+          ? `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || participant.idAccount
           : participant.idAccount
         return {
           id: participant.idAccount,
@@ -157,8 +177,8 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
       await refetchConversations()
       setDetailsView("main")
       selectConversation(null)
-    } catch {
-      toast.error("Rời nhóm thất bại, vui lòng thử lại.")
+    } catch (error) {
+      toast.error(resolveLeaveGroupErrorMessage(error))
     }
   }
 
@@ -393,3 +413,4 @@ function toFallback(fullName: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+

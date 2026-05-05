@@ -11,6 +11,26 @@ import ChatInfoMain from "./ChatInfoMain"
 import ChatSearchSidebar from "./ChatSearchSidebar"
 import ChatStorage from "./ChatStorage"
 
+const resolveLeaveGroupErrorMessage = (error: unknown) => {
+  const backendMessage = (
+    error as { response?: { data?: { message?: string } } }
+  )?.response?.data?.message
+
+  if (!backendMessage) {
+    return "Rời nhóm thất bại, vui lòng thử lại."
+  }
+
+  if (backendMessage === "Admin must transfer role before leaving group") {
+    return "Bạn đang là trưởng nhóm. Vui lòng chuyển quyền trưởng nhóm trước khi rời nhóm."
+  }
+
+  if (backendMessage === "Last member cannot leave group. Please dissolve group instead") {
+    return "Bạn là thành viên cuối cùng. Hãy giải tán nhóm thay vì rời nhóm."
+  }
+
+  return backendMessage
+}
+
 export default function ChatDetails() {
   const {
     selectedConversation,
@@ -96,8 +116,8 @@ export default function ChatDetails() {
       await refetchConversations()
       setDetailsView("main")
       selectConversation(null)
-    } catch {
-      toast.error("Rời nhóm thất bại, vui lòng thử lại.")
+    } catch (error) {
+      toast.error(resolveLeaveGroupErrorMessage(error))
     }
   }
 

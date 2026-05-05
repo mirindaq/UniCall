@@ -11,7 +11,7 @@ app:
   prefix: ${API_PREFIX:/api/v1}
   firebase:
     enabled: ${FIREBASE_OTP_ENABLED:true}
-    credentials-path: ${FIREBASE_CREDENTIALS_PATH:C:/Users/gvhoa/Downloads/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:C:/Users/Hoang/Downloads/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
   security:
     cookie:
       secure: ${COOKIE_SECURE:false}

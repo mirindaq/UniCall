@@ -1,6 +1,21 @@
 spring:
   application:
     name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/unicall_notification_service?createDatabaseIfNotExist=true}
+    username: ${NOTIFICATION_DB_USERNAME:springstudent}
+    password: ${NOTIFICATION_DB_PASSWORD:springstudent}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
 
 server:
   servlet:
@@ -9,6 +24,11 @@ server:
 
 api:
   prefix: /api/v1
+app:
+  notification:
+    exchange: ${NOTIFICATION_EXCHANGE:unicall.notification.exchange}
+    queue: ${NOTIFICATION_QUEUE:unicall.notification.queue}
+    routing-key-pattern: ${NOTIFICATION_ROUTING_KEY_PATTERN:notification.group.#}
 
 eureka:
   client:

@@ -323,7 +323,7 @@ export function FeedTab() {
   const myProfile = (myProfileResponse as any)?.data
   const myAvatar = myProfile?.avatar ?? undefined
   const myName = myProfile
-    ? `${myProfile.firstName ?? ""}${myProfile.lastName ?? ""}`.trim()
+    ? `${myProfile.lastName ?? ""} ${myProfile.firstName ?? ""}`.trim()
     : "Me"
   console.log('my profile: ', myProfile);
 

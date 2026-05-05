@@ -236,7 +236,7 @@ export function CreateGroupDialog({
         try {
           const response = await userService.getProfileByIdentityUserId(peerId)
           const profile = response.data
-          const displayName = `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+          const displayName = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim()
           return {
             id: peerId,
             displayName: displayName || peerId,
@@ -287,7 +287,7 @@ export function CreateGroupDialog({
             ? friend.idAccountReceive
             : friend.idAccountSent)
 
-        const displayName = `${friend.firstName ?? ""} ${friend.lastName ?? ""}`.trim()
+        const displayName = `${friend.lastName ?? ""} ${friend.firstName ?? ""}`.trim()
         const resolvedProfile = recentProfileMap[peerIdentityUserId ?? ""]
         const resolvedName = resolvedProfile?.displayName || displayName
 
@@ -695,3 +695,4 @@ function toFallback(fullName: string) {
 
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+
