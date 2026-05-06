@@ -262,6 +262,20 @@ export function ChatMessageRow({
   onLongPressMessage,
   onPressCallMessage,
 }: ChatMessageRowProps) {
+  if (message.centeredSystemNotice) {
+    return (
+      <View className="items-center px-5 py-1.5">
+        <View className="rounded-full bg-slate-200 px-3 py-1">
+          <Text
+            allowFontScaling={false}
+            className="text-center text-[11px] font-medium text-slate-600">
+            {message.content}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   const isMine = message.sender === 'me';
   const rowAvatar: MockAvatar = {
     type: 'initials',

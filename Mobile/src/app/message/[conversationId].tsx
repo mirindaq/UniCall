@@ -22,6 +22,7 @@ import type {
   MessageEnum,
   MessageType,
 } from '@/types/chat';
+import { UNICALL_SYSTEM_BOT_ID as SYSTEM_BOT_ID } from '@/types/chat';
 import type { UserProfile } from '@/types/user';
 import {
   buildMessagePreviewData,
@@ -47,6 +48,7 @@ type UiMessage = {
   pinned?: boolean;
   pinnedByAccountId?: string;
   pinnedAt?: string;
+  mentionedUserIds?: string[];
   optimisticStatus?: 'SENDING' | 'SENT';
 };
 
@@ -74,6 +76,7 @@ const toUiMessage = (message: ChatMessageResponse): UiMessage => ({
   pinned: message.pinned,
   pinnedByAccountId: message.pinnedByAccountId,
   pinnedAt: message.pinnedAt,
+  mentionedUserIds: message.mentionedUserIds,
 });
 
 const normalizeId = (value?: string | number | null) => {
@@ -149,6 +152,47 @@ const isGroupPinPermissionError = (message?: string): boolean => {
   const hasRoleKeyword = /truong nhom|pho nhom|deputy|admin|group admin/.test(normalized);
   return hasPinKeyword && hasRoleKeyword;
 };
+
+const normalizeSystemMessageContent = (value?: string) => (value || '').trim().toLowerCase();
+
+const isCenteredGroupSystemNotice = (message: UiMessage) => {
+  if (message.idAccountSent !== SYSTEM_BOT_ID) {
+    return false;
+  }
+  if (message.type !== 'TEXT') {
+    return false;
+  }
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  const text = normalizeSystemMessageContent(message.content);
+  return (
+    text.includes('đã rời nhóm') ||
+    text.includes('đã tạo nhóm') ||
+    (text.includes('đã thêm') && text.includes('vào nhóm')) ||
+    (text.includes('đã xóa') && text.includes('khỏi nhóm')) ||
+    text.includes('đã chuyển quyền trưởng nhóm cho') ||
+    text.includes('đã duyệt yêu cầu tham gia nhóm của') ||
+    text.includes('đã cập nhật vai trò của') ||
+    text.includes('đã thay đổi ảnh đại diện nhóm') ||
+    text.includes('đã cho phép tất cả thành viên gửi tin nhắn vào nhóm') ||
+    text.includes('đã giới hạn gửi tin nhắn') ||
+    text.includes('đã cho phép tất cả thành viên ghim tin nhắn') ||
+    text.includes('đã giới hạn ghim tin nhắn') ||
+    text.includes('đã cho phép tất cả thành viên thay đổi ảnh đại diện nhóm') ||
+    text.includes('đã giới hạn thay đổi ảnh đại diện') ||
+    text.includes('đã bật chế độ phê duyệt thành viên mới') ||
+    text.includes('đã tắt chế độ phê duyệt thành viên mới')
+  );
+};
+
+const normalizeVietnameseForSearch = (value?: string) =>
+  (value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 type MessageActionItemProps = {
   label: string;
@@ -376,6 +420,45 @@ export default function ConversationDetailScreen() {
       };
     });
   }, [conversation, isGroupConversation, senderProfiles]);
+
+  const mentionableMembers = useMemo(() => {
+    if (!conversation || conversation.type !== 'GROUP') {
+      return [];
+    }
+    return conversation.participantInfos
+      .filter((participant) => {
+        const participantId = normalizeId(participant.idAccount);
+        return (
+          participantId != null &&
+          participantId !== normalizeId(myIdentityId) &&
+          participantId !== normalizeId(myAccountNumericId)
+        );
+      })
+      .map((participant) => {
+        const profile = senderProfiles[participant.idAccount];
+        const displayName = toDisplayName(profile, participant.nickname || participant.idAccount);
+        return {
+          id: participant.idAccount,
+          displayName,
+          normalizedDisplayName: normalizeVietnameseForSearch(displayName),
+        };
+      });
+  }, [conversation, myAccountNumericId, myIdentityId, senderProfiles]);
+
+  const extractMentionedUserIds = useCallback(
+    (messageContent: string) => {
+      const content = messageContent.trim();
+      if (!content || !isGroupConversation) {
+        return undefined;
+      }
+      const normalizedContent = normalizeVietnameseForSearch(content);
+      const mentionedMemberIds = mentionableMembers
+        .filter((member) => normalizedContent.includes(`@${member.normalizedDisplayName}`))
+        .map((member) => member.id);
+      return mentionedMemberIds.length > 0 ? mentionedMemberIds : undefined;
+    },
+    [isGroupConversation, mentionableMembers]
+  );
 
   const resolveSenderName = useCallback(
     (message: UiMessage) => {
@@ -844,6 +927,7 @@ export default function ConversationDetailScreen() {
     return messages.map((message, index) => {
       const prev = messages[index - 1];
       const isMine = isMessageFromCurrentUser(message, myIdentityId, myAccountNumericId);
+      const centeredSystemNotice = isCenteredGroupSystemNotice(message);
       const senderProfile = senderProfiles[message.idAccountSent];
       const senderDisplayName = resolveSenderName(message);
       const date = message.timeSent ? new Date(message.timeSent) : null;
@@ -883,20 +967,27 @@ export default function ConversationDetailScreen() {
           ? 'attachment'
           : 'text',
         content: message.content || '',
+        centeredSystemNotice,
         rawType: message.type,
         attachments: message.attachments,
         recalled: message.recalled,
         replyPreview,
         senderName:
-          !isMine && (!prev || prev.idAccountSent !== message.idAccountSent)
+          !centeredSystemNotice && !isMine && (!prev || prev.idAccountSent !== message.idAccountSent)
             ? conversation?.type === 'GROUP'
               ? senderDisplayName
               : headerTitle
             : undefined,
-        senderAvatarUrl: !isMine ? senderProfile?.avatar ?? conversation?.avatar ?? null : null,
-        senderAvatarText: !isMine ? toInitials(senderDisplayName || headerTitle) : undefined,
+        senderAvatarUrl:
+          !centeredSystemNotice && !isMine ? senderProfile?.avatar ?? conversation?.avatar ?? null : null,
+        senderAvatarText:
+          !centeredSystemNotice && !isMine ? toInitials(senderDisplayName || headerTitle) : undefined,
         timeLabel,
-        showAvatar: prev ? prev.idAccountSent !== message.idAccountSent && !isMine : !isMine,
+        showAvatar: centeredSystemNotice
+          ? false
+          : prev
+            ? prev.idAccountSent !== message.idAccountSent && !isMine
+            : !isMine,
         reactionSummary: reactionSummary.items,
         reactionTotal: reactionSummary.total,
         pinned: message.pinned,
@@ -911,7 +1002,7 @@ export default function ConversationDetailScreen() {
             ? false
             : undefined,
         statusText:
-          isMine && index === lastMineIndex
+          !centeredSystemNotice && isMine && index === lastMineIndex
             ? message.optimisticStatus === 'SENDING'
               ? 'Đang gửi...'
               : 'Đã gửi'
@@ -1065,6 +1156,7 @@ export default function ConversationDetailScreen() {
     }
 
     const replyToMessageId = replyingToMessageId;
+    const mentionedUserIds = extractMentionedUserIds(normalizedContent);
     setIsSending(true);
 
     try {
@@ -1073,7 +1165,8 @@ export default function ConversationDetailScreen() {
         normalizedContent,
         'TEXT',
         undefined,
-        replyToMessageId ?? undefined
+        replyToMessageId ?? undefined,
+        mentionedUserIds
       );
       const incoming = toUiMessage(response.data);
       setMessages((prev) => {
@@ -1124,13 +1217,15 @@ export default function ConversationDetailScreen() {
       );
 
       const content = mixedText?.trim() ?? '';
+      const mentionedUserIds = extractMentionedUserIds(content);
       const messageType: MessageType = content ? 'MIX' : 'NONTEXT';
       const response = await chatService.sendMessageRest(
         conversationId,
         content,
         messageType,
         uploadedAttachments,
-        replyToMessageId ?? undefined
+        replyToMessageId ?? undefined,
+        mentionedUserIds
       );
 
       const incoming = toUiMessage(response.data);
@@ -1167,12 +1262,15 @@ export default function ConversationDetailScreen() {
 
     setIsSending(true);
     try {
+      const content = 'Đã gửi GIF';
+      const mentionedUserIds = extractMentionedUserIds(content);
       const response = await chatService.sendMessageRest(
         conversationId,
-        '\u0110\u00E3 g\u1EEDi GIF',
+        content,
         'NONTEXT',
         [{ type: 'GIF', url: gifUrl, order: 0 }],
-        replyingToMessageId ?? undefined
+        replyingToMessageId ?? undefined,
+        mentionedUserIds
       );
       const incoming = toUiMessage(response.data);
       setMessages((prev) => {
@@ -1486,7 +1584,7 @@ export default function ConversationDetailScreen() {
         onSendImages={handleSendImages}
         onSendGif={handleSendGif}
         onLongPressMessage={(message) => {
-          if (message.recalled || message.rawType === 'CALL') {
+          if (message.centeredSystemNotice || message.recalled || message.rawType === 'CALL') {
             return;
           }
           const idMessage = message.id;

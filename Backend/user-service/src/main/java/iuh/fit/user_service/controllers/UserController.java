@@ -2,8 +2,10 @@ package iuh.fit.user_service.controllers;
 
 import iuh.fit.common_service.dtos.response.base.ResponseSuccess;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
+import iuh.fit.common_service.exceptions.UnauthorizedException;
 import iuh.fit.user_service.dtos.request.RequestAccountDeletionRequest;
 import iuh.fit.user_service.dtos.response.AccountDeletionStatusResponse;
+import iuh.fit.user_service.dtos.response.AdminUserResponse;
 import iuh.fit.user_service.dtos.request.UpdateMyProfileRequest;
 import iuh.fit.user_service.dtos.response.UserProfileResponse;
 import iuh.fit.user_service.dtos.response.UserSearchResponse;
@@ -32,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class UserController {
     private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String USER_ROLE_HEADER = "X-User-Role";
 
     private final UserProfileService userProfileService;
 
@@ -133,5 +136,75 @@ public class UserController {
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Search users success", data)
         );
+    }
+
+    @GetMapping("/admin/access")
+    public ResponseEntity<ResponseSuccess<Boolean>> checkAdminAccess(
+            @RequestHeader(value = USER_ROLE_HEADER, required = false) String userRole
+    ) {
+        requireAdminRole(userRole);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Admin access granted", true)
+        );
+    }
+
+    @GetMapping("/admin/users")
+    public ResponseEntity<ResponseSuccess<PageResponse<AdminUserResponse>>> getAdminUsers(
+            @RequestHeader(value = USER_ROLE_HEADER, required = false) String userRole,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "limit", defaultValue = "20") int limit,
+            @RequestParam(name = "keyword", required = false) String keyword
+    ) {
+        requireAdminRole(userRole);
+        Page<User> userPage = userProfileService.getAdminUsers(page, limit, keyword);
+        PageResponse<AdminUserResponse> data = PageResponse.fromPage(userPage, AdminUserResponse::from);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Get admin users success", data)
+        );
+    }
+
+    @PutMapping("/admin/users/{identityUserId}/block")
+    public ResponseEntity<ResponseSuccess<AdminUserResponse>> blockUser(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String actorIdentityUserId,
+            @RequestHeader(value = USER_ROLE_HEADER, required = false) String userRole,
+            @PathVariable String identityUserId
+    ) {
+        requireAdminRole(userRole);
+        if (actorIdentityUserId != null && actorIdentityUserId.equals(identityUserId)) {
+            throw new UnauthorizedException("Admin cannot block itself");
+        }
+        User updated = userProfileService.setUserActiveStatus(identityUserId, false);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Block user success", AdminUserResponse.from(updated))
+        );
+    }
+
+    @PutMapping("/admin/users/{identityUserId}/unblock")
+    public ResponseEntity<ResponseSuccess<AdminUserResponse>> unblockUser(
+            @RequestHeader(value = USER_ROLE_HEADER, required = false) String userRole,
+            @PathVariable String identityUserId
+    ) {
+        requireAdminRole(userRole);
+        User updated = userProfileService.setUserActiveStatus(identityUserId, true);
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Unblock user success", AdminUserResponse.from(updated))
+        );
+    }
+
+    private void requireAdminRole(String userRoleHeader) {
+        if (userRoleHeader == null || userRoleHeader.isBlank()) {
+            throw new UnauthorizedException("Missing admin role");
+        }
+        boolean hasAdminRole = java.util.Arrays.stream(userRoleHeader.split(","))
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .anyMatch(role -> role.equals("admin")
+                        || role.equals("role_admin")
+                        || role.equals("system_admin")
+                        || role.equals("super_admin")
+                        || role.equals("super-admin"));
+        if (!hasAdminRole) {
+            throw new UnauthorizedException("Admin role required");
+        }
     }
 }

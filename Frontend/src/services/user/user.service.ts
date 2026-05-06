@@ -1,6 +1,9 @@
+import axios from "axios"
 import axiosClient from "@/configurations/axios.config"
+import { buildApiUrl } from "@/constants/api"
 import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
+import type { AdminManagedUser } from "@/types/admin"
 import type {
   AccountDeletionStatus,
   FriendInvitePrivacy,
@@ -180,6 +183,50 @@ export const userService = {
   cancelMyAccountDeletionRequest: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
     const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
       `${USER_API_PREFIX}/me/deletion-request/cancel`,
+    )
+    return response.data
+  },
+
+  checkAdminAccess: async (): Promise<ResponseSuccess<boolean>> => {
+    const response = await axios.get<ResponseSuccess<boolean>>(buildApiUrl(`${USER_API_PREFIX}/admin/access`), {
+      withCredentials: true,
+      headers: { "Content-Type": "application/json" },
+    })
+    return response.data
+  },
+
+  getAdminUsers: async ({
+    keyword,
+    page = 1,
+    limit = 20,
+  }: {
+    keyword?: string
+    page?: number
+    limit?: number
+  }): Promise<ResponseSuccess<PageResponse<AdminManagedUser>>> => {
+    const response = await axiosClient.get<ResponseSuccess<PageResponse<AdminManagedUser>>>(
+      `${USER_API_PREFIX}/admin/users`,
+      {
+        params: {
+          keyword,
+          page,
+          limit,
+        },
+      }
+    )
+    return response.data
+  },
+
+  blockUserByAdmin: async (identityUserId: string): Promise<ResponseSuccess<AdminManagedUser>> => {
+    const response = await axiosClient.put<ResponseSuccess<AdminManagedUser>>(
+      `${USER_API_PREFIX}/admin/users/${identityUserId}/block`
+    )
+    return response.data
+  },
+
+  unblockUserByAdmin: async (identityUserId: string): Promise<ResponseSuccess<AdminManagedUser>> => {
+    const response = await axiosClient.put<ResponseSuccess<AdminManagedUser>>(
+      `${USER_API_PREFIX}/admin/users/${identityUserId}/unblock`
     )
     return response.data
   },

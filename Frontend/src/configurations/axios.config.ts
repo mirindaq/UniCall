@@ -3,11 +3,13 @@ import { toast } from "sonner"
 
 import { API_BASE_URL, buildApiUrl } from "@/constants/api"
 import { API_PREFIXES } from "@/constants/api-prefixes"
+import { ADMIN_PATH } from "@/constants/admin"
 import { AUTH_PATH } from "@/constants/auth"
 import { updateAuthState } from "@/contexts/auth-context"
 import type { ResponseError, ResponseSuccess } from "@/types/api-response"
 
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH ?? AUTH_PATH.LOGIN
+const ADMIN_LOGIN_PATH = AUTH_PATH.ADMIN_LOGIN
 const AUTH_API_PREFIX = API_PREFIXES.auth
 
 const axiosClient = axios.create({
@@ -34,9 +36,15 @@ const processQueue = (error: unknown) => {
   failedQueue = []
 }
 
+const isAdminFlowPath = (pathname?: string | null) =>
+  Boolean(pathname && pathname.startsWith(ADMIN_PATH.ROOT))
+
 const redirectToLogin = () => {
   updateAuthState(false)
-  window.location.href = LOGIN_PATH
+  const targetPath = isAdminFlowPath(window.location.pathname)
+    ? ADMIN_LOGIN_PATH
+    : LOGIN_PATH
+  window.location.href = targetPath
 }
 
 const isAuthRequest = (url?: string) =>
@@ -47,7 +55,8 @@ const isAuthRequest = (url?: string) =>
       url?.includes(`${AUTH_API_PREFIX}/change-password`) ||
       url?.includes(`${AUTH_API_PREFIX}/resend-verification-email`) ||
       url?.includes(`${AUTH_API_PREFIX}/refresh`) ||
-      url?.includes(`${AUTH_API_PREFIX}/logout`)
+      url?.includes(`${AUTH_API_PREFIX}/logout`) ||
+      url?.includes(`${AUTH_API_PREFIX}/admin/login`)
   )
 
 const isAuthLifecycleRequest = (url?: string) =>

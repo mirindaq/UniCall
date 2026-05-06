@@ -21,6 +21,8 @@ public interface KeycloakAuthService {
 
     AuthTokenResponse login(String phoneNumber, String password);
 
+    boolean hasAdminRole(String identityUserId);
+
     AuthTokenResponse refreshToken(String refreshToken);
 
     void revokeRefreshToken(String refreshToken);

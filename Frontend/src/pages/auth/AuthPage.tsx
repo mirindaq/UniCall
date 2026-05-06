@@ -14,6 +14,7 @@ import { authService } from "@/services/auth/auth.service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { AUTH_PATH } from "@/constants/auth"
+import { USER_PATH } from "@/constants/user"
 import { useAuth } from "@/contexts/auth-context"
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
   getFirebaseAuth,
   toFirebasePhoneNumber,
 } from "@/services/auth/firebase-phone-auth.service"
+import { userService } from "@/services/user/user.service"
 import type { ResponseError } from "@/types/api-response"
 import type {
   LoginRequest,
@@ -460,10 +462,11 @@ export function AuthPage() {
 
     try {
       const response = await authService.login(payload)
-      setAuthenticated()
+      const profile = await userService.getMyProfile({ forceRefresh: true })
+      setAuthenticated(profile.data.identityUserId)
       setShowResendVerification(false)
       toast.success(response.message || "Đăng nhập thành công")
-      navigate(AUTH_PATH.HOME)
+      navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`, { replace: true })
     } catch (error) {
       clearAuthenticated()
       const message = extractErrorMessage(error, "Đăng nhập thất bại.")

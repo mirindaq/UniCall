@@ -98,6 +98,21 @@ public class AuthController {
         return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Login success"));
     }
 
+    @PostMapping("/admin/login")
+    public ResponseEntity<ResponseSuccess<?>> adminLogin(
+            @RequestHeader(value = CLIENT_TYPE_HEADER, required = false) String clientType,
+            @Valid @RequestBody LoginRequest request
+    ) {
+        AuthService.LoginResult result = authService.loginAdmin(request);
+        if (isMobileClient(clientType)) {
+            return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Admin login success", result.tokens()));
+        }
+
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
+        result.cookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
+        return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Admin login success"));
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<ResponseSuccess<?>> refresh(
             @RequestHeader(value = CLIENT_TYPE_HEADER, required = false) String clientType,

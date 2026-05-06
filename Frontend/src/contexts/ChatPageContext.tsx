@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { useQuery } from "@/hooks/useQuery"
@@ -100,6 +101,7 @@ const sortConversationsByPinnedAndTime = (items: ConversationResponse[]): Conver
 const ChatPageContext = createContext<ChatPageContextValue | null>(null)
 
 export function ChatPageProvider({ children }: { children: React.ReactNode }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [detailsView, setDetailsView] = useState<"main" | "storage" | "group-members" | "group-manage" | "search">("main")
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(true)
@@ -127,6 +129,7 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
 
   const [conversations, setConversations] = useState<ConversationResponse[]>([])
   const refetchInFlightRef = useRef(false)
+  const requestedConversationId = searchParams.get("conversationId")
 
   useEffect(() => {
     const incoming = conversationsResponse?.data ?? []
@@ -194,6 +197,23 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     }
     void markConversationAsRead(selectedConversationId)
   }, [markConversationAsRead, selectedConversationId])
+
+  useEffect(() => {
+    if (!requestedConversationId || conversations.length === 0) {
+      return
+    }
+
+    const targetConversation = conversations.find(
+      (conversation) => conversation.idConversation === requestedConversationId
+    )
+    if (!targetConversation || selectedConversationId === requestedConversationId) {
+      return
+    }
+
+    setSelectedConversationId(requestedConversationId)
+    setDetailsView("main")
+    setMessageFocusRequestId(null)
+  }, [conversations, requestedConversationId, selectedConversationId])
 
   const conversationTitle = useCallback(
     (c: ConversationResponse) => {
@@ -324,7 +344,16 @@ export function ChatPageProvider({ children }: { children: React.ReactNode }) {
     setSelectedConversationId(id)
     setDetailsView("main")
     setMessageFocusRequestId(null)
-  }, [])
+    setSearchParams((prev) => {
+      const nextParams = new URLSearchParams(prev)
+      if (id) {
+        nextParams.set("conversationId", id)
+      } else {
+        nextParams.delete("conversationId")
+      }
+      return nextParams
+    }, { replace: true })
+  }, [setSearchParams])
 
   const setDetailsPanelOpen = useCallback((open: boolean) => {
     setIsDetailsPanelOpen(open)

@@ -8,6 +8,7 @@ import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
+import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -72,6 +73,23 @@ public class GrpcUserServiceClient {
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .cancelAccountDeletionRequest(grpcRequest);
         } catch (StatusRuntimeException ex) {
+            throw mapException(ex);
+        }
+    }
+
+    public boolean userProfileExists(String identityUserId) {
+        GetUserProfileByIdentityRequest grpcRequest = GetUserProfileByIdentityRequest.newBuilder()
+                .setIdentityUserId(identityUserId)
+                .build();
+        try {
+            userStub
+                    .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                    .getUserProfileByIdentity(grpcRequest);
+            return true;
+        } catch (StatusRuntimeException ex) {
+            if (ex.getStatus().getCode() == Status.Code.NOT_FOUND) {
+                return false;
+            }
             throw mapException(ex);
         }
     }

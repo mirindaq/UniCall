@@ -28,6 +28,8 @@ public interface AuthService {
 
     LoginResult login(LoginRequest request);
 
+    LoginResult loginAdmin(LoginRequest request);
+
     RefreshResult refresh(String refreshToken);
 
     LogoutResult logout(String refreshToken, HttpServletRequest request);

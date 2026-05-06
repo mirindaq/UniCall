@@ -9,9 +9,10 @@ import { userService } from "@/services/user/user.service"
 
 interface ProtectedRouteProps {
   children: ReactNode
+  redirectTo?: string
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, redirectTo = AUTH_PATH.LOGIN }: ProtectedRouteProps) {
   const { isAuthenticated, setAuthenticated, clearAuthenticated } = useAuth()
   const location = useLocation()
   const [loading, setLoading] = useState(!isAuthenticated)
@@ -56,7 +57,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to={AUTH_PATH.LOGIN} state={{ from: location }} replace />
+    return <Navigate to={redirectTo} state={{ from: location }} replace />
   }
 
   return <>{children}</>

@@ -1,5 +1,9 @@
 export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX' | 'CALL';
 export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI' | 'LINK';
+export const UNICALL_AI_BOT_ID = 'unicall-ai-bot';
+export const UNICALL_IMAGE_BOT_ID = 'unicall-image-bot';
+export const UNICALL_SYSTEM_BOT_ID = 'unicall-system-bot';
+export const UNICALL_AI_BOT_IDS = [UNICALL_AI_BOT_ID, UNICALL_IMAGE_BOT_ID, UNICALL_SYSTEM_BOT_ID] as const;
 
 export type MessageEnum = 'SENT' | 'RECEIVED' | 'DELETED' | 'FAILED';
 
@@ -20,7 +24,21 @@ export interface ChatMessageResponse {
   pinned?: boolean;
   pinnedByAccountId?: string;
   pinnedAt?: string;
+  mentionedUserIds?: string[];
   attachments?: ChatAttachment[];
+  callInfo?: ChatCallInfo;
+}
+
+export type CallOutcome = 'COMPLETED' | 'NO_ANSWER' | 'REJECTED' | 'CANCELED';
+
+export interface ChatCallInfo {
+  callId: string;
+  audioOnly: boolean;
+  callerUserId: string;
+  calleeUserId: string;
+  endedByUserId?: string;
+  durationSeconds?: number;
+  outcome: CallOutcome;
 }
 
 export interface ChatAttachment {

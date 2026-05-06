@@ -1,6 +1,7 @@
 package iuh.fit.identity_service.services.impl;
 
 import iuh.fit.common_service.exceptions.UnauthenticatedException;
+import iuh.fit.common_service.exceptions.UnauthorizedException;
 import iuh.fit.identity_service.clients.GrpcUserServiceClient;
 import iuh.fit.identity_service.dtos.request.auth.ChangePasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
@@ -85,6 +86,15 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResult login(LoginRequest request) {
+        return doLogin(request, false);
+    }
+
+    @Override
+    public LoginResult loginAdmin(LoginRequest request) {
+        return doLogin(request, true);
+    }
+
+    private LoginResult doLogin(LoginRequest request, boolean requireAdminRole) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
             throw new UnauthenticatedException("Missing access token from identity provider");
@@ -93,6 +103,13 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
         String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
+        boolean hasAdminRole = keycloakAuthService.hasAdminRole(identityUserId);
+        if (requireAdminRole && !hasAdminRole) {
+            throw new UnauthorizedException("Admin role is required");
+        }
+        if (!requireAdminRole && hasAdminRole) {
+            throw new UnauthorizedException("Admin accounts must use the admin login endpoint");
+        }
         grpcUserServiceClient.cancelDeletionRequest(identityUserId);
 
         return new LoginResult(

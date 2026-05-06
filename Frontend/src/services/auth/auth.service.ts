@@ -32,6 +32,20 @@ export const authService = {
     return response.data
   },
 
+  adminLogin: async (payload: LoginRequest): Promise<ResponseSuccess<void>> => {
+    const normalizedPayload: LoginRequest = {
+      ...payload,
+      phoneNumber: payload.phoneNumber.trim(),
+      password: payload.password.trim(),
+      firebaseIdToken: payload.firebaseIdToken.trim(),
+    }
+    const response = await axiosClient.post<ResponseSuccess<void>>(
+      `${AUTH_API_PREFIX}/admin/login`,
+      normalizedPayload
+    )
+    return response.data
+  },
+
   register: async (payload: RegisterRequest): Promise<ResponseSuccess<RegisterResponse>> => {
     const response = await axiosClient.post<ResponseSuccess<RegisterResponse>>(`${AUTH_API_PREFIX}/register`, payload)
     return response.data

@@ -9,6 +9,15 @@ server:
 
 app:
   prefix: ${API_PREFIX:/api/v1}
+  bootstrap:
+    admin:
+      enabled: ${ADMIN_BOOTSTRAP_ENABLED:true}
+      phone-number: ${ADMIN_BOOTSTRAP_PHONE:0900000000}
+      email: ${ADMIN_BOOTSTRAP_EMAIL:admin@unicall.local}
+      first-name: ${ADMIN_BOOTSTRAP_FIRST_NAME:System}
+      last-name: ${ADMIN_BOOTSTRAP_LAST_NAME:Admin}
+      password: ${ADMIN_BOOTSTRAP_PASSWORD:Admin@123}
+      role: ${ADMIN_BOOTSTRAP_ROLE:admin}
   firebase:
     enabled: ${FIREBASE_OTP_ENABLED:true}
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:C:/Users/Hoang/Downloads/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}

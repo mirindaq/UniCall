@@ -210,7 +210,8 @@ export const chatSocketService = {
     content: string,
     type: ChatMessageResponse['type'] = 'TEXT',
     attachments?: Pick<ChatAttachment, 'type' | 'url' | 'size' | 'order'>[],
-    replyToMessageId?: string | null
+    replyToMessageId?: string | null,
+    mentionedUserIds?: string[]
   ) {
     const client = sharedClient;
     if (!client?.connected) {
@@ -224,6 +225,10 @@ export const chatSocketService = {
         type,
         attachments,
         replyToMessageId: replyToMessageId ?? undefined,
+        mentionedUserIds:
+          mentionedUserIds && mentionedUserIds.length > 0
+            ? mentionedUserIds
+            : undefined,
       }),
       headers: { 'content-type': 'application/json' },
     });

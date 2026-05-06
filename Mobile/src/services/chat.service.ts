@@ -54,11 +54,21 @@ export const chatService = {
     content: string,
     type: ChatMessageResponse['type'] = 'TEXT',
     attachments?: Pick<ChatAttachment, 'type' | 'url' | 'size' | 'order'>[],
-    replyToMessageId?: string | null
+    replyToMessageId?: string | null,
+    mentionedUserIds?: string[]
   ): Promise<ResponseSuccess<ChatMessageResponse>> => {
     const { data } = await axiosClient.post<ResponseSuccess<ChatMessageResponse>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { content, type, attachments, replyToMessageId: replyToMessageId ?? undefined }
+      {
+        content,
+        type,
+        attachments,
+        replyToMessageId: replyToMessageId ?? undefined,
+        mentionedUserIds:
+          mentionedUserIds && mentionedUserIds.length > 0
+            ? mentionedUserIds
+            : undefined,
+      }
     );
     return data;
   },

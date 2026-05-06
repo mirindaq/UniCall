@@ -67,6 +67,11 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     }
 
     @Override
+    public boolean hasAdminRole(String identityUserId) {
+        return keycloakIdentityClient.hasAdminRole(identityUserId);
+    }
+
+    @Override
     public AuthTokenResponse refreshToken(String refreshToken) {
         return keycloakIdentityClient.refreshToken(refreshToken);
     }

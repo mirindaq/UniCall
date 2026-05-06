@@ -54,4 +54,15 @@ public interface UserProfileService {
             String search,
             String keyword
     );
+
+    Page<User> getAdminUsers(
+            int page,
+            int limit,
+            String keyword
+    );
+
+    User setUserActiveStatus(
+            String targetIdentityUserId,
+            boolean isActive
+    );
 }

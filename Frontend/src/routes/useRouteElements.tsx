@@ -5,20 +5,17 @@ import { AUTH_PATH } from "@/constants/auth"
 import { USER_PATH } from "@/constants/user"
 import { AdminLayout } from "@/layouts/AdminLayout"
 import { UserLayout } from "@/layouts/UserLayout"
-import { AdminBroadcastsPage } from "@/pages/admin/AdminBroadcastsPage"
-import { AdminConversationsPage } from "@/pages/admin/AdminConversationsPage"
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage"
-import { AdminGroupsPage } from "@/pages/admin/AdminGroupsPage"
-import { AdminModerationPage } from "@/pages/admin/AdminModerationPage"
-import { AdminReportsPage } from "@/pages/admin/AdminReportsPage"
-import { AdminSupportPage } from "@/pages/admin/AdminSupportPage"
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage"
+import { AdminLoginPage } from "@/pages/auth/AdminLoginPage"
 import { AuthPage } from "@/pages/auth/AuthPage"
 import { HomePage } from "@/pages/home/HomePage"
 import { UserChatPage } from "@/pages/user/UserChatPage"
 import { UserFriendsPage } from "@/pages/user/UserFriendsPage"
 import { UserNotificationsPage } from "@/pages/user/UserNotificationsPage"
 import { UserPostsPage } from "@/pages/user/UserPostsPage"
+import AdminGuestRoute from "@/routes/AdminGuestRoute"
+import AdminRoute from "@/routes/AdminRoute"
 import GuestRoute from "@/routes/GuestRoute"
 import ProtectedRoute from "@/routes/ProtectedRoute"
 
@@ -34,6 +31,14 @@ export default function useRouteElements() {
         <GuestRoute>
           <AuthPage />
         </GuestRoute>
+      ),
+    },
+    {
+      path: AUTH_PATH.ADMIN_LOGIN,
+      element: (
+        <AdminGuestRoute>
+          <AdminLoginPage />
+        </AdminGuestRoute>
       ),
     },
     {
@@ -77,8 +82,10 @@ export default function useRouteElements() {
     {
       path: ADMIN_PATH.ROOT,
       element: (
-        <ProtectedRoute>
-          <AdminLayout />
+        <ProtectedRoute redirectTo={AUTH_PATH.ADMIN_LOGIN}>
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
         </ProtectedRoute>
       ),
       children: [
@@ -93,30 +100,6 @@ export default function useRouteElements() {
         {
           path: ADMIN_PATH.USERS,
           element: <AdminUsersPage />,
-        },
-        {
-          path: ADMIN_PATH.CONVERSATIONS,
-          element: <AdminConversationsPage />,
-        },
-        {
-          path: ADMIN_PATH.GROUPS,
-          element: <AdminGroupsPage />,
-        },
-        {
-          path: ADMIN_PATH.MODERATION,
-          element: <AdminModerationPage />,
-        },
-        {
-          path: ADMIN_PATH.REPORTS,
-          element: <AdminReportsPage />,
-        },
-        {
-          path: ADMIN_PATH.BROADCASTS,
-          element: <AdminBroadcastsPage />,
-        },
-        {
-          path: ADMIN_PATH.SUPPORT,
-          element: <AdminSupportPage />,
         },
       ],
     },

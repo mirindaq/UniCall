@@ -13,6 +13,7 @@ export interface MockChatMessage {
   sender: MockMessageSender;
   kind: MockMessageKind;
   content: string;
+  centeredSystemNotice?: boolean;
   rawType?: MessageType;
   attachments?: ChatAttachment[];
   recalled?: boolean;
