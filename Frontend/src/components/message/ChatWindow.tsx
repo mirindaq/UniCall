@@ -181,6 +181,11 @@ type MentionSuggestionState = {
   highlightedIndex: number
 }
 
+type AiQuickPrompt = {
+  label: string
+  prompt: string
+}
+
 type MessagePreviewKind =
   | "text"
   | "call"
@@ -211,6 +216,33 @@ const AI_MENTION_COMMANDS: MentionCommand[] = [
     description: "Yêu cầu UniCall AI tạo hình ảnh.",
   },
 ]
+
+const AI_QUICK_PROMPTS: AiQuickPrompt[] = [
+  { label: "Thống kê tổng quan", prompt: "@Unicall thống kê chat" },
+  { label: "Thống kê 7 ngày", prompt: "@Unicall thống kê chat 7 ngày" },
+  { label: "Thống kê 30 ngày", prompt: "@Unicall thống kê chat 30 ngày" },
+  { label: "Tóm tắt 7 ngày", prompt: "@Unicall tóm tắt chat 7 ngày" },
+  { label: "Tóm tắt 30 ngày", prompt: "@Unicall tóm tắt chat 30 ngày" },
+  { label: "Rút action items", prompt: "@Unicall rút action items 7 ngày" },
+  { label: "Bật ghi nhớ AI", prompt: "@Unicall bật ghi nhớ AI" },
+  {
+    label: "Ghi nhớ sở thích",
+    prompt: "@Unicall ghi nhớ: trả lời ngắn gọn, rõ ý",
+  },
+  { label: "Tắt ghi nhớ AI", prompt: "@Unicall tắt ghi nhớ AI" },
+  { label: "Xóa ghi nhớ", prompt: "@Unicall xóa ghi nhớ" },
+]
+
+function normalizeQuickPromptText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
 
 function isCenteredGroupSystemNotice(msg: ChatMessageResponse): boolean {
   if (msg.idAccountSent !== "unicall-system-bot") {
@@ -682,6 +714,8 @@ export default function ChatWindow() {
   const [draft, setDraft] = useState("")
   const [mentionSuggestion, setMentionSuggestion] =
     useState<MentionSuggestionState | null>(null)
+  const [showAiQuickPrompts, setShowAiQuickPrompts] = useState(true)
+  const [forceOpenAiQuickPrompts, setForceOpenAiQuickPrompts] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [blockStatus, setBlockStatus] =
     useState<ConversationBlockStatusResponse | null>(null)
@@ -2437,6 +2471,111 @@ export default function ChatWindow() {
     }
   }, [mentionSuggestion, visibleMentionItems.length])
 
+  const aiQuickPromptQuery = useMemo(() => {
+    const normalizedDraft = draft.trimStart()
+    if (!normalizedDraft.toLowerCase().startsWith("@unicall")) {
+      return ""
+    }
+    return normalizedDraft.slice("@unicall".length).trim()
+  }, [draft])
+
+  const visibleAiQuickPrompts = useMemo(() => {
+    const normalizedQuery = normalizeQuickPromptText(aiQuickPromptQuery)
+    if (!normalizedQuery) {
+      return AI_QUICK_PROMPTS
+    }
+    return AI_QUICK_PROMPTS.filter((item) => {
+      const normalizedLabel = normalizeQuickPromptText(item.label)
+      const normalizedPrompt = normalizeQuickPromptText(
+        item.prompt.replace(/^@unicall\s*/i, "")
+      )
+      return (
+        normalizedLabel.includes(normalizedQuery) ||
+        normalizedPrompt.includes(normalizedQuery)
+      )
+    })
+  }, [aiQuickPromptQuery])
+
+  const shouldShowAiQuickPromptPanel = useMemo(() => {
+    if (mentionSuggestion || !showAiQuickPrompts) {
+      return false
+    }
+    const normalizedDraft = draft.trimStart().toLowerCase()
+    return (
+      (forceOpenAiQuickPrompts ||
+        normalizedDraft.startsWith("@unicall ") ||
+        normalizedDraft === "@unicall") &&
+      visibleAiQuickPrompts.length > 0
+    )
+  }, [
+    draft,
+    forceOpenAiQuickPrompts,
+    mentionSuggestion,
+    showAiQuickPrompts,
+    visibleAiQuickPrompts.length,
+  ])
+
+  useEffect(() => {
+    if (!showAiQuickPrompts) {
+      return
+    }
+    const normalizedDraft = draft.trimStart().toLowerCase()
+    if (!normalizedDraft.startsWith("@unicall")) {
+      if (forceOpenAiQuickPrompts) {
+        setForceOpenAiQuickPrompts(false)
+      }
+      return
+    }
+    if (aiQuickPromptQuery && visibleAiQuickPrompts.length === 0) {
+      setShowAiQuickPrompts(false)
+      setForceOpenAiQuickPrompts(false)
+    }
+  }, [
+    aiQuickPromptQuery,
+    draft,
+    forceOpenAiQuickPrompts,
+    showAiQuickPrompts,
+    visibleAiQuickPrompts.length,
+  ])
+
+  const openAiQuickPromptPanel = () => {
+    const baseDraft = draft.trimStart().toLowerCase().startsWith("@unicall")
+      ? draft
+      : "@Unicall "
+    setShowAiQuickPrompts(true)
+    setDraft(baseDraft)
+    setForceOpenAiQuickPrompts(true)
+    const caretAfter = baseDraft.length
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    window.setTimeout(() => {
+      const textarea = textareaRef.current
+      if (!textarea) {
+        return
+      }
+      textarea.focus()
+      textarea.setSelectionRange(caretAfter, caretAfter)
+      handleInput()
+    }, 0)
+  }
+
+  const applyAiQuickPrompt = (prompt: string) => {
+    const nextDraft = prompt.trim()
+    const caretAfter = nextDraft.length
+    setDraft(nextDraft)
+    setShowAiQuickPrompts(false)
+    setForceOpenAiQuickPrompts(false)
+    draftCaretRef.current = { start: caretAfter, end: caretAfter }
+    window.setTimeout(() => {
+      const textarea = textareaRef.current
+      if (!textarea) {
+        return
+      }
+      textarea.focus()
+      textarea.setSelectionRange(caretAfter, caretAfter)
+      handleInput()
+    }, 0)
+  }
+
   const conversationImageItems = useMemo<ImageViewerItem[]>(() => {
     if (allConversationImages.length > 0) {
       return allConversationImages
@@ -2533,34 +2672,22 @@ export default function ChatWindow() {
 
     setIsSending(true)
     try {
-      const client = chatSocketService.getClient()
-      if (client?.connected) {
-        chatSocketService.sendMessage(
-          selectedConversationId,
-          normalized,
-          type,
-          attachments,
-          replyToMessageId,
-          mentionedUserIds
-        )
-      } else {
-        const res = await chatService.sendMessageRest(
-          selectedConversationId,
-          normalized,
-          type,
-          attachments,
-          replyToMessageId,
-          mentionedUserIds
-        )
-        onRealtimeMessage(res.data)
-        setSocketExtras((prev) => {
-          if (prev.some((x) => x.idMessage === res.data.idMessage)) {
-            return prev
-          }
-          return [...prev, res.data]
-        })
-        pendingScrollToBottomRef.current = true
-      }
+      const res = await chatService.sendMessageRest(
+        selectedConversationId,
+        normalized,
+        type,
+        attachments,
+        replyToMessageId,
+        mentionedUserIds
+      )
+      onRealtimeMessage(res.data)
+      setSocketExtras((prev) => {
+        if (prev.some((x) => x.idMessage === res.data.idMessage)) {
+          return prev
+        }
+        return [...prev, res.data]
+      })
+      pendingScrollToBottomRef.current = true
       if (replyToMessageId) {
         setReplyingTo(null)
       }
@@ -4984,6 +5111,26 @@ export default function ChatWindow() {
                   className={cn("h-5 w-5", isUploadingFile && "animate-spin")}
                 />
               </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title={
+                  showAiQuickPrompts
+                    ? "Tắt gợi ý mẫu @Unicall"
+                    : "Bật gợi ý mẫu @Unicall"
+                }
+                type="button"
+                onClick={() => {
+                  if (showAiQuickPrompts) {
+                    setShowAiQuickPrompts(false)
+                    setForceOpenAiQuickPrompts(false)
+                    return
+                  }
+                  openAiQuickPromptPanel()
+                }}
+              >
+                <Bot className="h-5 w-5" />
+              </Button>
             </div>
 
             <div className="flex items-end gap-2">
@@ -5027,6 +5174,49 @@ export default function ChatWindow() {
                               {item.kind === "ai"
                                 ? item.command.description
                                 : "Nhắc tên thành viên"}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {shouldShowAiQuickPromptPanel ? (
+                  <div className="absolute bottom-full left-0 z-20 mb-2 w-[360px] max-w-[95vw] overflow-hidden rounded-xl border bg-popover shadow-lg">
+                    <div className="flex items-center justify-between border-b px-3 py-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Mẫu lệnh @Unicall
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        onClick={() => {
+                          setShowAiQuickPrompts(false)
+                          setForceOpenAiQuickPrompts(false)
+                        }}
+                        aria-label="Đóng gợi ý mẫu AI"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                      {visibleAiQuickPrompts.map((item) => (
+                        <button
+                          key={item.prompt}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted/70"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                          }}
+                          onClick={() => applyAiQuickPrompt(item.prompt)}
+                        >
+                          <Bot className="h-4 w-4 text-blue-600" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground">
+                              {item.label}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {item.prompt}
                             </span>
                           </span>
                         </button>

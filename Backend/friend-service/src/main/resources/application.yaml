@@ -4,8 +4,8 @@ spring:
 
   datasource:
     url: jdbc:mysql://localhost:3306/unicall_friend_service?createDatabaseIfNotExist=true
-    username: springstudent
-    password: springstudent
+    username: root
+    password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

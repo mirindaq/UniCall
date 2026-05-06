@@ -20,4 +20,13 @@ public class AiAssistantProperties {
     private String imageSystemPrompt = "Ban la UniCallImage, tao mo ta anh ngan gon bang tieng Viet.";
     private int connectTimeoutMs = 3000;
     private int readTimeoutMs = 30000;
+
+    private boolean vectorEnabled = true;
+    private String embeddingModel = "text-embedding-004";
+    private int vectorCandidateLimit = 120;
+    private int vectorTopK = 6;
+    private int vectorMinTextLength = 8;
+    private int vectorMaxNewEmbeddingsPerRequest = 20;
+    private double vectorMinScore = 0.58;
+    private boolean vectorIncludeAiMessages = false;
 }

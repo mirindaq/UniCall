@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 
@@ -24,6 +24,38 @@ interface ChatInputBarProps {
 const MIN_INPUT_HEIGHT = 24;
 const MAX_INPUT_HEIGHT = 112;
 const INPUT_VERTICAL_PADDING = 6;
+
+type AiQuickPrompt = {
+  label: string;
+  prompt: string;
+};
+
+const AI_QUICK_PROMPTS: AiQuickPrompt[] = [
+  { label: 'Thống kê tổng quan', prompt: '@Unicall thống kê chat' },
+  { label: 'Thống kê 7 ngày', prompt: '@Unicall thống kê chat 7 ngày' },
+  { label: 'Thống kê 30 ngày', prompt: '@Unicall thống kê chat 30 ngày' },
+  { label: 'Tóm tắt 7 ngày', prompt: '@Unicall tóm tắt chat 7 ngày' },
+  { label: 'Tóm tắt 30 ngày', prompt: '@Unicall tóm tắt chat 30 ngày' },
+  { label: 'Rút action items', prompt: '@Unicall rút action items 7 ngày' },
+  { label: 'Bật ghi nhớ AI', prompt: '@Unicall bật ghi nhớ AI' },
+  {
+    label: 'Ghi nhớ sở thích',
+    prompt: '@Unicall ghi nhớ: trả lời ngắn gọn, rõ ý',
+  },
+  { label: 'Tắt ghi nhớ AI', prompt: '@Unicall tắt ghi nhớ AI' },
+  { label: 'Xóa ghi nhớ', prompt: '@Unicall xóa ghi nhớ' },
+];
+
+function normalizeQuickPromptText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 const ReplyPreviewThumb = ({ preview }: { preview: MessagePreviewData }) => {
   if (
@@ -73,8 +105,48 @@ export function ChatInputBar({
   const [message, setMessage] = useState('');
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [showAiQuickPrompts, setShowAiQuickPrompts] = useState(true);
+  const [forceOpenAiQuickPrompts, setForceOpenAiQuickPrompts] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   const hasContent = message.trim().length > 0;
+  const aiQuickPromptQuery = useMemo(() => {
+    const normalizedDraft = message.trimStart();
+    if (!normalizedDraft.toLowerCase().startsWith('@unicall')) {
+      return '';
+    }
+    return normalizedDraft.slice('@unicall'.length).trim();
+  }, [message]);
+
+  const visibleAiQuickPrompts = useMemo(() => {
+    const normalizedQuery = normalizeQuickPromptText(aiQuickPromptQuery);
+    if (!normalizedQuery) {
+      return AI_QUICK_PROMPTS;
+    }
+    return AI_QUICK_PROMPTS.filter((item) => {
+      const normalizedLabel = normalizeQuickPromptText(item.label);
+      const normalizedPrompt = normalizeQuickPromptText(
+        item.prompt.replace(/^@unicall\s*/i, '')
+      );
+      return (
+        normalizedLabel.includes(normalizedQuery) ||
+        normalizedPrompt.includes(normalizedQuery)
+      );
+    });
+  }, [aiQuickPromptQuery]);
+
+  const shouldShowAiQuickPromptPanel = useMemo(() => {
+    if (!showAiQuickPrompts) {
+      return false;
+    }
+    const normalizedDraft = message.trimStart().toLowerCase();
+    return (
+      (forceOpenAiQuickPrompts ||
+        normalizedDraft.startsWith('@unicall ') ||
+        normalizedDraft === '@unicall') &&
+      visibleAiQuickPrompts.length > 0
+    );
+  }, [forceOpenAiQuickPrompts, message, showAiQuickPrompts, visibleAiQuickPrompts.length]);
 
   const handleSend = async () => {
     const content = message.trim();
@@ -131,12 +203,62 @@ export function ChatInputBar({
     setIsGifPickerOpen(false);
   };
 
+  const openAiQuickPromptPanel = () => {
+    const baseDraft = message.trimStart().toLowerCase().startsWith('@unicall')
+      ? message
+      : '@Unicall ';
+    setMessage(baseDraft);
+    setShowAiQuickPrompts(true);
+    setForceOpenAiQuickPrompts(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
+
+  const applyAiQuickPrompt = (prompt: string) => {
+    const nextDraft = prompt.trim();
+    setMessage(nextDraft);
+    setShowAiQuickPrompts(false);
+    setForceOpenAiQuickPrompts(false);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
+
   return (
     <View
       className="border-t border-slate-300 bg-white px-3.5 py-2"
       onLayout={(event) => {
         onHeightChange?.(event.nativeEvent.layout.height);
       }}>
+      {shouldShowAiQuickPromptPanel ? (
+        <View className="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <View className="flex-row items-center justify-between border-b border-slate-200 px-3 py-2">
+            <Text className="text-xs font-medium text-slate-500">Mẫu lệnh @Unicall</Text>
+            <Pressable
+              onPress={() => {
+                setShowAiQuickPrompts(false);
+                setForceOpenAiQuickPrompts(false);
+              }}>
+              <Ionicons name="close" size={16} color="#64748b" />
+            </Pressable>
+          </View>
+          <View className="max-h-48">
+            {visibleAiQuickPrompts.map((item) => (
+              <Pressable
+                key={item.prompt}
+                className="border-b border-slate-100 px-3 py-2 active:bg-slate-100"
+                onPress={() => applyAiQuickPrompt(item.prompt)}>
+                <Text className="text-sm font-medium text-slate-900">{item.label}</Text>
+                <Text numberOfLines={1} className="mt-0.5 text-xs text-slate-500">
+                  {item.prompt}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {replyPreview ? (
         <View className="mb-2 flex-row items-start justify-between rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
           <View className="mr-2 flex-1">
@@ -168,9 +290,23 @@ export function ChatInputBar({
         </View>
 
         <TextInput
+          ref={inputRef}
           value={message}
           onChangeText={(value) => {
             setMessage(value);
+            const normalizedDraft = value.trimStart().toLowerCase();
+            if (!normalizedDraft.startsWith('@unicall')) {
+              setForceOpenAiQuickPrompts(false);
+            }
+            if (
+              normalizedDraft.startsWith('@unicall') &&
+              showAiQuickPrompts &&
+              normalizeQuickPromptText(normalizedDraft.slice('@unicall'.length)).length > 0 &&
+              visibleAiQuickPrompts.length === 0
+            ) {
+              setShowAiQuickPrompts(false);
+              setForceOpenAiQuickPrompts(false);
+            }
             if (!value) {
               setInputHeight(MIN_INPUT_HEIGHT);
             }
@@ -203,6 +339,11 @@ export function ChatInputBar({
           <>
             <Pressable
               className="ml-1 h-9 w-9 items-center justify-center rounded-full"
+              onPress={openAiQuickPromptPanel}>
+              <Ionicons name="sparkles-outline" size={22} color="#2563eb" />
+            </Pressable>
+            <Pressable
+              className="ml-1 h-9 w-9 items-center justify-center rounded-full"
               onPress={() => void handlePickImages()}>
               <Ionicons
                 name="image-outline"
@@ -218,6 +359,11 @@ export function ChatInputBar({
           </>
         ) : (
           <>
+            <Pressable
+              className="ml-1 h-9 w-9 items-center justify-center rounded-full"
+              onPress={openAiQuickPromptPanel}>
+              <Ionicons name="sparkles-outline" size={22} color="#2563eb" />
+            </Pressable>
             <Pressable
               className="ml-1 h-9 w-9 items-center justify-center rounded-full"
               onPress={() => setIsGifPickerOpen(true)}>
