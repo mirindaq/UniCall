@@ -1,16 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import type { GroupContactItem } from '@/mock/contacts-data';
+import type { GroupContactItem } from '@/types/contacts';
 
 interface ContactsGroupsTabProps {
   groupItems: GroupContactItem[];
+  onPressCreateGroup?: () => void;
+  onPressGroup?: (groupId: string) => void;
 }
 
-function GroupRow({ item }: { item: GroupContactItem }) {
+function GroupRow({ item, onPress }: { item: GroupContactItem; onPress?: () => void }) {
   return (
-    <View className="border-b border-slate-100 px-5 py-3">
+    <Pressable className="border-b border-slate-100 px-5 py-3" onPress={onPress}>
       <View className="flex-row items-start">
         <View className="h-[52px] w-[52px] items-center justify-center rounded-full bg-sky-100">
           <Ionicons name="people-outline" size={22} color="#3b82f6" />
@@ -34,29 +36,31 @@ function GroupRow({ item }: { item: GroupContactItem }) {
           ) : null}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-export function ContactsGroupsTab({ groupItems }: ContactsGroupsTabProps) {
+export function ContactsGroupsTab({ groupItems, onPressCreateGroup, onPressGroup }: ContactsGroupsTabProps) {
+  const groupCount = groupItems.length;
+
   return (
     <View className="pb-4">
       <View className="bg-white px-5 py-4">
-        <View className="flex-row items-center">
+        <Pressable className="flex-row items-center" onPress={onPressCreateGroup}>
           <View className="h-[52px] w-[52px] items-center justify-center rounded-full bg-sky-100">
             <Ionicons name="person-add-outline" size={28} color="#1e98f3" />
           </View>
           <Text allowFontScaling={false} className="ml-4 text-[17px] text-slate-900">
             Tạo nhóm mới
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       <View className="my-2 h-2 bg-slate-100" />
 
       <View className="flex-row items-center px-5 py-3">
         <Text allowFontScaling={false} className="text-[17px] font-semibold text-slate-900">
-          Nhóm đang tham gia (62)
+          Nhóm đang tham gia ({groupCount})
         </Text>
         <View className="ml-auto flex-row items-center">
           <Ionicons name="swap-vertical-outline" size={18} color="#9ca3af" />
@@ -67,9 +71,15 @@ export function ContactsGroupsTab({ groupItems }: ContactsGroupsTabProps) {
       </View>
 
       <View className="bg-white">
-        {groupItems.map((item) => (
-          <GroupRow key={item.id} item={item} />
-        ))}
+        {groupItems.length === 0 ? (
+          <Text allowFontScaling={false} className="px-5 py-6 text-center text-[14px] text-slate-500">
+            Chưa có nhóm nào.
+          </Text>
+        ) : (
+          groupItems.map((item) => (
+            <GroupRow key={item.id} item={item} onPress={() => onPressGroup?.(item.id)} />
+          ))
+        )}
       </View>
     </View>
   );

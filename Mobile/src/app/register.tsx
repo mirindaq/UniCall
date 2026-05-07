@@ -63,7 +63,7 @@ const formatDateDisplay = (date: Date) => {
 const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof AxiosError) {
     if (!error.response) {
-      return 'Khong ket noi duoc may chu. Kiem tra EXPO_PUBLIC_API_BASE_URL.';
+      return 'Không kết nối được máy chủ. Kiểm tra EXPO_PUBLIC_API_BASE_URL.';
     }
 
     const message = (error.response.data as ResponseError | undefined)?.message;
@@ -78,13 +78,13 @@ const getFirebaseErrorMessage = (error: unknown, fallbackMessage: string) => {
 
   switch (code) {
     case 'auth/invalid-phone-number':
-      return 'So dien thoai khong hop le.';
+      return 'Số điện thoại không hợp lệ.';
     case 'auth/too-many-requests':
-      return 'Ban da thu qua nhieu lan. Vui long thu lai sau.';
+      return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.';
     case 'auth/invalid-verification-code':
-      return 'Ma OTP khong dung.';
+      return 'Mã OTP không đúng.';
     case 'auth/code-expired':
-      return 'Ma OTP da het han.';
+      return 'Mã OTP đã hết hạn.';
     default:
       return fallbackMessage;
   }
@@ -154,8 +154,8 @@ export default function RegisterScreen() {
     if (!targetPhone) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu so dien thoai',
-        text2: 'Vui long nhap so dien thoai hop le.',
+        text1: 'Thiếu số điện thoại',
+        text2: 'Vui lòng nhập số điện thoại hợp lệ.',
       });
       return;
     }
@@ -168,14 +168,14 @@ export default function RegisterScreen() {
       setConfirmationResult(nextConfirmation);
       Toast.show({
         type: 'success',
-        text1: 'Da gui OTP',
-        text2: 'Vui long kiem tra SMS.',
+        text1: 'Đã gửi OTP',
+        text2: 'Vui lòng kiểm tra SMS.',
       });
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Gui OTP that bai',
-        text2: getFirebaseErrorMessage(error, 'Khong the gui OTP. Vui long thu lai.'),
+        text1: 'Gửi OTP thất bại',
+        text2: getFirebaseErrorMessage(error, 'Không thể gửi OTP. Vui lòng thử lại.'),
       });
     } finally {
       setIsSendingOtp(false);
@@ -186,24 +186,24 @@ export default function RegisterScreen() {
     if (!confirmationResult) {
       Toast.show({
         type: 'error',
-        text1: 'Chua gui OTP',
-        text2: 'Vui long gui OTP truoc.',
+        text1: 'Chưa gửi OTP',
+        text2: 'Vui lòng gửi OTP trước.',
       });
       return;
     }
     if (!otpCode.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu ma OTP',
-        text2: 'Vui long nhap ma OTP.',
+        text1: 'Thiếu mã OTP',
+        text2: 'Vui lòng nhập mã OTP.',
       });
       return;
     }
     if (!pendingRegisterPayload) {
       Toast.show({
         type: 'error',
-        text1: 'Du lieu khong hop le',
-        text2: 'Vui long dang ky lai.',
+        text1: 'Dữ liệu không hợp lệ',
+        text2: 'Vui lòng đăng ký lại.',
       });
       return;
     }
@@ -223,8 +223,8 @@ export default function RegisterScreen() {
 
       Toast.show({
         type: 'success',
-        text1: 'Dang ky thanh cong',
-        text2: 'Vui long kiem tra email de kich hoat tai khoan truoc khi dang nhap.',
+        text1: 'Đăng ký thành công',
+        text2: 'Vui lòng kiểm tra email để kích hoạt tài khoản trước khi đăng nhập.',
       });
       setShowOtpModal(false);
       resetOtpFlow();
@@ -233,11 +233,11 @@ export default function RegisterScreen() {
       const firebaseCode = (error as { code?: string } | undefined)?.code;
       Toast.show({
         type: 'error',
-        text1: 'Xac thuc OTP/Dang ky that bai',
+        text1: 'Xác thực OTP/Đăng ký thất bại',
         text2:
           firebaseCode?.startsWith('auth/')
-            ? getFirebaseErrorMessage(error, 'Ma OTP khong hop le hoac da het han.')
-            : getApiErrorMessage(error, 'Vui long kiem tra lai thong tin.'),
+            ? getFirebaseErrorMessage(error, 'Mã OTP không hợp lệ hoặc đã hết hạn.')
+            : getApiErrorMessage(error, 'Vui lòng kiểm tra lại thông tin.'),
       });
     } finally {
       setIsVerifyingOtp(false);
@@ -263,8 +263,8 @@ export default function RegisterScreen() {
     if (!isValidPhoneNumber(normalizedPhoneNumber)) {
       Toast.show({
         type: 'error',
-        text1: 'So dien thoai chua dung',
-        text2: 'Vui long nhap so dang 0xxxxxxxxx hoac +84xxxxxxxxx.',
+        text1: 'Số điện thoại chưa đúng',
+        text2: 'Vui lòng nhập số dạng 0xxxxxxxxx hoặc +84xxxxxxxxx.',
       });
       return;
     }
@@ -272,8 +272,8 @@ export default function RegisterScreen() {
     if (!strongPasswordRegex.test(password.trim())) {
       Toast.show({
         type: 'error',
-        text1: 'Mat khau chua hop le',
-        text2: 'Mat khau toi thieu 8 ky tu, co chu hoa, chu thuong, so va ky tu dac biet.',
+        text1: 'Mật khẩu chưa hợp lệ',
+        text2: 'Mật khẩu tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt.',
       });
       return;
     }
@@ -281,8 +281,8 @@ export default function RegisterScreen() {
     if (password.trim() !== confirmPassword.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Mat khau khong khop',
-        text2: 'Vui long nhap trung khop mat khau xac nhan.',
+        text1: 'Mật khẩu không khớp',
+        text2: 'Vui lòng nhập trùng khớp mật khẩu xác nhận.',
       });
       return;
     }
@@ -292,8 +292,8 @@ export default function RegisterScreen() {
     if (!emailRegex.test(normalizedEmail)) {
       Toast.show({
         type: 'error',
-        text1: 'Email chua hop le',
-        text2: 'Vui long nhap dung dinh dang email.',
+        text1: 'Email chưa hợp lệ',
+        text2: 'Vui lòng nhập đúng định dạng email.',
       });
       return;
     }
@@ -301,8 +301,8 @@ export default function RegisterScreen() {
     if (!dateOfBirth) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu ngay sinh',
-        text2: 'Vui long chon ngay sinh.',
+        text1: 'Thiếu ngày sinh',
+        text2: 'Vui lòng chọn ngày sinh.',
       });
       return;
     }
@@ -312,8 +312,8 @@ export default function RegisterScreen() {
     if (dateOfBirth >= today) {
       Toast.show({
         type: 'error',
-        text1: 'Ngay sinh chua hop le',
-        text2: 'Ngay sinh phai la ngay trong qua khu.',
+        text1: 'Ngày sinh chưa hợp lệ',
+        text2: 'Ngày sinh phải là ngày trong quá khứ.',
       });
       return;
     }
@@ -321,8 +321,8 @@ export default function RegisterScreen() {
     if (!lastName.trim() || !firstName.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Ho ten chua hop le',
-        text2: 'Vui long nhap day du ca ho va ten.',
+        text1: 'Họ tên chưa hợp lệ',
+        text2: 'Vui lòng nhập đầy đủ cả họ và tên.',
       });
       return;
     }
@@ -330,8 +330,8 @@ export default function RegisterScreen() {
     if (!acceptedTerm1 || !acceptedTerm2) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu xac nhan',
-        text2: 'Vui long dong y cac dieu khoan de tiep tuc.',
+        text1: 'Thiếu xác nhận',
+        text2: 'Vui lòng đồng ý các điều khoản để tiếp tục.',
       });
       return;
     }
@@ -365,9 +365,10 @@ export default function RegisterScreen() {
             <Ionicons name="arrow-back" size={22} color="#111827" />
           </Pressable>
 
-          <Text className="mt-8 text-center text-3xl font-bold text-slate-900">Tao tai khoan Unicall</Text>
+          <Text className="mt-8 text-center text-3xl font-extrabold tracking-tight text-slate-900">Tạo tài khoản UniCall</Text>
+          <Text className="mt-2 text-center text-base text-slate-500">Tạo tài khoản mới để bắt đầu kết nối</Text>
 
-          <View className="mt-7 gap-3">
+          <View className="mt-7 gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <View className="flex-row items-center overflow-hidden rounded-2xl border-2 border-blue-500 bg-white">
               <View className="w-[92px] items-center justify-center border-r border-slate-300 bg-slate-100 py-4">
                 <Text className="text-base font-medium text-slate-900">+84</Text>
@@ -386,7 +387,7 @@ export default function RegisterScreen() {
               <TextInput
                 value={lastName}
                 onChangeText={setLastName}
-                placeholder="Ho"
+                placeholder="Họ"
                 placeholderTextColor="#9ca3af"
                 className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
               />
@@ -394,7 +395,7 @@ export default function RegisterScreen() {
               <TextInput
                 value={firstName}
                 onChangeText={setFirstName}
-                placeholder="Ten"
+                placeholder="Tên"
                 placeholderTextColor="#9ca3af"
                 className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
               />
@@ -403,7 +404,7 @@ export default function RegisterScreen() {
             <TextInput
               value={email}
               onChangeText={setEmail}
-              placeholder="Email (vi du: abc@gmail.com)"
+              placeholder="Email (ví dụ: abc@gmail.com)"
               placeholderTextColor="#9ca3af"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -412,15 +413,15 @@ export default function RegisterScreen() {
 
             <View className="flex-row gap-2.5">
               <GenderOption label="Nam" selected={gender === 'MALE'} onPress={() => setGender('MALE')} />
-              <GenderOption label="Nu" selected={gender === 'FEMALE'} onPress={() => setGender('FEMALE')} />
-              <GenderOption label="Khac" selected={gender === 'OTHER'} onPress={() => setGender('OTHER')} />
+              <GenderOption label="Nữ" selected={gender === 'FEMALE'} onPress={() => setGender('FEMALE')} />
+              <GenderOption label="Khác" selected={gender === 'OTHER'} onPress={() => setGender('OTHER')} />
             </View>
 
             <Pressable
               className="flex-row items-center justify-between rounded-2xl border border-slate-300 bg-white px-4 py-4"
               onPress={() => setDatePickerVisible(true)}>
               <Text className={`${dateOfBirth ? 'text-slate-900' : 'text-slate-400'} text-base`}>
-                {dateOfBirth ? formatDateDisplay(dateOfBirth) : 'Chon ngay sinh'}
+                {dateOfBirth ? formatDateDisplay(dateOfBirth) : 'Chọn ngày sinh'}
               </Text>
               <Ionicons name="calendar-outline" size={20} color="#475569" />
             </Pressable>
@@ -428,7 +429,7 @@ export default function RegisterScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Mat khau (>=8, hoa, thuong, so, ky tu dac biet)"
+              placeholder="Mật khẩu (>=8 ký tự, hoa, thường, số, ký tự đặc biệt)"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
@@ -437,7 +438,7 @@ export default function RegisterScreen() {
             <TextInput
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              placeholder="Xac nhan mat khau"
+              placeholder="Xác nhận mật khẩu"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
@@ -446,14 +447,14 @@ export default function RegisterScreen() {
             <Pressable className="mt-1 flex-row items-start" onPress={() => setAcceptedTerm1((value) => !value)}>
               <Checkbox checked={acceptedTerm1} />
               <Text className="ml-3 flex-1 text-sm leading-6 text-slate-900">
-                Toi dong y voi <Text className="font-bold text-blue-600">dieu khoan su dung Unicall</Text>
+                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản sử dụng UniCall</Text>
               </Text>
             </Pressable>
 
             <Pressable className="flex-row items-start" onPress={() => setAcceptedTerm2((value) => !value)}>
               <Checkbox checked={acceptedTerm2} />
               <Text className="ml-3 flex-1 text-sm leading-6 text-slate-900">
-                Toi dong y voi <Text className="font-bold text-blue-600">dieu khoan mang xa hoi Unicall</Text>
+                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản mạng xã hội UniCall</Text>
               </Text>
             </Pressable>
 
@@ -464,15 +465,15 @@ export default function RegisterScreen() {
               onPress={handleRegister}
               disabled={!canSubmit}>
               <Text className={`text-xl font-bold ${canSubmit ? 'text-white' : 'text-slate-500'}`}>
-                {isSubmitting ? 'Dang xu ly...' : 'Tiep tuc'}
+                {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}
               </Text>
             </Pressable>
           </View>
 
           <View className="mb-2 mt-auto flex-row flex-wrap items-center justify-center px-4">
-            <Text className="text-base leading-6 text-slate-900">Ban da co tai khoan? </Text>
+            <Text className="text-base leading-6 text-slate-900">Bạn đã có tài khoản? </Text>
             <Pressable onPress={() => router.replace('/login')}>
-              <Text className="text-base font-bold leading-6 text-blue-600">Dang nhap ngay</Text>
+              <Text className="text-base font-bold leading-6 text-blue-600">Đăng nhập ngay</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -490,15 +491,15 @@ export default function RegisterScreen() {
         }}>
         <View className="flex-1 items-center justify-center bg-black/45 px-5">
           <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Xac thuc OTP</Text>
+            <Text className="text-lg font-bold text-slate-900">Xác thực OTP</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Vui long nhap ma OTP da gui den so <Text className="font-semibold">{otpPhoneNumber || '*****'}</Text>.
+              Vui lòng nhập mã OTP đã gửi đến số <Text className="font-semibold">{otpPhoneNumber || '*****'}</Text>.
             </Text>
 
             <TextInput
               value={otpCode}
               onChangeText={setOtpCode}
-              placeholder="Nhap ma OTP"
+              placeholder="Nhập mã OTP"
               placeholderTextColor="#9ca3af"
               keyboardType="number-pad"
               className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
@@ -513,14 +514,14 @@ export default function RegisterScreen() {
                   resetOtpFlow();
                   setIsSubmitting(false);
                 }}>
-                <Text className="font-medium text-slate-700">Huy</Text>
+                <Text className="font-medium text-slate-700">Hủy</Text>
               </Pressable>
 
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isSendingOtp ? 'bg-sky-300' : 'bg-slate-600'}`}
                 onPress={() => void handleSendOtp()}
                 disabled={isSendingOtp}>
-                <Text className="font-semibold text-white">{isSendingOtp ? 'Dang gui...' : 'Gui lai OTP'}</Text>
+                <Text className="font-semibold text-white">{isSendingOtp ? 'Đang gửi...' : 'Gửi lại OTP'}</Text>
               </Pressable>
 
               <Pressable
@@ -528,7 +529,7 @@ export default function RegisterScreen() {
                 onPress={() => void handleVerifyOtpAndRegister()}
                 disabled={isVerifyingOtp || !confirmationResult || !otpCode.trim()}>
                 <Text className="font-semibold text-white">
-                  {isVerifyingOtp ? 'Dang xac thuc...' : 'Xac thuc'}
+                  {isVerifyingOtp ? 'Đang xác thực...' : 'Xác thực'}
                 </Text>
               </Pressable>
             </View>

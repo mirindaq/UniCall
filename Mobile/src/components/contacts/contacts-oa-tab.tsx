@@ -3,7 +3,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import { ConversationAvatar } from '@/components/messages/conversation-avatar';
-import type { OaContactItem } from '@/mock/contacts-data';
+import type { OaContactItem } from '@/types/contacts';
 
 interface ContactsOaTabProps {
   oaItems: OaContactItem[];
@@ -39,9 +39,13 @@ export function ContactsOaTab({ oaItems }: ContactsOaTabProps) {
         Official Account đã quan tâm
       </Text>
       <View className="bg-white">
-        {oaItems.map((item) => (
-          <OaRow key={item.id} item={item} />
-        ))}
+        {oaItems.length === 0 ? (
+          <Text allowFontScaling={false} className="px-5 py-6 text-center text-[14px] text-slate-500">
+            Chưa có Official Account nào.
+          </Text>
+        ) : (
+          oaItems.map((item) => <OaRow key={item.id} item={item} />)
+        )}
       </View>
     </View>
   );

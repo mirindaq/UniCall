@@ -34,7 +34,7 @@ const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8
 const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof AxiosError) {
     if (!error.response) {
-      return 'Khong ket noi duoc may chu. Kiem tra EXPO_PUBLIC_API_BASE_URL.';
+      return 'Không kết nối được máy chủ. Kiểm tra EXPO_PUBLIC_API_BASE_URL.';
     }
 
     const message = (error.response.data as ResponseError | undefined)?.message;
@@ -53,13 +53,13 @@ const getFirebaseErrorMessage = (error: unknown, fallbackMessage: string) => {
 
   switch (code) {
     case 'auth/invalid-phone-number':
-      return 'So dien thoai khong hop le.';
+      return 'Số điện thoại không hợp lệ.';
     case 'auth/too-many-requests':
-      return 'Ban da thu qua nhieu lan. Vui long thu lai sau.';
+      return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.';
     case 'auth/invalid-verification-code':
-      return 'Ma OTP khong dung.';
+      return 'Mã OTP không đúng.';
     case 'auth/code-expired':
-      return 'Ma OTP da het han.';
+      return 'Mã OTP đã hết hạn.';
     default:
       return fallbackMessage;
   }
@@ -143,8 +143,8 @@ export default function LoginScreen() {
     if (!normalizedPhoneNumber || !password.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu thong tin',
-        text2: 'Vui long nhap so dien thoai va mat khau.',
+        text1: 'Thiếu thông tin',
+        text2: 'Vui lòng nhập số điện thoại và mật khẩu.',
       });
       return;
     }
@@ -166,20 +166,20 @@ export default function LoginScreen() {
       router.replace('/message');
     } catch (error) {
       await authTokenStore.clear();
-      const message = getApiErrorMessage(error, 'Vui long kiem tra lai tai khoan.');
+      const message = getApiErrorMessage(error, 'Vui lòng kiểm tra lại tài khoản.');
       if (isEmailNotVerifiedError(message)) {
         setShowResendVerificationModal(true);
         Toast.show({
           type: 'error',
-          text1: 'Tai khoan chua xac thuc email',
-          text2: 'Vui long nhap email de gui lai link kich hoat.',
+          text1: 'Tài khoản chưa xác thực email',
+          text2: 'Vui lòng nhập email để gửi lại liên kết kích hoạt.',
         });
         return;
       }
 
       Toast.show({
         type: 'error',
-        text1: 'Dang nhap that bai',
+        text1: 'Đăng nhập thất bại',
         text2: message,
       });
     } finally {
@@ -192,8 +192,8 @@ export default function LoginScreen() {
     if (!isValidPhoneNumber(normalizedPhoneNumber)) {
       Toast.show({
         type: 'error',
-        text1: 'So dien thoai chua dung',
-        text2: 'Vui long nhap dung so dien thoai tai khoan can xac thuc.',
+        text1: 'Số điện thoại chưa đúng',
+        text2: 'Vui lòng nhập đúng số điện thoại tài khoản cần xác thực.',
       });
       return;
     }
@@ -201,8 +201,8 @@ export default function LoginScreen() {
     if (!resendEmail.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu email',
-        text2: 'Vui long nhap email da dang ky.',
+        text1: 'Thiếu email',
+        text2: 'Vui lòng nhập email đã đăng ký.',
       });
       return;
     }
@@ -215,15 +215,15 @@ export default function LoginScreen() {
       });
       Toast.show({
         type: 'success',
-        text1: 'Da gui lai email xac thuc',
-        text2: response.message || 'Vui long kiem tra hop thu email cua ban.',
+        text1: 'Đã gửi lại email xác thực',
+        text2: response.message || 'Vui lòng kiểm tra hộp thư email của bạn.',
       });
       setShowResendVerificationModal(false);
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Khong the gui email',
-        text2: getApiErrorMessage(error, 'Vui long kiem tra lai so dien thoai hoac email.'),
+        text1: 'Không thể gửi email',
+        text2: getApiErrorMessage(error, 'Vui lòng kiểm tra lại số điện thoại hoặc email.'),
       });
     } finally {
       setIsResendingVerification(false);
@@ -235,8 +235,8 @@ export default function LoginScreen() {
     if (!targetPhone) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu so dien thoai',
-        text2: 'Vui long nhap so dien thoai hop le.',
+        text1: 'Thiếu số điện thoại',
+        text2: 'Vui lòng nhập số điện thoại hợp lệ.',
       });
       return;
     }
@@ -249,14 +249,14 @@ export default function LoginScreen() {
       setForgotOtpConfirmation(nextConfirmation);
       Toast.show({
         type: 'success',
-        text1: 'Da gui OTP',
-        text2: 'Vui long kiem tra SMS.',
+        text1: 'Đã gửi OTP',
+        text2: 'Vui lòng kiểm tra SMS.',
       });
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Gui OTP that bai',
-        text2: getFirebaseErrorMessage(error, 'Khong the gui OTP. Vui long thu lai.'),
+        text1: 'Gửi OTP thất bại',
+        text2: getFirebaseErrorMessage(error, 'Không thể gửi OTP. Vui lòng thử lại.'),
       });
     } finally {
       setIsSendingForgotOtp(false);
@@ -267,8 +267,8 @@ export default function LoginScreen() {
     if (!forgotOtpConfirmation) {
       Toast.show({
         type: 'error',
-        text1: 'Chua gui OTP',
-        text2: 'Vui long gui OTP truoc.',
+        text1: 'Chưa gửi OTP',
+        text2: 'Vui lòng gửi OTP trước.',
       });
       return;
     }
@@ -276,8 +276,8 @@ export default function LoginScreen() {
     if (!forgotOtpCode.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Thieu ma OTP',
-        text2: 'Vui long nhap ma OTP.',
+        text1: 'Thiếu mã OTP',
+        text2: 'Vui lòng nhập mã OTP.',
       });
       return;
     }
@@ -285,8 +285,8 @@ export default function LoginScreen() {
     if (!pendingForgotPasswordPayload) {
       Toast.show({
         type: 'error',
-        text1: 'Du lieu khong hop le',
-        text2: 'Vui long thuc hien lai thao tac quen mat khau.',
+        text1: 'Dữ liệu không hợp lệ',
+        text2: 'Vui lòng thực hiện lại thao tác quên mật khẩu.',
       });
       return;
     }
@@ -307,8 +307,8 @@ export default function LoginScreen() {
 
       Toast.show({
         type: 'success',
-        text1: 'Dat lai mat khau thanh cong',
-        text2: 'Ban co the dang nhap bang mat khau moi.',
+        text1: 'Đặt lại mật khẩu thành công',
+        text2: 'Bạn có thể đăng nhập bằng mật khẩu mới.',
       });
 
       setShowForgotOtpModal(false);
@@ -320,11 +320,11 @@ export default function LoginScreen() {
       const firebaseCode = (error as { code?: string } | undefined)?.code;
       Toast.show({
         type: 'error',
-        text1: 'Xac thuc OTP/doi mat khau that bai',
+        text1: 'Xác thực OTP/đổi mật khẩu thất bại',
         text2:
           firebaseCode?.startsWith('auth/')
-            ? getFirebaseErrorMessage(error, 'Ma OTP khong hop le hoac da het han.')
-            : getApiErrorMessage(error, 'Vui long kiem tra lai thong tin.'),
+            ? getFirebaseErrorMessage(error, 'Mã OTP không hợp lệ hoặc đã hết hạn.')
+            : getApiErrorMessage(error, 'Vui lòng kiểm tra lại thông tin.'),
       });
     } finally {
       setIsVerifyingForgotOtp(false);
@@ -337,8 +337,8 @@ export default function LoginScreen() {
     if (!isValidPhoneNumber(normalizedPhoneNumber)) {
       Toast.show({
         type: 'error',
-        text1: 'So dien thoai chua dung',
-        text2: 'Vui long nhap dung so dien thoai tai khoan.',
+        text1: 'Số điện thoại chưa đúng',
+        text2: 'Vui lòng nhập đúng số điện thoại tài khoản.',
       });
       return;
     }
@@ -346,8 +346,8 @@ export default function LoginScreen() {
     if (!strongPasswordRegex.test(forgotPasswordNewPassword.trim())) {
       Toast.show({
         type: 'error',
-        text1: 'Mat khau chua hop le',
-        text2: 'Mat khau toi thieu 8 ky tu, co chu hoa, chu thuong, so va ky tu dac biet.',
+        text1: 'Mật khẩu chưa hợp lệ',
+        text2: 'Mật khẩu tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt.',
       });
       return;
     }
@@ -355,8 +355,8 @@ export default function LoginScreen() {
     if (forgotPasswordNewPassword.trim() !== forgotPasswordConfirmNewPassword.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Mat khau khong khop',
-        text2: 'Vui long nhap trung khop mat khau xac nhan.',
+        text1: 'Mật khẩu không khớp',
+        text2: 'Vui lòng nhập trùng khớp mật khẩu xác nhận.',
       });
       return;
     }
@@ -384,9 +384,10 @@ export default function LoginScreen() {
             <Ionicons name="arrow-back" size={22} color="#111827" />
           </Pressable>
 
-          <Text className="mt-8 text-center text-3xl font-bold text-slate-900">Dang nhap</Text>
+          <Text className="mt-8 text-center text-3xl font-extrabold tracking-tight text-slate-900">Đăng nhập</Text>
+          <Text className="mt-2 text-center text-base text-slate-500">Chào mừng bạn quay lại UniCall</Text>
 
-          <View className="mt-7 gap-3">
+          <View className="mt-7 gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <View className="flex-row items-center overflow-hidden rounded-2xl border-2 border-blue-500 bg-white">
               <View className="w-[92px] items-center justify-center border-r border-slate-300 bg-slate-100 py-4">
                 <Text className="text-base font-medium text-slate-900">+84</Text>
@@ -404,28 +405,28 @@ export default function LoginScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Mat khau"
+              placeholder="Mật khẩu"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
             />
 
             <Pressable className="self-end" onPress={() => setShowForgotPasswordModal(true)}>
-              <Text className="text-sm font-semibold text-blue-600">Quen mat khau?</Text>
+              <Text className="text-sm font-semibold text-blue-600">Quên mật khẩu?</Text>
             </Pressable>
 
             <Pressable
               className={`mt-2 items-center justify-center rounded-full py-4 ${canSubmit ? 'bg-blue-600' : 'bg-slate-300'}`}
               onPress={handleLogin}
               disabled={!canSubmit}>
-              <Text className="text-xl font-bold text-white">{isSubmitting ? 'Dang xu ly...' : 'Tiep tuc'}</Text>
+              <Text className="text-xl font-bold text-white">{isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}</Text>
             </Pressable>
           </View>
 
           <View className="mb-2 mt-auto flex-row flex-wrap items-center justify-center px-4">
-            <Text className="text-base leading-6 text-slate-900">Ban chua co tai khoan? </Text>
+            <Text className="text-base leading-6 text-slate-900">Bạn chưa có tài khoản? </Text>
             <Pressable onPress={() => router.push('/register')}>
-              <Text className="text-base font-bold leading-6 text-blue-600">Tao tai khoan</Text>
+              <Text className="text-base font-bold leading-6 text-blue-600">Tạo tài khoản</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -438,14 +439,14 @@ export default function LoginScreen() {
         onRequestClose={() => setShowResendVerificationModal(false)}>
         <View className="flex-1 items-center justify-center bg-black/45 px-5">
           <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Xac thuc email tai khoan</Text>
+            <Text className="text-lg font-bold text-slate-900">Xác thực email tài khoản</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Tai khoan chua kich hoat. Nhap dung email da dang ky de gui lai link xac thuc.
+              Tài khoản chưa kích hoạt. Nhập đúng email đã đăng ký để gửi lại liên kết xác thực.
             </Text>
             <TextInput
               value={resendEmail}
               onChangeText={setResendEmail}
-              placeholder="Nhap email da dang ky"
+              placeholder="Nhập email đã đăng ký"
               placeholderTextColor="#9ca3af"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -455,14 +456,14 @@ export default function LoginScreen() {
               <Pressable
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
                 onPress={() => setShowResendVerificationModal(false)}>
-                <Text className="font-medium text-slate-700">Dong</Text>
+                <Text className="font-medium text-slate-700">Đóng</Text>
               </Pressable>
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isResendingVerification ? 'bg-sky-300' : 'bg-sky-500'}`}
                 onPress={handleResendVerification}
                 disabled={isResendingVerification}>
                 <Text className="font-semibold text-white">
-                  {isResendingVerification ? 'Dang gui...' : 'Gui lai email'}
+                  {isResendingVerification ? 'Đang gửi...' : 'Gửi lại email'}
                 </Text>
               </Pressable>
             </View>
@@ -477,14 +478,14 @@ export default function LoginScreen() {
         onRequestClose={() => setShowForgotPasswordModal(false)}>
         <View className="flex-1 items-center justify-center bg-black/45 px-5">
           <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Quen mat khau</Text>
+            <Text className="text-lg font-bold text-slate-900">Quên mật khẩu</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Nhap so dien thoai va mat khau moi. Unicall se gui OTP de xac thuc truoc khi doi mat khau.
+              Nhập số điện thoại và mật khẩu mới. UniCall sẽ gửi OTP để xác thực trước khi đổi mật khẩu.
             </Text>
             <TextInput
               value={forgotPasswordPhone}
               onChangeText={setForgotPasswordPhone}
-              placeholder="Nhap so dien thoai tai khoan"
+              placeholder="Nhập số điện thoại tài khoản"
               placeholderTextColor="#9ca3af"
               keyboardType="phone-pad"
               className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
@@ -492,7 +493,7 @@ export default function LoginScreen() {
             <TextInput
               value={forgotPasswordNewPassword}
               onChangeText={setForgotPasswordNewPassword}
-              placeholder="Mat khau moi"
+              placeholder="Mật khẩu mới"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
@@ -500,7 +501,7 @@ export default function LoginScreen() {
             <TextInput
               value={forgotPasswordConfirmNewPassword}
               onChangeText={setForgotPasswordConfirmNewPassword}
-              placeholder="Xac nhan mat khau moi"
+              placeholder="Xác nhận mật khẩu mới"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
@@ -509,14 +510,14 @@ export default function LoginScreen() {
               <Pressable
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
                 onPress={() => setShowForgotPasswordModal(false)}>
-                <Text className="font-medium text-slate-700">Dong</Text>
+                <Text className="font-medium text-slate-700">Đóng</Text>
               </Pressable>
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isSubmittingForgotPassword ? 'bg-sky-300' : 'bg-sky-500'}`}
                 onPress={handleForgotPassword}
                 disabled={isSubmittingForgotPassword}>
                 <Text className="font-semibold text-white">
-                  {isSubmittingForgotPassword ? 'Dang xu ly...' : 'Gui OTP'}
+                  {isSubmittingForgotPassword ? 'Đang xử lý...' : 'Gửi OTP'}
                 </Text>
               </Pressable>
             </View>
@@ -535,14 +536,14 @@ export default function LoginScreen() {
         }}>
         <View className="flex-1 items-center justify-center bg-black/45 px-5">
           <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Xac thuc OTP</Text>
+            <Text className="text-lg font-bold text-slate-900">Xác thực OTP</Text>
             <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Vui long nhap ma OTP da gui den so <Text className="font-semibold">{forgotOtpPhone || '*****'}</Text>.
+              Vui lòng nhập mã OTP đã gửi đến số <Text className="font-semibold">{forgotOtpPhone || '*****'}</Text>.
             </Text>
             <TextInput
               value={forgotOtpCode}
               onChangeText={setForgotOtpCode}
-              placeholder="Nhap ma OTP"
+              placeholder="Nhập mã OTP"
               placeholderTextColor="#9ca3af"
               keyboardType="number-pad"
               className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
@@ -555,20 +556,20 @@ export default function LoginScreen() {
                   setShowForgotOtpModal(false);
                   resetForgotOtpFlow();
                 }}>
-                <Text className="font-medium text-slate-700">Huy</Text>
+                <Text className="font-medium text-slate-700">Hủy</Text>
               </Pressable>
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isSendingForgotOtp ? 'bg-sky-300' : 'bg-slate-600'}`}
                 onPress={() => void handleSendForgotOtp()}
                 disabled={isSendingForgotOtp}>
-                <Text className="font-semibold text-white">{isSendingForgotOtp ? 'Dang gui...' : 'Gui lai OTP'}</Text>
+                <Text className="font-semibold text-white">{isSendingForgotOtp ? 'Đang gửi...' : 'Gửi lại OTP'}</Text>
               </Pressable>
               <Pressable
                 className={`rounded-xl px-4 py-2.5 ${isVerifyingForgotOtp ? 'bg-sky-300' : 'bg-sky-500'}`}
                 onPress={() => void handleVerifyForgotOtpAndReset()}
                 disabled={isVerifyingForgotOtp || !forgotOtpConfirmation || !forgotOtpCode.trim()}>
                 <Text className="font-semibold text-white">
-                  {isVerifyingForgotOtp ? 'Dang xac thuc...' : 'Xac thuc'}
+                  {isVerifyingForgotOtp ? 'Đang xác thực...' : 'Xác thực'}
                 </Text>
               </Pressable>
             </View>
