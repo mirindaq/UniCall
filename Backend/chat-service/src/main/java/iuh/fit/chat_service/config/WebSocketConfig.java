@@ -35,6 +35,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .map(String::trim)
                 .filter(p -> !p.isBlank())
                 .toArray(String[]::new);
+        
+        // SockJS endpoint for React Native mobile (better compatibility)
+        registry.addEndpoint("/ws")
+                .addInterceptors(userIdHandshakeInterceptor)
+                .setAllowedOriginPatterns(patterns)
+                .withSockJS();
+        
+        // Native WebSocket endpoint for web
         registry.addEndpoint("/ws")
                 .addInterceptors(userIdHandshakeInterceptor)
                 .setAllowedOriginPatterns(patterns);

@@ -85,7 +85,7 @@ export function AdminLayout() {
     } finally {
       clearAuthenticated()
       toast.success("Đăng xuất thành công")
-      navigate(AUTH_PATH.LOGIN, { replace: true })
+      navigate(AUTH_PATH.ADMIN_LOGIN, { replace: true })
       setIsBusy(false)
     }
   }

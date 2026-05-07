@@ -20,8 +20,12 @@ public class ConversationResponse {
     private LocalDateTime dateUpdateMessage;
     private String lastMessageContent;
     private String lastMessageSenderId;
+    private int unreadCount;
+    private boolean pinned;
     private int numberMember;
     private List<ParticipantInfo> participantInfos;
+    private GroupManagementSettingsResponse groupManagementSettings;
+    private int pendingMemberRequestCount;
 
     public static ConversationResponse from(Conversation entity) {
         if (entity == null) {
@@ -35,8 +39,12 @@ public class ConversationResponse {
                 .dateCreate(entity.getDateCreate())
                 .dateUpdateMessage(entity.getDateUpdateMessage())
                 .lastMessageContent(entity.getLastMessageContent())
+                .unreadCount(0)
+                .pinned(false)
                 .numberMember(entity.getNumberMember())
                 .participantInfos(entity.getParticipantInfos())
+                .groupManagementSettings(GroupManagementSettingsResponse.from(entity.getGroupManagementSettings()))
+                .pendingMemberRequestCount(entity.getPendingMemberRequests() == null ? 0 : entity.getPendingMemberRequests().size())
                 .build();
     }
 }

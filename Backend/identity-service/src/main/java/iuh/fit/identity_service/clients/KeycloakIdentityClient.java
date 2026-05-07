@@ -17,15 +17,22 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.time.LocalDate;
 
 @Component
 @RequiredArgsConstructor
 public class KeycloakIdentityClient {
+    private static final List<String> ADMIN_ROLE_NAMES = List.of(
+            "admin",
+            "role_admin",
+            "system_admin",
+            "super_admin",
+            "super-admin"
+    );
     private final WebClient keycloakWebClient;
 
     @Value("${app.security.keycloak.realm}")
@@ -79,6 +86,101 @@ public class KeycloakIdentityClient {
                     return response.createException().flatMap(Mono::error);
                 })
                 .block();
+    }
+
+    public String createOrGetUser(
+            String phoneNumber,
+            String email,
+            String firstName,
+            String lastName,
+            String password
+    ) {
+        String token = getAdminToken();
+        Map<String, Object> existing = findUserByUsername(phoneNumber, token);
+        if (existing != null) {
+            String existingId = asString(existing.get("id"));
+            if (existingId != null && !existingId.isBlank()) {
+                return existingId;
+            }
+        }
+
+        RegisterRequest request = RegisterRequest.builder()
+                .phoneNumber(phoneNumber)
+                .email(email)
+                .firstName(firstName)
+                .lastName(lastName)
+                .gender("OTHER")
+                .dateOfBirth(LocalDate.of(1990, 1, 1))
+                .password(password)
+                .firebaseIdToken("bootstrap")
+                .build();
+        return createUser(request);
+    }
+
+    public void assignRealmRoleIfMissing(String userId, String roleName) {
+        if (userId == null || userId.isBlank() || roleName == null || roleName.isBlank()) {
+            return;
+        }
+
+        String token = getAdminToken();
+        Map<String, Object> role = getRealmRole(roleName, token);
+
+        if (role == null || role.isEmpty()) {
+            return;
+        }
+
+        List<Map<String, Object>> assignedRoles = keycloakWebClient.get()
+                .uri("/admin/realms/{realm}/users/{id}/role-mappings/realm", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .block();
+
+        boolean alreadyAssigned = assignedRoles != null && assignedRoles.stream()
+                .map(item -> asString(item.get("name")))
+                .anyMatch(roleName::equals);
+
+        if (alreadyAssigned) {
+            return;
+        }
+
+        keycloakWebClient.post()
+                .uri("/admin/realms/{realm}/users/{id}/role-mappings/realm", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(List.of(role))
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
+    public void ensureRealmRoleExists(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            return;
+        }
+
+        String normalizedRoleName = roleName.trim();
+        String token = getAdminToken();
+        Map<String, Object> existingRole = getRealmRole(normalizedRoleName, token);
+        if (existingRole != null && !existingRole.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("name", normalizedRoleName);
+
+        try {
+            keycloakWebClient.post()
+                    .uri("/admin/realms/{realm}/roles", realm)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(payload)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (WebClientResponseException.Conflict ignored) {
+            // Role was created concurrently or already exists under another startup race.
+        }
     }
 
     public void sendAccountActivationEmail(String userId) {
@@ -228,6 +330,37 @@ public class KeycloakIdentityClient {
         return userId;
     }
 
+    public void resetPasswordWithOtp(String phoneNumber, String newPassword) {
+        if (phoneNumber == null || phoneNumber.isBlank()
+                || newPassword == null || newPassword.isBlank()) {
+            throw new InvalidParamException("Phone number and new password are required");
+        }
+
+        String adminToken = getAdminToken();
+        Map<String, Object> user = findUserByUsername(phoneNumber, adminToken);
+        if (user == null) {
+            throw new InvalidParamException("User account is invalid");
+        }
+        String userId = asString(user.get("id"));
+        if (userId == null || userId.isBlank()) {
+            throw new InvalidParamException("User account is invalid");
+        }
+
+        Map<String, Object> credential = new HashMap<>();
+        credential.put("type", "password");
+        credential.put("value", newPassword);
+        credential.put("temporary", false);
+
+        keycloakWebClient.put()
+                .uri("/admin/realms/{realm}/users/{id}/reset-password", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(credential)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
     public void deleteUser(String userId) {
         if (userId == null || userId.isBlank()) {
             return;
@@ -246,22 +379,12 @@ public class KeycloakIdentityClient {
             Map<String, Object> tokenMap = requestPasswordToken(phoneNumber, password);
             return toAuthTokenResponse(tokenMap);
         } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized e) {
-            if (isAccountNotFullySetUpError(e) && cleanupVerifyEmailActionIfNeeded(phoneNumber)) {
-                try {
-                    Map<String, Object> tokenMap = requestPasswordToken(phoneNumber, password);
-                    return toAuthTokenResponse(tokenMap);
-                } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized retryError) {
-                    if (isAccountNotFullySetUpError(retryError)) {
-                        throw new UnauthenticatedException("Account is not activated. Please verify your email");
-                    }
-                    throw new UnauthenticatedException("Phone number or password is invalid");
-                }
-            }
-            if (isAccountNotFullySetUpError(e)) {
-                throw new UnauthenticatedException("Account is not activated. Please verify your email");
-            }
             throw new UnauthenticatedException("Phone number or password is invalid");
         }
+    }
+
+    public boolean hasAdminRole(String identityUserId) {
+        return hasAnyRealmRole(identityUserId, ADMIN_ROLE_NAMES);
     }
 
     public AuthTokenResponse refreshToken(String refreshToken) {
@@ -342,8 +465,8 @@ public class KeycloakIdentityClient {
         user.put("firstName", request.getFirstName());
         user.put("lastName", request.getLastName());
         user.put("enabled", true);
-        user.put("emailVerified", false);
-        user.put("requiredActions", List.of("VERIFY_EMAIL"));
+        user.put("emailVerified", true);
+        user.put("requiredActions", List.of());
         user.put("attributes", Map.of(
                 "phoneNumber", List.of(request.getPhoneNumber()),
                 "email", List.of(request.getEmail()),
@@ -399,59 +522,6 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
-    private boolean isAccountNotFullySetUpError(WebClientResponseException ex) {
-        String body = ex.getResponseBodyAsString();
-        if (body == null) {
-            return false;
-        }
-        return body.toLowerCase(Locale.ROOT).contains("account is not fully set up");
-    }
-
-    private boolean cleanupVerifyEmailActionIfNeeded(String phoneNumber) {
-        String token = getAdminToken();
-        Map<String, Object> user = findUserByUsername(phoneNumber, token);
-        if (user == null) {
-            return false;
-        }
-
-        String userId = asString(user.get("id"));
-        if (userId == null || userId.isBlank()) {
-            return false;
-        }
-
-        boolean emailVerified = Boolean.TRUE.equals(user.get("emailVerified"));
-        List<String> requiredActions = toStringList(user.get("requiredActions"));
-        if (!emailVerified || requiredActions.stream().noneMatch("VERIFY_EMAIL"::equals)) {
-            return false;
-        }
-
-        List<String> updatedActions = requiredActions.stream()
-                .filter(action -> !"VERIFY_EMAIL".equals(action))
-                .toList();
-
-        Map<String, Object> payload = new HashMap<>();
-        putIfPresent(payload, "username", user.get("username"));
-        putIfPresent(payload, "email", user.get("email"));
-        putIfPresent(payload, "firstName", user.get("firstName"));
-        putIfPresent(payload, "lastName", user.get("lastName"));
-        payload.put("enabled", user.getOrDefault("enabled", Boolean.TRUE));
-        payload.put("emailVerified", true);
-        payload.put("requiredActions", updatedActions);
-        if (user.get("attributes") != null) {
-            payload.put("attributes", user.get("attributes"));
-        }
-
-        keycloakWebClient.put()
-                .uri("/admin/realms/{realm}/users/{id}", realm, userId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(payload)
-                .retrieve()
-                .toBodilessEntity()
-                .block();
-        return true;
-    }
-
     private Map<String, Object> findUserByUsername(String username, String adminToken) {
         List<Map<String, Object>> users = keycloakWebClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -470,26 +540,48 @@ public class KeycloakIdentityClient {
         return users.get(0);
     }
 
-    private List<String> toStringList(Object value) {
-        if (!(value instanceof List<?> rawList)) {
-            return List.of();
+    private @Nullable Map<String, Object> getRealmRole(String roleName, String adminToken) {
+        try {
+            return keycloakWebClient.get()
+                    .uri("/admin/realms/{realm}/roles/{roleName}", realm, roleName)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                    .retrieve()
+                    .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+        } catch (WebClientResponseException.NotFound ignored) {
+            return null;
         }
-        List<String> result = new ArrayList<>();
-        for (Object item : rawList) {
-            if (item != null) {
-                result.add(item.toString());
-            }
+    }
+
+    private boolean hasAnyRealmRole(String userId, List<String> roleNames) {
+        if (userId == null || userId.isBlank() || roleNames == null || roleNames.isEmpty()) {
+            return false;
         }
-        return result;
+
+        List<String> normalizedRoleNames = roleNames.stream()
+                .map(role -> role.toLowerCase(Locale.ROOT))
+                .toList();
+
+        String token = getAdminToken();
+        List<Map<String, Object>> assignedRoles = keycloakWebClient.get()
+                .uri("/admin/realms/{realm}/users/{id}/role-mappings/realm", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .block();
+
+        if (assignedRoles == null || assignedRoles.isEmpty()) {
+            return false;
+        }
+
+        return assignedRoles.stream()
+                .map(item -> asString(item.get("name")))
+                .filter(name -> name != null && !name.isBlank())
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .anyMatch(normalizedRoleNames::contains);
     }
 
     private String asString(Object value) {
         return value == null ? null : value.toString();
-    }
-
-    private void putIfPresent(Map<String, Object> target, String key, Object value) {
-        if (value != null) {
-            target.put(key, value);
-        }
     }
 }

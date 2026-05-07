@@ -1,6 +1,7 @@
 package iuh.fit.chat_service.services.impl;
 
 import iuh.fit.chat_service.dtos.response.ConversationCallSignalResponse;
+import iuh.fit.chat_service.dtos.response.ConversationResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
 import iuh.fit.chat_service.dtos.response.UserRealtimeEventResponse;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
@@ -28,6 +29,15 @@ public class RealtimeEventPublisherImpl implements RealtimeEventPublisher {
                 userId,
                 "/queue/events",
                 UserRealtimeEventResponse.callSignal(conversationId, signal)
+        );
+    }
+
+    @Override
+    public void publishUserConversationEvent(String userId, String conversationId, ConversationResponse conversation) {
+        messagingTemplate.convertAndSendToUser(
+                userId,
+                "/queue/events",
+                UserRealtimeEventResponse.conversation(conversationId, conversation)
         );
     }
 }

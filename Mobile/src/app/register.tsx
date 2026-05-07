@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,9 +16,15 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import {
+  getFirebaseAuth,
+  toFirebasePhoneNumber,
+} from '@/services/firebase-phone-auth.service';
 import { authService } from '@/services/auth.service';
 import type { ResponseError } from '@/types/api-response';
-import type { Gender } from '@/types/auth';
+import type { Gender, RegisterRequest } from '@/types/auth';
+
+type RegisterPayloadWithoutOtp = Omit<RegisterRequest, 'firebaseIdToken'>;
 
 const normalizePhone = (value: string) => {
   const raw = value.trim().replace(/\s+/g, '').replace(/-/g, '');
@@ -37,6 +44,7 @@ const normalizePhone = (value: string) => {
 };
 
 const isValidPhoneNumber = (value: string) => /^(0|\+84)\d{9}$/.test(value);
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const formatDateISO = (date: Date) => {
   const year = date.getFullYear();
@@ -55,7 +63,7 @@ const formatDateDisplay = (date: Date) => {
 const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof AxiosError) {
     if (!error.response) {
-      return 'Không kết nối được máy chủ. Kiểm tra EXPO_PUBLIC_API_BASE_URL hoặc IP LAN của máy chạy backend.';
+      return 'Không kết nối được máy chủ. Kiểm tra EXPO_PUBLIC_API_BASE_URL.';
     }
 
     const message = (error.response.data as ResponseError | undefined)?.message;
@@ -65,19 +73,47 @@ const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
+const getFirebaseErrorMessage = (error: unknown, fallbackMessage: string) => {
+  const code = (error as { code?: string } | undefined)?.code;
+
+  switch (code) {
+    case 'auth/invalid-phone-number':
+      return 'Số điện thoại không hợp lệ.';
+    case 'auth/too-many-requests':
+      return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.';
+    case 'auth/invalid-verification-code':
+      return 'Mã OTP không đúng.';
+    case 'auth/code-expired':
+      return 'Mã OTP đã hết hạn.';
+    default:
+      return fallbackMessage;
+  }
+};
+
 export default function RegisterScreen() {
   const router = useRouter();
+
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('@gmail.com');
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [gender, setGender] = useState<Gender>('MALE');
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerm1, setAcceptedTerm1] = useState(false);
   const [acceptedTerm2, setAcceptedTerm2] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<any | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [hasAutoSentOtp, setHasAutoSentOtp] = useState(false);
+  const [pendingRegisterPayload, setPendingRegisterPayload] = useState<RegisterPayloadWithoutOtp | null>(null);
 
   const canSubmit = useMemo(() => {
     return (
@@ -86,12 +122,140 @@ export default function RegisterScreen() {
       lastName.trim().length > 0 &&
       firstName.trim().length > 0 &&
       dateOfBirth !== null &&
-      password.trim().length >= 6 &&
+      password.trim().length >= 8 &&
+      confirmPassword.trim().length > 0 &&
       acceptedTerm1 &&
       acceptedTerm2 &&
       !isSubmitting
     );
-  }, [acceptedTerm1, acceptedTerm2, dateOfBirth, email, firstName, isSubmitting, lastName, password, phoneNumber]);
+  }, [
+    acceptedTerm1,
+    acceptedTerm2,
+    confirmPassword,
+    dateOfBirth,
+    email,
+    firstName,
+    isSubmitting,
+    lastName,
+    password,
+    phoneNumber,
+  ]);
+
+  const resetOtpFlow = () => {
+    setOtpCode('');
+    setOtpPhoneNumber('');
+    setConfirmationResult(null);
+    setHasAutoSentOtp(false);
+    setPendingRegisterPayload(null);
+  };
+
+  const handleSendOtp = async (phoneNumberOverride?: string) => {
+    const targetPhone = (phoneNumberOverride ?? otpPhoneNumber).trim();
+    if (!targetPhone) {
+      Toast.show({
+        type: 'error',
+        text1: 'Thiếu số điện thoại',
+        text2: 'Vui lòng nhập số điện thoại hợp lệ.',
+      });
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const firebasePhoneNumber = toFirebasePhoneNumber(targetPhone);
+      const nextConfirmation = await getFirebaseAuth().signInWithPhoneNumber(firebasePhoneNumber);
+      setOtpPhoneNumber(targetPhone);
+      setConfirmationResult(nextConfirmation);
+      Toast.show({
+        type: 'success',
+        text1: 'Đã gửi OTP',
+        text2: 'Vui lòng kiểm tra SMS.',
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Gửi OTP thất bại',
+        text2: getFirebaseErrorMessage(error, 'Không thể gửi OTP. Vui lòng thử lại.'),
+      });
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtpAndRegister = async () => {
+    if (!confirmationResult) {
+      Toast.show({
+        type: 'error',
+        text1: 'Chưa gửi OTP',
+        text2: 'Vui lòng gửi OTP trước.',
+      });
+      return;
+    }
+    if (!otpCode.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Thiếu mã OTP',
+        text2: 'Vui lòng nhập mã OTP.',
+      });
+      return;
+    }
+    if (!pendingRegisterPayload) {
+      Toast.show({
+        type: 'error',
+        text1: 'Dữ liệu không hợp lệ',
+        text2: 'Vui lòng đăng ký lại.',
+      });
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    try {
+      const auth = getFirebaseAuth();
+      const credentialResult = await confirmationResult.confirm(otpCode.trim());
+      const firebaseIdToken = await credentialResult.user.getIdToken();
+
+      await authService.register({
+        ...pendingRegisterPayload,
+        firebaseIdToken,
+      });
+
+      await auth.signOut();
+
+      Toast.show({
+        type: 'success',
+        text1: 'Đăng ký thành công',
+        text2: 'Vui lòng kiểm tra email để kích hoạt tài khoản trước khi đăng nhập.',
+      });
+      setShowOtpModal(false);
+      resetOtpFlow();
+      router.replace('/login');
+    } catch (error) {
+      const firebaseCode = (error as { code?: string } | undefined)?.code;
+      Toast.show({
+        type: 'error',
+        text1: 'Xác thực OTP/Đăng ký thất bại',
+        text2:
+          firebaseCode?.startsWith('auth/')
+            ? getFirebaseErrorMessage(error, 'Mã OTP không hợp lệ hoặc đã hết hạn.')
+            : getApiErrorMessage(error, 'Vui lòng kiểm tra lại thông tin.'),
+      });
+    } finally {
+      setIsVerifyingOtp(false);
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showOtpModal || hasAutoSentOtp || !otpPhoneNumber) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setHasAutoSentOtp(true);
+      void handleSendOtp(otpPhoneNumber);
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [showOtpModal, hasAutoSentOtp, otpPhoneNumber]);
 
   const handleRegister = async () => {
     const normalizedPhoneNumber = normalizePhone(phoneNumber);
@@ -105,11 +269,20 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (password.trim().length < 6) {
+    if (!strongPasswordRegex.test(password.trim())) {
       Toast.show({
         type: 'error',
         text1: 'Mật khẩu chưa hợp lệ',
-        text2: 'Mật khẩu cần tối thiểu 6 ký tự.',
+        text2: 'Mật khẩu tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt.',
+      });
+      return;
+    }
+
+    if (password.trim() !== confirmPassword.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Mật khẩu không khớp',
+        text2: 'Vui lòng nhập trùng khớp mật khẩu xác nhận.',
       });
       return;
     }
@@ -164,50 +337,38 @@ export default function RegisterScreen() {
     }
 
     setIsSubmitting(true);
-    try {
-      await authService.register({
-        phoneNumber: normalizedPhoneNumber,
-        email: normalizedEmail,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        gender,
-        dateOfBirth: formatDateISO(dateOfBirth),
-        password: password.trim(),
-      });
-
-      Toast.show({
-        type: 'success',
-        text1: 'Đăng ký thành công',
-        text2: 'Vui lòng kiểm tra email để kích hoạt tài khoản trước khi đăng nhập.',
-      });
-      router.replace('/login');
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Đăng ký thất bại',
-        text2: getApiErrorMessage(error, 'Vui lòng kiểm tra lại thông tin.'),
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    setPendingRegisterPayload({
+      phoneNumber: normalizedPhoneNumber,
+      email: normalizedEmail,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      gender,
+      dateOfBirth: formatDateISO(dateOfBirth),
+      password: password.trim(),
+    });
+    setOtpPhoneNumber(normalizedPhoneNumber);
+    setOtpCode('');
+    setConfirmationResult(null);
+    setHasAutoSentOtp(false);
+    setShowOtpModal(true);
   };
+
+  const isOtpBusy = isSendingOtp || isVerifyingOtp;
 
   return (
     <SafeAreaView className="flex-1 bg-slate-100" edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
-        <ScrollView
-          className="flex-1 px-6"
-          contentContainerClassName="grow pb-6"
-          keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 px-6" contentContainerClassName="grow pb-6" keyboardShouldPersistTaps="handled">
           <Pressable
             className="mt-1 h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white"
             onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color="#111827" />
           </Pressable>
 
-          <Text className="mt-8 text-center text-3xl font-bold text-slate-900">Tạo tài khoản Unicall</Text>
+          <Text className="mt-8 text-center text-3xl font-extrabold tracking-tight text-slate-900">Tạo tài khoản UniCall</Text>
+          <Text className="mt-2 text-center text-base text-slate-500">Tạo tài khoản mới để bắt đầu kết nối</Text>
 
-          <View className="mt-7 gap-3">
+          <View className="mt-7 gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <View className="flex-row items-center overflow-hidden rounded-2xl border-2 border-blue-500 bg-white">
               <View className="w-[92px] items-center justify-center border-r border-slate-300 bg-slate-100 py-4">
                 <Text className="text-base font-medium text-slate-900">+84</Text>
@@ -268,7 +429,16 @@ export default function RegisterScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Mật khẩu (tối thiểu 6 ký tự)"
+              placeholder="Mật khẩu (>=8 ký tự, hoa, thường, số, ký tự đặc biệt)"
+              placeholderTextColor="#9ca3af"
+              secureTextEntry
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
+            />
+
+            <TextInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Xác nhận mật khẩu"
               placeholderTextColor="#9ca3af"
               secureTextEntry
               className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
@@ -277,14 +447,14 @@ export default function RegisterScreen() {
             <Pressable className="mt-1 flex-row items-start" onPress={() => setAcceptedTerm1((value) => !value)}>
               <Checkbox checked={acceptedTerm1} />
               <Text className="ml-3 flex-1 text-sm leading-6 text-slate-900">
-                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản sử dụng Unicall</Text>
+                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản sử dụng UniCall</Text>
               </Text>
             </Pressable>
 
             <Pressable className="flex-row items-start" onPress={() => setAcceptedTerm2((value) => !value)}>
               <Checkbox checked={acceptedTerm2} />
               <Text className="ml-3 flex-1 text-sm leading-6 text-slate-900">
-                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản mạng xã hội Unicall</Text>
+                Tôi đồng ý với <Text className="font-bold text-blue-600">điều khoản mạng xã hội UniCall</Text>
               </Text>
             </Pressable>
 
@@ -308,6 +478,64 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={showOtpModal}
+        onRequestClose={() => {
+          if (isOtpBusy) return;
+          setShowOtpModal(false);
+          resetOtpFlow();
+          setIsSubmitting(false);
+        }}>
+        <View className="flex-1 items-center justify-center bg-black/45 px-5">
+          <View className="w-full max-w-md rounded-2xl bg-white p-5">
+            <Text className="text-lg font-bold text-slate-900">Xác thực OTP</Text>
+            <Text className="mt-2 text-sm leading-5 text-slate-600">
+              Vui lòng nhập mã OTP đã gửi đến số <Text className="font-semibold">{otpPhoneNumber || '*****'}</Text>.
+            </Text>
+
+            <TextInput
+              value={otpCode}
+              onChangeText={setOtpCode}
+              placeholder="Nhập mã OTP"
+              placeholderTextColor="#9ca3af"
+              keyboardType="number-pad"
+              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+            />
+
+            <View className="mt-4 flex-row justify-end gap-2">
+              <Pressable
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
+                onPress={() => {
+                  if (isOtpBusy) return;
+                  setShowOtpModal(false);
+                  resetOtpFlow();
+                  setIsSubmitting(false);
+                }}>
+                <Text className="font-medium text-slate-700">Hủy</Text>
+              </Pressable>
+
+              <Pressable
+                className={`rounded-xl px-4 py-2.5 ${isSendingOtp ? 'bg-sky-300' : 'bg-slate-600'}`}
+                onPress={() => void handleSendOtp()}
+                disabled={isSendingOtp}>
+                <Text className="font-semibold text-white">{isSendingOtp ? 'Đang gửi...' : 'Gửi lại OTP'}</Text>
+              </Pressable>
+
+              <Pressable
+                className={`rounded-xl px-4 py-2.5 ${isVerifyingOtp ? 'bg-sky-300' : 'bg-sky-500'}`}
+                onPress={() => void handleVerifyOtpAndRegister()}
+                disabled={isVerifyingOtp || !confirmationResult || !otpCode.trim()}>
+                <Text className="font-semibold text-white">
+                  {isVerifyingOtp ? 'Đang xác thực...' : 'Xác thực'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <DateTimePickerModal
         isVisible={isDatePickerVisible}

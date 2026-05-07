@@ -13,6 +13,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Collection;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtHeaderInjectionFilter implements GlobalFilter, Ordered {
@@ -49,15 +50,17 @@ public class JwtHeaderInjectionFilter implements GlobalFilter, Ordered {
     private String extractRole(JwtAuthenticationToken token) {
         Collection<String> roles = token.getToken().getClaimAsStringList("roles");
         if (roles != null && !roles.isEmpty()) {
-            return roles.iterator().next();
+            return roles.stream().filter(role -> role != null && !role.isBlank()).collect(Collectors.joining(","));
         }
 
         var realmAccess = token.getToken().getClaimAsMap("realm_access");
         if (realmAccess != null) {
             Object rawRoles = realmAccess.get("roles");
             if (rawRoles instanceof Collection<?> collection && !collection.isEmpty()) {
-                Object first = collection.iterator().next();
-                return first == null ? "" : first.toString();
+                return collection.stream()
+                        .map(item -> item == null ? "" : item.toString())
+                        .filter(role -> !role.isBlank())
+                        .collect(Collectors.joining(","));
             }
         }
 

@@ -1,6 +1,6 @@
 import axiosClient from '@/configurations/axios.config';
 import { API_PREFIXES } from '@/constants/api-prefixes';
-import type { ResponseSuccess } from '@/types/api-response';
+import type { PageResponse, ResponseSuccess } from '@/types/api-response';
 import type { FriendItem } from '@/types/friendship';
 
 const FRIEND_API_PREFIX = API_PREFIXES.friends;
@@ -34,7 +34,7 @@ export const friendService = {
   },
 };
 
-export type FriendRequestStatus = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+export type FriendRequestStatus = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CANCELED' | 'CANCELLED';
 
 export type FriendRequestPayload = {
   idAccountSent: string;
@@ -49,12 +49,15 @@ export type FriendRequestStatusUpdatePayload = {
 };
 
 export type FriendRequestItem = {
-  id: string;
+  idFriendRequest: string;
   idAccountSent: string;
   idAccountReceive: string;
+  pathAvartar?: string | null;
+  firstName?: string;
+  lastName?: string;
+  content?: string;
+  timeRequest?: string;
   status: FriendRequestStatus;
-  createdAt?: string;
-  updatedAt?: string;
 };
 
 export const friendRequestService = {
@@ -79,9 +82,15 @@ export const friendRequestService = {
     return response.data;
   },
 
-  getAllFriendRequests: async (idAccountReceive: string): Promise<ResponseSuccess<FriendRequestItem[]>> => {
-    const response = await axiosClient.get<ResponseSuccess<FriendRequestItem[]>>(
-      `${FRIEND_REQUEST_API_PREFIX}/all/${idAccountReceive}`
+  getAllFriendRequests: async (
+    idAccount: string,
+    page = 0,
+    size = 50,
+    sortDirection: 'asc' | 'desc' = 'desc'
+  ): Promise<ResponseSuccess<PageResponse<FriendRequestItem>>> => {
+    const response = await axiosClient.get<ResponseSuccess<PageResponse<FriendRequestItem>>>(
+      `${FRIEND_REQUEST_API_PREFIX}/all/${idAccount}`,
+      { params: { page, size, sortDirection } }
     );
     return response.data;
   },

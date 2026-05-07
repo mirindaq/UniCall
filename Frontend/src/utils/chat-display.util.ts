@@ -15,7 +15,7 @@ export function getPeerAccountId(conversation: ConversationResponse, myIdentityU
 
 export function displayNameFromProfile(profile: Pick<UserProfile, "firstName" | "lastName"> | null | undefined) {
   if (!profile) return ""
-  return `${profile.firstName} ${profile.lastName}`.trim()
+  return `${profile.lastName} ${profile.firstName}`.trim()
 }
 
 export function formatChatSidebarTime(iso?: string | null) {
@@ -54,3 +54,4 @@ export function searchItemToProfile(user: UserSearchItem): UserProfile {
     isActive: true,
   }
 }
+

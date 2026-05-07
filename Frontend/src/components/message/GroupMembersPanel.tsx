@@ -30,6 +30,26 @@ type GroupMembersPanelProps = {
   onBack: () => void
 }
 
+const resolveLeaveGroupErrorMessage = (error: unknown) => {
+  const backendMessage = (
+    error as { response?: { data?: { message?: string } } }
+  )?.response?.data?.message
+
+  if (!backendMessage) {
+    return "Rời nhóm thất bại, vui lòng thử lại."
+  }
+
+  if (backendMessage === "Admin must transfer role before leaving group") {
+    return "Bạn đang là trưởng nhóm. Vui lòng chuyển quyền trưởng nhóm trước khi rời nhóm."
+  }
+
+  if (backendMessage === "Last member cannot leave group. Please dissolve group instead") {
+    return "Bạn là thành viên cuối cùng. Hãy giải tán nhóm thay vì rời nhóm."
+  }
+
+  return backendMessage
+}
+
 export default function GroupMembersPanel({ conversationId, onBack }: GroupMembersPanelProps) {
   const { currentUserId, refetchConversations, selectConversation, setDetailsView } = useChatPage()
   const [participants, setParticipants] = useState<GroupParticipantInfo[]>([])
@@ -96,14 +116,16 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
     return participants.map((participant) => {
       const profile = profiles[participant.idAccount]
       const displayName = profile
-        ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || participant.idAccount
+        ? `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || participant.idAccount
         : participant.idAccount
       const fallback = toFallback(displayName)
       const roleLabel =
         participant.idAccount === currentUserId
           ? participant.role === "ADMIN"
             ? "Trưởng nhóm"
-            : "Bạn"
+            : participant.role === "DEPUTY"
+              ? "Phó nhóm"
+              : "Bạn"
           : participant.role === "ADMIN"
             ? "Trưởng nhóm"
             : participant.role === "DEPUTY"
@@ -132,7 +154,7 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
       .map((participant) => {
         const profile = profiles[participant.idAccount]
         const displayName = profile
-          ? `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim() || participant.idAccount
+          ? `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() || participant.idAccount
           : participant.idAccount
         return {
           id: participant.idAccount,
@@ -155,8 +177,8 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
       await refetchConversations()
       setDetailsView("main")
       selectConversation(null)
-    } catch {
-      toast.error("Rời nhóm thất bại, vui lòng thử lại.")
+    } catch (error) {
+      toast.error(resolveLeaveGroupErrorMessage(error))
     }
   }
 
@@ -173,7 +195,21 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
     }
   }
 
-  const handleRemoveMember = async (memberId: string) => {
+  const canKickMember = (memberRole: GroupParticipantInfo["role"]) => {
+    if (currentUserParticipant?.role === "ADMIN") {
+      return memberRole !== "ADMIN"
+    }
+    if (currentUserParticipant?.role === "DEPUTY") {
+      return memberRole === "USER"
+    }
+    return false
+  }
+
+  const handleRemoveMember = async (memberId: string, memberRole: GroupParticipantInfo["role"]) => {
+    if (!canKickMember(memberRole)) {
+      toast.error("Bạn không có quyền xóa thành viên này.")
+      return
+    }
     try {
       await chatService.removeGroupMember(conversationId, memberId)
       toast.success("Đã xóa thành viên khỏi nhóm.")
@@ -301,11 +337,18 @@ export default function GroupMembersPanel({ conversationId, onBack }: GroupMembe
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="h-9 rounded-md px-3 text-red-600 focus:text-red-600"
-                            onClick={() => void handleRemoveMember(member.id)}
+                            onClick={() => void handleRemoveMember(member.id, member.role)}
                           >
                             Xóa khỏi nhóm
                           </DropdownMenuItem>
                         </>
+                      ) : currentUserParticipant?.role === "DEPUTY" && member.role === "USER" ? (
+                        <DropdownMenuItem
+                          className="h-9 rounded-md px-3 text-red-600 focus:text-red-600"
+                          onClick={() => void handleRemoveMember(member.id, member.role)}
+                        >
+                          Xóa khỏi nhóm
+                        </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem className="h-9 rounded-md px-3" disabled>
                           Không có quyền
@@ -370,3 +413,4 @@ function toFallback(fullName: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+

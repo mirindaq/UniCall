@@ -1,12 +1,11 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { ContactsSubTab } from '@/mock/contacts-data';
+import type { ContactsSubTab } from '@/types/contacts';
 
 const CONTACTS_TABS: { key: ContactsSubTab; label: string }[] = [
   { key: 'friends', label: 'Bạn bè' },
   { key: 'groups', label: 'Nhóm' },
-  { key: 'oa', label: 'OA' },
 ];
 
 interface ContactsTabsProps {

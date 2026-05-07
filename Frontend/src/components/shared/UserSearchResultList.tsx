@@ -1,4 +1,4 @@
-import { SeedAvatar } from "@/components/friend_ship/SeedAvatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { UserSearchItem } from "@/types/user.type"
 
 export function UserSearchResultList({
@@ -38,11 +38,15 @@ export function UserSearchResultList({
               onClick={() => onSelectUser(user)}
               className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
             >
-              <SeedAvatar
-                fallback={toFallback(user.fullName || `${user.firstName} ${user.lastName}`)}
-                tone="bg-sky-100 text-sky-700"
-                className="ring-1 ring-slate-200"
-              />
+              <Avatar size="lg" className="ring-1 ring-slate-200">
+                <AvatarImage
+                  src={normalizeAvatarSrc(user.avatar)}
+                  alt={user.fullName || `${user.lastName} ${user.firstName}`.trim() || "User"}
+                />
+                <AvatarFallback className="bg-sky-100 font-semibold text-sky-700">
+                  {toFallback(user.fullName || `${user.lastName} ${user.firstName}`)}
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{user.fullName}</p>
                 <p className="text-xs text-slate-500">{user.phoneNumber}</p>
@@ -66,6 +70,11 @@ export function UserSearchResultList({
       )}
     </div>
   )
+}
+
+function normalizeAvatarSrc(value?: string | null) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
 }
 
 function toFallback(fullName: string) {

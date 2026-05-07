@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -216,6 +217,32 @@ public class UserProfileServiceImpl implements UserProfileService {
         Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy));
         Specification<User> specification = buildQuery.build();
         return userRepository.findAll(specification, pageable);
+    }
+
+    @Override
+    public Page<User> getAdminUsers(int page, int limit, String keyword) {
+        int safePage = Math.max(page, 1);
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        Pageable pageable = PageRequest.of(safePage - 1, safeLimit, Sort.by(Sort.Direction.DESC, "id"));
+
+        if (keyword == null || keyword.isBlank()) {
+            return userRepository.findAll(pageable);
+        }
+
+        String normalizedKeyword = keyword.trim().toLowerCase();
+        return userRepository.findByAdminKeyword(normalizedKeyword, pageable);
+    }
+
+    @Override
+    @Transactional
+    public User setUserActiveStatus(String targetIdentityUserId, boolean isActive) {
+        if (targetIdentityUserId == null || targetIdentityUserId.isBlank()) {
+            throw new InvalidParamException("targetIdentityUserId is required");
+        }
+
+        User user = getUserProfileByIdentityUserId(targetIdentityUserId.trim());
+        user.setIsActive(isActive);
+        return userRepository.save(user);
     }
 
     private String mergeSearchWithKeyword(String search, String keyword) {

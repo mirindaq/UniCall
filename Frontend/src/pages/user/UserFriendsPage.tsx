@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { BellPlus, Users, UserPlus, UsersRound } from "lucide-react"
+import { Users, UserPlus, UsersRound } from "lucide-react"
 
 import {
   FriendshipPageHeader,
@@ -9,9 +9,8 @@ import {
 import { CommunitiesTab } from "@/pages/user/friend_ship/CommunitiesTab"
 import { FriendInvitationsTab } from "@/pages/user/friend_ship/FriendInvitationsTab"
 import { FriendsListTab } from "@/pages/user/friend_ship/FriendsListTab"
-import { GroupInvitationsTab } from "@/pages/user/friend_ship/GroupInvitationsTab"
 
-type FriendTab = "friends" | "communities" | "friend-requests" | "group-requests"
+type FriendTab = "friends" | "communities" | "friend-requests"
 
 const friendTabs: FriendshipTabItem<FriendTab>[] = [
   {
@@ -21,18 +20,13 @@ const friendTabs: FriendshipTabItem<FriendTab>[] = [
   },
   {
     value: "communities",
-    label: "Danh sách nhóm và cộng đồng",
+    label: "Danh sách nhóm",
     icon: UsersRound,
   },
   {
     value: "friend-requests",
     label: "Lời mời kết bạn",
     icon: UserPlus,
-  },
-  {
-    value: "group-requests",
-    label: "Lời mời vào nhóm và cộng đồng",
-    icon: BellPlus,
   },
 ]
 
@@ -48,8 +42,6 @@ export function UserFriendsPage() {
         return <CommunitiesTab />
       case "friend-requests":
         return <FriendInvitationsTab />
-      case "group-requests":
-        return <GroupInvitationsTab />
       default:
         return <FriendsListTab />
     }

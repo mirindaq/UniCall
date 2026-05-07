@@ -49,4 +49,7 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 6, max = 100, message = "Password must be from 6 to 100 characters")
     private String password;
+
+    @NotBlank(message = "Firebase OTP token is required")
+    private String firebaseIdToken;
 }

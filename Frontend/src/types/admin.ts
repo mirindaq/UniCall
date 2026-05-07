@@ -91,3 +91,12 @@ export interface AuditLog {
   createdAt: string
   ipAddress: string
 }
+
+export interface AdminManagedUser {
+  identityUserId: string
+  phoneNumber: string
+  email: string
+  fullName: string
+  isActive: boolean
+  deletionPending: boolean
+}

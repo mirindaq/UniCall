@@ -1,7 +1,20 @@
 import { useMemo, useState, useEffect } from "react"
 import { ArrowUpDown } from "lucide-react"
+import { toast } from "sonner"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { useQuery } from "@/hooks/useQuery"
 import { friendService } from "@/services/friend/friend.service"
 import { userService } from "@/services/user/user.service"
@@ -10,8 +23,6 @@ import {
   FriendshipFilterChips,
   FriendshipIconSelect,
   FriendshipTabTitle,
-  InlineMoreButton,
-  SeedAvatar,
   type SelectOption,
   ZeroDataState,
 } from "@/components/friend_ship"
@@ -35,6 +46,8 @@ const friendFilterOptions: SelectOption[] = [
 export function FriendsListTab() {
   const [sortBy, setSortBy] = useState<FriendSort>("name")
   const [filterBy, setFilterBy] = useState<FriendFilter>("all")
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null)
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false)
 
   const { data: myProfileResponse } = useQuery(
     () => userService.getMyProfile(),
@@ -134,7 +147,7 @@ export function FriendsListTab() {
     const profile = friendProfiles[peerIdentityUserId]
     const firstName = profile?.firstName || friend.firstName || ""
     const lastName = profile?.lastName || friend.lastName || ""
-    const displayName = `${firstName} ${lastName}`.trim() || peerIdentityUserId
+    const displayName = `${lastName} ${firstName}`.trim() || peerIdentityUserId
     return {
       id: friend.idFriend,
       name: displayName,
@@ -148,6 +161,24 @@ export function FriendsListTab() {
       recentOrder: 0,
     }
   })
+
+  const handleConfirmRemoveFriend = async () => {
+    if (!removeTarget || isRemovingFriend) {
+      return
+    }
+    setIsRemovingFriend(true)
+    try {
+      await friendService.deleteFriend(removeTarget.id)
+      setFriendsData((prev) => prev.filter((item: any) => item.idFriend !== removeTarget.id))
+      toast.success("Đã hủy kết bạn.")
+      setRemoveTarget(null)
+    } catch (error) {
+      const backendMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(backendMessage || "Hủy kết bạn thất bại.")
+    } finally {
+      setIsRemovingFriend(false)
+    }
+  }
 
   const filteredFriends = useMemo(() => {
     let result: any[] = friends
@@ -265,7 +296,10 @@ export function FriendsListTab() {
                         className="flex items-center justify-between rounded-xl px-2 py-2.5 transition hover:bg-slate-50"
                       >
                         <div className="flex min-w-0 items-center gap-4">
-                          <SeedAvatar fallback={friend.fallback} tone={friend.tone} />
+                          <Avatar size="lg">
+                            <AvatarImage src={normalizeAvatarSrc(friend.avatar)} alt={friend.name} />
+                            <AvatarFallback className="font-semibold">{friend.fallback}</AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0 space-y-1">
                             <p className="truncate text-base font-semibold tracking-tight text-slate-900">
                               {friend.name}
@@ -277,7 +311,15 @@ export function FriendsListTab() {
                             </Badge>
                           ) : null}
                         </div>
-                        <InlineMoreButton />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => setRemoveTarget({ id: friend.id, name: friend.name })}
+                        >
+                          Hủy kết bạn
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -287,6 +329,32 @@ export function FriendsListTab() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={removeTarget != null} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận hủy kết bạn</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Bạn có chắc muốn hủy kết bạn với ${removeTarget?.name ?? "người này"} không?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingFriend}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isRemovingFriend}
+              onClick={() => void handleConfirmRemoveFriend()}
+            >
+              {isRemovingFriend ? "Đang xử lý..." : "Hủy kết bạn"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
+}
+
+function normalizeAvatarSrc(value?: string | null) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
 }

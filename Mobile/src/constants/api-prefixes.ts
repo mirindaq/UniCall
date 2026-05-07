@@ -8,6 +8,7 @@ export const API_PREFIXES = {
   chat: `${API_V1_PREFIX}/chat`,
   conversations: `${API_V1_PREFIX}/conversations`,
   files: `${API_V1_PREFIX}/files`,
+  notifications: `/api-gateway/notification-service${API_V1_PREFIX}/notifications`,
 } as const;
 
 export const API_WS_PREFIXES = {

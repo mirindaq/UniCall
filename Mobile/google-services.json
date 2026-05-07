@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "981068536505",
+    "project_id": "unicall-dddf4",
+    "storage_bucket": "unicall-dddf4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981068536505:android:5a6c9459cc91edb4541968",
+        "android_client_info": {
+          "package_name": "com.unicall.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJ6d9beGBg-lcDxIt-cfSSp7DebAsil00"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

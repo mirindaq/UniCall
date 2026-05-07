@@ -37,6 +37,7 @@ const teardownUserEventSubscriptionIfIdle = () => {
 
 export const chatSocketService = {
   getClient: () => realtimeSocketService.getClient(),
+  waitForConnected: (timeoutMs?: number) => realtimeSocketService.waitForConnected(timeoutMs),
 
   connect(onConnected?: () => void, onDisconnected?: () => void) {
     let effectiveOnConnected = onConnected
@@ -84,7 +85,8 @@ export const chatSocketService = {
     content: string,
     type: ChatMessageResponse["type"] = "TEXT",
     attachments?: Array<Pick<ChatAttachment, "type" | "url" | "size" | "order">>,
-    replyToMessageId?: string | null
+    replyToMessageId?: string | null,
+    mentionedUserIds?: string[]
   ) {
     realtimeSocketService.publish("/app/chat.send", {
       conversationId,
@@ -92,6 +94,10 @@ export const chatSocketService = {
       type,
       attachments,
       replyToMessageId: replyToMessageId ?? undefined,
+      mentionedUserIds:
+        mentionedUserIds && mentionedUserIds.length > 0
+          ? mentionedUserIds
+          : undefined,
     })
   },
 
@@ -101,17 +107,19 @@ export const chatSocketService = {
     type: CallSignalType,
     extras?: {
       audioOnly?: boolean
+      targetUserIds?: string[]
       sdp?: string
       candidate?: string
       sdpMid?: string
       sdpMLineIndex?: number
     }
   ) {
-    realtimeSocketService.publish("/app/call.signal", {
+    return realtimeSocketService.publish("/app/call.signal", {
       conversationId,
       callId,
       type,
       audioOnly: extras?.audioOnly ?? true,
+      targetUserIds: extras?.targetUserIds,
       sdp: extras?.sdp,
       candidate: extras?.candidate,
       sdpMid: extras?.sdpMid,

@@ -5,6 +5,7 @@ import {
   CircleHelp,
   CloudUpload,
   Database,
+  FileText,
   FolderKanban,
   Globe,
   LogOut,
@@ -56,6 +57,11 @@ const userTabs = [
     to: `${USER_PATH.ROOT}/${USER_PATH.FRIENDS}`,
     label: "Ban be",
     icon: Users,
+  },
+  {
+    to: `${USER_PATH.ROOT}/${USER_PATH.POSTS}`,
+    label: "Bai viet",
+    icon: FileText,
   },
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.NOTIFICATIONS}`,
@@ -308,6 +314,8 @@ export function UserLayout() {
             callerName={globalCallPeer?.name ?? "Người dùng"}
             callerAvatar={globalCallPeer?.avatar}
             audioOnly={globalCall.activeCall?.audioOnly ?? true}
+            selfParticipantId={identityUserId}
+            remoteParticipantMedia={globalCall.remoteParticipantMedia}
             startedAt={globalCall.activeCall?.startedAt}
             ringDeadlineAt={globalCall.ringDeadlineAt}
             ringDurationMs={globalCall.ringDurationMs}
@@ -330,3 +338,4 @@ export function UserLayout() {
     </div>
   )
 }
+

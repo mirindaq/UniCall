@@ -1,63 +1,112 @@
-import { Badge } from "@/components/ui/badge"
-import { adminStats, moderationQueue, supportTickets } from "@/mock/admin-data"
+import { useMemo } from "react"
+import { toast } from "sonner"
+
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader"
 import { AdminStatCard } from "@/components/admin/AdminStatCard"
 import { Button } from "@/components/ui/button"
-import { adminMockService } from "@/services/admin/admin.mock.service"
-import { toast } from "sonner"
+import { useQuery } from "@/hooks/useQuery"
+import { userService } from "@/services/user/user.service"
+import type { AdminManagedUser, AdminStat } from "@/types/admin"
+
+const DASHBOARD_PAGE_SIZE = 100
+
+async function fetchAllAdminUsers() {
+  const firstPageResponse = await userService.getAdminUsers({
+    page: 1,
+    limit: DASHBOARD_PAGE_SIZE,
+  })
+
+  const totalPage = Math.max(firstPageResponse.data.totalPage, 1)
+  let items: AdminManagedUser[] = [...firstPageResponse.data.items]
+
+  if (totalPage > 1) {
+    const remainingResponses = await Promise.all(
+      Array.from({ length: totalPage - 1 }, (_, index) =>
+        userService.getAdminUsers({
+          page: index + 2,
+          limit: DASHBOARD_PAGE_SIZE,
+        })
+      )
+    )
+
+    items = items.concat(
+      remainingResponses.flatMap((response) => response.data.items)
+    )
+  }
+
+  return {
+    totalUsers: firstPageResponse.data.totalItem,
+    users: items,
+  }
+}
 
 export function AdminDashboardPage() {
-  const handleEmergencyEndCall = async () => {
-    const response = await adminMockService.forceEndCallRoom("ROOM-999")
-    toast.success(response.message)
-  }
+  const {
+    data: dashboardData,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery(fetchAllAdminUsers, {
+    onError: () => {
+      toast.error("Khong the tai thong ke admin")
+    },
+  })
+
+  const stats = useMemo<AdminStat[]>(() => {
+    const users = dashboardData?.users ?? []
+    const totalUsers = dashboardData?.totalUsers ?? 0
+    const activeUsers = users.filter((user) => user.isActive).length
+    const blockedUsers = users.filter((user) => !user.isActive).length
+    const pendingDeletionUsers = users.filter((user) => user.deletionPending).length
+
+    return [
+      {
+        key: "total-users",
+        label: "Tong tai khoan",
+        value: totalUsers.toString(),
+        delta: "Du lieu thuc tu he thong",
+        trend: "neutral",
+      },
+      {
+        key: "active-users",
+        label: "Tai khoan hoat dong",
+        value: activeUsers.toString(),
+        delta: "Dang su dung binh thuong",
+        trend: "up",
+      },
+      {
+        key: "blocked-users",
+        label: "Tai khoan bi chan",
+        value: blockedUsers.toString(),
+        delta: "Can theo doi neu tang nhanh",
+        trend: blockedUsers > 0 ? "down" : "neutral",
+      },
+      {
+        key: "pending-deletion",
+        label: "Cho xoa tai khoan",
+        value: pendingDeletionUsers.toString(),
+        delta: "Dang cho xu ly xoa",
+        trend: pendingDeletionUsers > 0 ? "down" : "neutral",
+      },
+    ]
+  }, [dashboardData?.totalUsers, dashboardData?.users])
 
   return (
     <div className="space-y-4">
       <AdminPageHeader
-        title="Bảng điều khiển quản trị"
-        description="Tổng quan KPI thời gian thực, áp lực kiểm duyệt và tải hỗ trợ."
-        action={<Button onClick={handleEmergencyEndCall}>Kết thúc phòng gọi khẩn</Button>}
+        title="Bang dieu khien quan tri"
+        description="Tong quan nhanh tinh trang tai khoan nguoi dung."
+        action={
+          <Button onClick={() => void refetch()} disabled={isLoading || isRefetching}>
+            {isLoading || isRefetching ? "Dang tai..." : "Lam moi"}
+          </Button>
+        }
       />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {adminStats.map((stat) => (
+        {stats.map((stat) => (
           <AdminStatCard key={stat.key} stat={stat} />
         ))}
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-3 text-base font-semibold text-slate-900">Ảnh chụp nhanh hàng chờ kiểm duyệt</p>
-          <div className="space-y-2">
-            {moderationQueue.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{item.reason}</p>
-                  <p className="text-xs text-slate-500">{item.id} • {item.createdAt}</p>
-                </div>
-                <Badge variant={item.severity === "HIGH" ? "destructive" : "secondary"}>{item.severity}</Badge>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-3 text-base font-semibold text-slate-900">Theo dõi SLA hỗ trợ</p>
-          <div className="space-y-2">
-            {supportTickets.map((ticket) => (
-              <div key={ticket.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{ticket.subject}</p>
-                  <p className="text-xs text-slate-500">{ticket.id} • {ticket.requester}</p>
-                </div>
-                <Badge variant={ticket.status === "RESOLVED" ? "secondary" : "default"}>
-                  {ticket.status === "OPEN" ? "Mới" : ticket.status === "IN_PROGRESS" ? "Đang xử lý" : "Đã hoàn tất"}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </section>
       </section>
     </div>
   )

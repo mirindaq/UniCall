@@ -6,6 +6,7 @@ import iuh.fit.identity_service.dtos.request.auth.ForgotPasswordRequest;
 import iuh.fit.identity_service.dtos.request.auth.LoginRequest;
 import iuh.fit.identity_service.dtos.request.auth.RefreshTokenRequest;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
+import iuh.fit.identity_service.dtos.request.auth.ResetPasswordWithOtpRequest;
 import iuh.fit.identity_service.dtos.request.auth.ResendVerificationEmailRequest;
 import iuh.fit.identity_service.dtos.request.auth.VerifyPasswordRequest;
 import iuh.fit.identity_service.dtos.response.auth.AuthTokenResponse;
@@ -74,6 +75,14 @@ public class AuthController {
         return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password verified"));
     }
 
+    @PostMapping("/reset-password-with-otp")
+    public ResponseEntity<ResponseSuccess<Void>> resetPasswordWithOtp(
+            @Valid @RequestBody ResetPasswordWithOtpRequest request
+    ) {
+        authService.resetPasswordWithOtp(request);
+        return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Password reset successfully"));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<ResponseSuccess<?>> login(
             @RequestHeader(value = CLIENT_TYPE_HEADER, required = false) String clientType,
@@ -87,6 +96,21 @@ public class AuthController {
         ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
         result.cookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
         return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Login success"));
+    }
+
+    @PostMapping("/admin/login")
+    public ResponseEntity<ResponseSuccess<?>> adminLogin(
+            @RequestHeader(value = CLIENT_TYPE_HEADER, required = false) String clientType,
+            @Valid @RequestBody LoginRequest request
+    ) {
+        AuthService.LoginResult result = authService.loginAdmin(request);
+        if (isMobileClient(clientType)) {
+            return ResponseEntity.ok(new ResponseSuccess<>(HttpStatus.OK, "Admin login success", result.tokens()));
+        }
+
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok();
+        result.cookies().forEach(cookie -> responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString()));
+        return responseBuilder.body(new ResponseSuccess<>(HttpStatus.OK, "Admin login success"));
     }
 
     @PostMapping("/refresh")

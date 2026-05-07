@@ -1,19 +1,21 @@
-import {
-  CalendarIcon,
-  ChevronDown,
-  Download,
-  Search,
-} from "lucide-react"
+import { CalendarIcon, ChevronDown, Download, Search } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { useChatPage } from "@/contexts/ChatPageContext"
-import { fileService, type AttachmentResponse } from "@/services/file/file.service"
+import {
+  fileService,
+  type AttachmentResponse,
+} from "@/services/file/file.service"
 import { userService } from "@/services/user/user.service"
 import { getOriginalFileNameFromUrl } from "@/utils/file-display.util"
 
@@ -30,7 +32,11 @@ type SenderOption = {
 
 type FileTypeFilter = "all" | "pdf" | "word" | "powerpoint" | "excel"
 
-const FILE_TYPE_OPTIONS: Array<{ value: FileTypeFilter; label: string; badge: string }> = [
+const FILE_TYPE_OPTIONS: Array<{
+  value: FileTypeFilter
+  label: string
+  badge: string
+}> = [
   { value: "all", label: "Tất cả", badge: "*" },
   { value: "pdf", label: "PDF", badge: "PDF" },
   { value: "word", label: "Word", badge: "W" },
@@ -39,7 +45,10 @@ const FILE_TYPE_OPTIONS: Array<{ value: FileTypeFilter; label: string; badge: st
 ]
 const SEARCH_DEBOUNCE_MS = 1000
 
-const toDisplayName = (profile: { firstName?: string; lastName?: string }, fallback: string): string => {
+const toDisplayName = (
+  profile: { firstName?: string; lastName?: string },
+  fallback: string
+): string => {
   const fullName = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim()
   return fullName || fallback
 }
@@ -67,17 +76,24 @@ const matchesFileTypeFilter = (url: string, type: FileTypeFilter): boolean => {
     return fileName.endsWith(".ppt") || fileName.endsWith(".pptx")
   }
   if (type === "excel") {
-    return fileName.endsWith(".xls") || fileName.endsWith(".xlsx") || fileName.endsWith(".csv")
+    return (
+      fileName.endsWith(".xls") ||
+      fileName.endsWith(".xlsx") ||
+      fileName.endsWith(".csv")
+    )
   }
   return true
 }
 
 export default function StorageFiles() {
-  const { selectedConversationId, selectedConversation, currentUserId } = useChatPage()
+  const { selectedConversationId, selectedConversation, currentUserId } =
+    useChatPage()
   const [attachments, setAttachments] = useState<AttachmentResponse[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [loadingSenders, setLoadingSenders] = useState(false)
-  const [senderProfiles, setSenderProfiles] = useState<Record<string, SenderProfile>>({})
+  const [senderProfiles, setSenderProfiles] = useState<
+    Record<string, SenderProfile>
+  >({})
 
   const [searchKeyword, setSearchKeyword] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -94,13 +110,18 @@ export default function StorageFiles() {
       .map((participant) => participant.idAccount)
       .filter((id): id is string => !!id)
     return Array.from(new Set(ids))
-  }, [selectedConversation?.idConversation, selectedConversation?.participantInfos])
+  }, [
+    selectedConversation?.idConversation,
+    selectedConversation?.participantInfos,
+  ])
 
   const senderOptions = useMemo<SenderOption[]>(() => {
     return participantIds
       .map((id) => ({
         id,
-        name: senderProfiles[id]?.displayName ?? (id === currentUserId ? "Bạn" : id),
+        name:
+          senderProfiles[id]?.displayName ??
+          (id === currentUserId ? "Bạn" : id),
         avatar: senderProfiles[id]?.avatar,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "vi"))
@@ -110,11 +131,17 @@ export default function StorageFiles() {
     if (!selectedSenderId) {
       return "Người gửi"
     }
-    return senderOptions.find((option) => option.id === selectedSenderId)?.name ?? "Người gửi"
+    return (
+      senderOptions.find((option) => option.id === selectedSenderId)?.name ??
+      "Người gửi"
+    )
   }, [selectedSenderId, senderOptions])
 
   const selectedTypeLabel = useMemo(() => {
-    return FILE_TYPE_OPTIONS.find((option) => option.value === selectedType)?.label ?? "Loại"
+    return (
+      FILE_TYPE_OPTIONS.find((option) => option.value === selectedType)
+        ?.label ?? "Loại"
+    )
   }, [selectedType])
 
   const filteredSenderOptions = useMemo(() => {
@@ -122,14 +149,19 @@ export default function StorageFiles() {
     if (!keyword) {
       return senderOptions
     }
-    return senderOptions.filter((option) => option.name.toLowerCase().includes(keyword))
+    return senderOptions.filter((option) =>
+      option.name.toLowerCase().includes(keyword)
+    )
   }, [senderOptions, senderSearch])
 
   const filteredAttachments = useMemo(() => {
-    return attachments.filter((attachment) => matchesFileTypeFilter(attachment.url, selectedType))
+    return attachments.filter((attachment) =>
+      matchesFileTypeFilter(attachment.url, selectedType)
+    )
   }, [attachments, selectedType])
 
-  const hasActiveFilter = !!selectedSenderId || !!fromDate || !!toDate || selectedType !== "all"
+  const hasActiveFilter =
+    !!selectedSenderId || !!fromDate || !!toDate || selectedType !== "all"
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -168,10 +200,14 @@ export default function StorageFiles() {
         await Promise.all(
           participantIds.map(async (senderId) => {
             try {
-              const profileRes = await userService.getProfileByIdentityUserId(senderId)
+              const profileRes =
+                await userService.getProfileByIdentityUserId(senderId)
               const profile = profileRes.data
               senderProfileMap[senderId] = {
-                displayName: toDisplayName(profile, senderId === currentUserId ? "Bạn" : senderId),
+                displayName: toDisplayName(
+                  profile,
+                  senderId === currentUserId ? "Bạn" : senderId
+                ),
                 avatar: profile.avatar ?? undefined,
               }
             } catch {
@@ -179,7 +215,7 @@ export default function StorageFiles() {
                 displayName: senderId === currentUserId ? "Bạn" : senderId,
               }
             }
-          }),
+          })
         )
 
         if (!cancelled) {
@@ -211,13 +247,16 @@ export default function StorageFiles() {
     const loadAttachments = async () => {
       setLoadingAttachments(true)
       try {
-        const response = await fileService.getAttachments(selectedConversationId, {
-          type: 'files',
-          senderId: selectedSenderId || undefined,
-          fromDate: fromDate || undefined,
-          toDate: toDate || undefined,
-          search: debouncedSearch || undefined,
-        })
+        const response = await fileService.getAttachments(
+          selectedConversationId,
+          {
+            type: "files",
+            senderId: selectedSenderId || undefined,
+            fromDate: fromDate || undefined,
+            toDate: toDate || undefined,
+            search: debouncedSearch || undefined,
+          }
+        )
         if (!cancelled) {
           const items = (response.data ?? []).slice().sort((a, b) => {
             const right = new Date(b.timeSent ?? b.timeUpload).getTime()
@@ -242,7 +281,13 @@ export default function StorageFiles() {
     return () => {
       cancelled = true
     }
-  }, [selectedConversationId, debouncedSearch, selectedSenderId, fromDate, toDate])
+  }, [
+    selectedConversationId,
+    debouncedSearch,
+    selectedSenderId,
+    fromDate,
+    toDate,
+  ])
 
   const applyRecentDays = (days: number) => {
     const end = new Date()
@@ -258,39 +303,28 @@ export default function StorageFiles() {
   }
 
   const getFileExtension = (url: string): string => {
-    const parts = url.split('.')
-    const ext = parts[parts.length - 1]?.toLowerCase() || 'FILE'
+    const parts = url.split(".")
+    const ext = parts[parts.length - 1]?.toLowerCase() || "FILE"
     return ext.substring(0, 4).toUpperCase()
   }
 
   const getExtensionColor = (ext: string): string => {
     const lowerExt = ext.toLowerCase()
-    if (lowerExt.includes('pdf')) return 'bg-red-500'
-    if (lowerExt.includes('doc')) return 'bg-blue-500'
-    if (lowerExt.includes('xls')) return 'bg-green-500'
-    if (lowerExt.includes('ppt')) return 'bg-orange-500'
-    if (lowerExt.includes('zip') || lowerExt.includes('rar')) return 'bg-yellow-600'
-    if (lowerExt.includes('mp3') || lowerExt.includes('wav')) return 'bg-purple-500'
-    return 'bg-gray-500'
+    if (lowerExt.includes("pdf")) return "bg-red-500"
+    if (lowerExt.includes("doc")) return "bg-blue-500"
+    if (lowerExt.includes("xls")) return "bg-green-500"
+    if (lowerExt.includes("ppt")) return "bg-orange-500"
+    if (lowerExt.includes("zip") || lowerExt.includes("rar"))
+      return "bg-yellow-600"
+    if (lowerExt.includes("mp3") || lowerExt.includes("wav"))
+      return "bg-purple-500"
+    return "bg-gray-500"
   }
 
-  const handleDownload = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
-      toast.success('Đang tải file xuống...')
-    } catch (error) {
-      console.error('Download error:', error)
-      toast.error('Tải file thất bại')
-    }
+  const handleOpenInNewTab = (url: string) => {
+    const opened = window.open(url, "_blank", "noopener,noreferrer")
+    // if (!opened) {
+    // }
   }
 
   if (loadingAttachments && attachments.length === 0) {
@@ -343,7 +377,9 @@ export default function StorageFiles() {
           <Popover open={senderPopoverOpen} onOpenChange={setSenderPopoverOpen}>
             <PopoverTrigger asChild>
               <Button variant="secondary" className="h-8 rounded-full">
-                <span className="max-w-[96px] truncate">{selectedSenderLabel}</span>
+                <span className="max-w-[96px] truncate">
+                  {selectedSenderLabel}
+                </span>
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -397,7 +433,9 @@ export default function StorageFiles() {
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="secondary" className="h-8 rounded-full">
-                <span className="max-w-[96px] truncate">{fromDate || toDate ? "Đang lọc ngày" : "Ngày gửi"}</span>
+                <span className="max-w-[96px] truncate">
+                  {fromDate || toDate ? "Đang lọc ngày" : "Ngày gửi"}
+                </span>
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -405,28 +443,53 @@ export default function StorageFiles() {
               <div className="border-b px-4 py-3">
                 <p className="text-sm font-medium">Gợi ý thời gian</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => applyRecentDays(7)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyRecentDays(7)}
+                  >
                     7 ngày
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => applyRecentDays(30)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyRecentDays(30)}
+                  >
                     30 ngày
                   </Button>
                 </div>
               </div>
               <div className="px-4 py-3">
-                <p className="mb-2 text-sm font-medium">Chọn khoảng thời gian</p>
+                <p className="mb-2 text-sm font-medium">
+                  Chọn khoảng thời gian
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
-                    <CalendarIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(event) => setFromDate(event.target.value)}
+                    />
+                    <CalendarIcon className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                   <div className="relative">
-                    <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
-                    <CalendarIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(event) => setToDate(event.target.value)}
+                    />
+                    <CalendarIcon className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </div>
                 <div className="mt-2 flex justify-end">
-                  <Button type="button" variant="ghost" size="sm" onClick={clearDateFilter}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearDateFilter}
+                  >
                     Xóa lọc
                   </Button>
                 </div>
@@ -438,7 +501,9 @@ export default function StorageFiles() {
 
       {filteredAttachments.length === 0 ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          {searchKeyword.trim() || hasActiveFilter ? "Không tìm thấy file" : "Chưa có file nào"}
+          {searchKeyword.trim() || hasActiveFilter
+            ? "Không tìm thấy file"
+            : "Chưa có file nào"}
         </div>
       ) : (
         <div className="mt-2 px-3 pb-2">
@@ -446,12 +511,12 @@ export default function StorageFiles() {
             const extension = getFileExtension(file.url)
             const extensionColor = getExtensionColor(extension)
             const fileName = getOriginalFileNameFromUrl(file.url)
-            const isAudio = file.type === 'AUDIO'
-            
+            const isAudio = file.type === "AUDIO"
+
             return (
               <div
                 key={file.idAttachment}
-                className="group flex items-center gap-3 py-2 hover:bg-muted/50 rounded px-2 -mx-2"
+                className="group -mx-2 flex items-center gap-3 rounded px-2 py-2 hover:bg-muted/50"
               >
                 <div
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded p-2 text-[10px] font-bold text-white ${extensionColor}`}
@@ -459,17 +524,15 @@ export default function StorageFiles() {
                   {extension}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-foreground">
-                    {fileName}
-                  </p>
+                  <p className="truncate text-sm text-foreground">{fileName}</p>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span>{file.size || 'Unknown size'}</span>
+                    <span>{file.size || "Unknown size"}</span>
                   </div>
                   {isAudio && (
                     <audio
                       src={file.url}
                       controls
-                      className="mt-2 w-full h-8"
+                      className="mt-2 h-8 w-full"
                       preload="metadata"
                     />
                   )}
@@ -477,9 +540,9 @@ export default function StorageFiles() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => handleDownload(file.url, fileName)}
-                  title="Tải xuống"
+                  className="shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                  onClick={() => handleOpenInNewTab(file.url)}
+                  title="Mo tab moi"
                 >
                   <Download className="h-4 w-4" />
                 </Button>

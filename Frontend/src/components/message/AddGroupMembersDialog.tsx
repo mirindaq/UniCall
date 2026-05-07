@@ -180,7 +180,7 @@ export function AddGroupMembersDialog({
         try {
           const response = await userService.getProfileByIdentityUserId(peerId)
           const profile = response.data
-          const displayName = `${profile.firstName ?? ""} ${profile.lastName ?? ""}`.trim()
+          const displayName = `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim()
           return {
             id: peerId,
             displayName: displayName || peerId,
@@ -227,7 +227,7 @@ export function AddGroupMembersDialog({
     const mapped = items.reduce<MemberOption[]>((acc, friend) => {
         const peerIdentityUserId =
           (friend.idAccountSent === currentIdentityUserId ? friend.idAccountReceive : friend.idAccountSent)
-        const displayName = `${friend.firstName ?? ""} ${friend.lastName ?? ""}`.trim()
+        const displayName = `${friend.lastName ?? ""} ${friend.firstName ?? ""}`.trim()
         const resolvedProfile = recentProfileMap[peerIdentityUserId ?? ""]
         const resolvedName = resolvedProfile?.displayName || displayName
         if (!peerIdentityUserId || !resolvedName) {
@@ -290,11 +290,19 @@ export function AddGroupMembersDialog({
     }
     setIsSubmitting(true)
     try {
-      await chatService.addGroupMembers(conversationId, {
+      const response = await chatService.addGroupMembers(conversationId, {
         memberIdentityUserIds: ids,
       })
       await onMembersAdded()
-      toast.success("Thêm thành viên thành công.")
+      const addedCount = response.data.addedMemberCount ?? 0
+      const createdRequestCount = response.data.createdMemberRequestCount ?? 0
+      if (createdRequestCount > 0 && addedCount === 0) {
+        toast.success("Đã gửi yêu cầu thêm thành viên để trưởng/phó nhóm duyệt.")
+      } else if (createdRequestCount > 0) {
+        toast.success(`Đã thêm ${addedCount} thành viên và gửi ${createdRequestCount} yêu cầu duyệt.`)
+      } else {
+        toast.success("Thêm thành viên thành công.")
+      }
       onOpenChange(false)
     } catch {
       toast.error("Thêm thành viên thất bại, vui lòng thử lại.")
@@ -491,3 +499,4 @@ function toFallback(fullName: string) {
   }
   return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
 }
+

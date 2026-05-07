@@ -1,5 +1,9 @@
-export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX';
-export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI';
+export type MessageType = 'TEXT' | 'NONTEXT' | 'MIX' | 'CALL';
+export type AttachmentType = 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'GIF' | 'STICKER' | 'EMOJI' | 'LINK';
+export const UNICALL_AI_BOT_ID = 'unicall-ai-bot';
+export const UNICALL_IMAGE_BOT_ID = 'unicall-image-bot';
+export const UNICALL_SYSTEM_BOT_ID = 'unicall-system-bot';
+export const UNICALL_AI_BOT_IDS = [UNICALL_AI_BOT_ID, UNICALL_IMAGE_BOT_ID, UNICALL_SYSTEM_BOT_ID] as const;
 
 export type MessageEnum = 'SENT' | 'RECEIVED' | 'DELETED' | 'FAILED';
 
@@ -15,7 +19,26 @@ export interface ChatMessageResponse {
   replyToMessageId?: string;
   edited: boolean;
   recalled?: boolean;
+  reactions?: Record<string, string>;
+  reactionStacks?: Record<string, string[]>;
+  pinned?: boolean;
+  pinnedByAccountId?: string;
+  pinnedAt?: string;
+  mentionedUserIds?: string[];
   attachments?: ChatAttachment[];
+  callInfo?: ChatCallInfo;
+}
+
+export type CallOutcome = 'COMPLETED' | 'NO_ANSWER' | 'REJECTED' | 'CANCELED';
+
+export interface ChatCallInfo {
+  callId: string;
+  audioOnly: boolean;
+  callerUserId: string;
+  calleeUserId: string;
+  endedByUserId?: string;
+  durationSeconds?: number;
+  outcome: CallOutcome;
 }
 
 export interface ChatAttachment {
@@ -25,6 +48,17 @@ export interface ChatAttachment {
   size?: string;
   order?: number;
 }
+
+export type ForwardMessageRequest = {
+  targetConversationIds?: string[];
+  targetUserIds?: string[];
+  note?: string;
+};
+
+export type ForwardMessageResponse = {
+  forwardedConversationCount: number;
+  targetConversationIds: string[];
+};
 
 export type CallSignalType = 'OFFER' | 'ACCEPT' | 'REJECT' | 'END' | 'ICE_CANDIDATE';
 
@@ -42,13 +76,22 @@ export interface ConversationCallSignalResponse {
   sentAt?: string;
 }
 
-export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL';
+export type SfuAccessTokenResponse = {
+  callId: string;
+  roomName: string;
+  url: string;
+  token: string;
+  expiresAt: string;
+};
+
+export type UserRealtimeEventType = 'MESSAGE_UPSERT' | 'CALL_SIGNAL' | 'CONVERSATION_UPSERT';
 
 export interface UserRealtimeEvent {
   eventType: UserRealtimeEventType;
   conversationId: string;
   message?: ChatMessageResponse;
   callSignal?: ConversationCallSignalResponse;
+  conversation?: ConversationResponse;
 }
 
 export type ConversationType = 'DOUBLE' | 'GROUP';
@@ -61,6 +104,20 @@ export interface ChatParticipantInfo {
   dateJoin: string;
 }
 
+export type GroupManagementSettings = {
+  allowMemberSendMessage: boolean;
+  allowMemberPinMessage: boolean;
+  allowMemberChangeAvatar: boolean;
+  memberApprovalEnabled: boolean;
+};
+
+export type PendingMemberRequestInfo = {
+  idRequest: string;
+  requesterIdentityUserId: string;
+  targetIdentityUserId: string;
+  requestedAt: string;
+};
+
 export interface ConversationResponse {
   idConversation: string;
   type: ConversationType;
@@ -69,8 +126,22 @@ export interface ConversationResponse {
   dateCreate: string;
   dateUpdateMessage: string;
   lastMessageContent?: string;
+  lastMessageSenderId?: string;
+  unreadCount?: number;
+  pinned?: boolean;
   numberMember: number;
   participantInfos: ChatParticipantInfo[];
+  groupManagementSettings?: GroupManagementSettings;
+  pendingMemberRequestCount?: number;
+}
+
+export interface ConversationBlockStatusResponse {
+  conversationId: string;
+  directPeerId?: string;
+  blocked: boolean;
+  blockedByMe: boolean;
+  blockedByOther: boolean;
+  blockedAt?: string;
 }
 
 export type CreateGroupConversationRequest = {
@@ -97,7 +168,12 @@ export type ManageGroupParticipantsResponse = {
   idConversation: string;
   name: string;
   numberMember: number;
+  groupManagementSettings: GroupManagementSettings;
   participantInfos: GroupParticipantInfo[];
+  pendingMemberRequests?: PendingMemberRequestInfo[];
+  pendingMemberRequestCount?: number;
+  addedMemberCount?: number;
+  createdMemberRequestCount?: number;
 };
 
 export type AddGroupMembersRequest = {
@@ -108,8 +184,18 @@ export type UpdateGroupMemberRoleRequest = {
   role: GroupParticipantRole;
 };
 
+export type UpdateMemberNicknameRequest = {
+  nickname?: string;
+};
+
 export type TransferGroupAdminRequest = {
   targetIdentityUserId: string;
+};
+
+export type UpdateGroupManagementSettingsRequest = GroupManagementSettings;
+
+export type UpdateGroupAvatarRequest = {
+  avatar: string;
 };
 
 export type DissolveGroupConversationResponse = {

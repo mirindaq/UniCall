@@ -1,135 +1,159 @@
-import { useMemo, useState } from "react"
-import { ArrowUpDown, SlidersHorizontal } from "lucide-react"
+import { useMemo } from "react"
+import { MessageCircleMore, RefreshCcw, UsersRound } from "lucide-react"
+import { useNavigate } from "react-router"
+import { toast } from "sonner"
 
-import { communityList } from "@/mock/friendship.data"
 import {
-  AvatarStack,
   FriendshipEmptyState,
-  FriendshipFilterChips,
-  FriendshipIconSelect,
   FriendshipTabTitle,
-  InlineMoreButton,
-  type SelectOption,
+  SeedAvatar,
   ZeroDataState,
 } from "@/components/friend_ship"
+import { Button } from "@/components/ui/button"
+import { useQuery } from "@/hooks/useQuery"
+import { USER_PATH } from "@/constants/user"
+import { chatService } from "@/services/chat/chat.service"
+import type { ConversationResponse } from "@/types/chat"
 
-type CommunityFilter = "all" | "study" | "sports" | "technology" | "club"
-type CommunitySort = "recent" | "members" | "name"
+function formatGroupFallback(name?: string) {
+  const normalized = (name ?? "Nhóm").trim()
+  if (!normalized) {
+    return "NH"
+  }
 
-const communitySortOptions: SelectOption[] = [
-  { value: "recent", label: "Hoạt động (mới đến cũ)" },
-  { value: "members", label: "Thành viên nhiều nhất" },
-  { value: "name", label: "Tên (A-Z)" },
-]
+  const parts = normalized.split(/\s+/).filter(Boolean)
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase()
+  }
 
-const communityFilterOptions: SelectOption[] = [
-  { value: "all", label: "Tất cả" },
-  { value: "study", label: "Học tập" },
-  { value: "sports", label: "Thể thao" },
-  { value: "technology", label: "Công nghệ" },
-  { value: "club", label: "Câu lạc bộ" },
-]
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase()
+}
+
+function formatActivityLabel(conversation: ConversationResponse) {
+  if (!conversation.dateUpdateMessage) {
+    return "Chưa có hoạt động gần đây"
+  }
+
+  const updatedAt = new Date(conversation.dateUpdateMessage)
+  if (Number.isNaN(updatedAt.getTime())) {
+    return "Vừa cập nhật"
+  }
+
+  return `Cập nhật ${updatedAt.toLocaleString("vi-VN")}`
+}
 
 export function CommunitiesTab() {
-  const [sortBy, setSortBy] = useState<CommunitySort>("recent")
-  const [filterBy, setFilterBy] = useState<CommunityFilter>("all")
+  const navigate = useNavigate()
+  const {
+    data: conversationsResponse,
+    isLoading,
+    refetch,
+    isRefetching,
+  } = useQuery(() => chatService.listConversations(), {
+    onError: () => {
+      toast.error("Khong the tai danh sach nhom")
+    },
+  })
 
-  const filteredCommunities = useMemo(() => {
-    const result = communityList.filter(
-      (community) => filterBy === "all" || community.category === filterBy,
-    )
+  const groupConversations = useMemo(() => {
+    const items = conversationsResponse?.data ?? []
+    return items
+      .filter((conversation) => conversation.type === "GROUP")
+      .sort((left, right) => {
+        const leftTime = left.dateUpdateMessage ? new Date(left.dateUpdateMessage).getTime() : 0
+        const rightTime = right.dateUpdateMessage ? new Date(right.dateUpdateMessage).getTime() : 0
+        return rightTime - leftTime
+      })
+  }, [conversationsResponse?.data])
 
-    if (sortBy === "members") {
-      return [...result].sort((a, b) => b.members - a.members)
-    }
+  const openGroupConversation = (conversationId: string) => {
+    navigate(`${USER_PATH.ROOT}/${USER_PATH.CHAT}?conversationId=${encodeURIComponent(conversationId)}`)
+  }
 
-    if (sortBy === "name") {
-      return [...result].sort((a, b) => a.name.localeCompare(b.name, "vi"))
-    }
-
-    return [...result].sort((a, b) => a.activityOrder - b.activityOrder)
-  }, [filterBy, sortBy])
-
-  if (communityList.length === 0) {
+  if (!isLoading && groupConversations.length === 0) {
     return (
       <ZeroDataState
-        title="Chưa có nhóm và cộng đồng nào"
-        description="Khi bạn tham gia nhóm hoặc cộng đồng, danh sách sẽ hiển thị tại đây."
+        title="Chưa có nhóm nào"
+        description="Khi bạn tham gia nhóm chat, danh sách nhóm sẽ hiển thị tại đây."
       />
     )
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <FriendshipTabTitle title={`Nhóm và cộng đồng (${filteredCommunities.length})`} />
+      <FriendshipTabTitle title={`Danh sách nhóm (${groupConversations.length})`} />
 
       <div className="flex min-h-0 flex-1 p-4">
         <div className="flex h-full min-h-0 w-full flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <div className="grid gap-3 lg:grid-cols-[320px_320px]">
-            <FriendshipIconSelect
-              icon={ArrowUpDown}
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as CommunitySort)}
-              placeholder="Hoạt động (mới đến cũ)"
-              options={communitySortOptions}
-            />
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Nhóm của bạn</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Chọn một nhóm để mở thẳng cuộc trò chuyện tương ứng.
+              </p>
+            </div>
 
-            <FriendshipIconSelect
-              icon={SlidersHorizontal}
-              value={filterBy}
-              onValueChange={(value) => setFilterBy(value as CommunityFilter)}
-              placeholder="Tất cả"
-              options={communityFilterOptions}
-            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refetch()}
+              disabled={isLoading || isRefetching}
+            >
+              <RefreshCcw className={`mr-2 size-4 ${isRefetching ? "animate-spin" : ""}`} />
+              {isLoading || isRefetching ? "Dang tai..." : "Lam moi"}
+            </Button>
           </div>
 
-          <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
-            <FriendshipFilterChips
-              title="Sắp xếp:"
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as CommunitySort)}
-              options={communitySortOptions}
-              activeClassName="bg-blue-600 text-white"
-            />
-            <FriendshipFilterChips
-              title="Lọc:"
-              value={filterBy}
-              onValueChange={(value) => setFilterBy(value as CommunityFilter)}
-              options={communityFilterOptions}
-              activeClassName="bg-slate-900 text-white"
-            />
-          </div>
-
-          {filteredCommunities.length === 0 ? (
+          {isLoading ? (
+            <div className="mt-4 space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-20 animate-pulse rounded-xl bg-slate-100"
+                />
+              ))}
+            </div>
+          ) : groupConversations.length === 0 ? (
             <FriendshipEmptyState
-              title="Không tìm thấy nhóm hoặc cộng đồng"
-              description="Hãy thử thay đổi bộ lọc hoặc tìm kiếm bằng từ khóa khác."
+              title="Không có nhóm nào để hiển thị"
+              description="Bạn chưa tham gia nhóm chat nào hoặc danh sách nhóm đang trống."
             />
           ) : (
             <div className="mt-4 flex-1 min-h-0 space-y-2 overflow-auto pr-1">
-              {filteredCommunities.map((community) => (
-                <div
-                  key={community.id}
-                  className="flex items-center justify-between rounded-xl px-2 py-2.5 transition hover:bg-slate-50"
+              {groupConversations.map((conversation) => (
+                <button
+                  key={conversation.idConversation}
+                  type="button"
+                  onClick={() => openGroupConversation(conversation.idConversation)}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
                 >
                   <div className="flex min-w-0 items-center gap-4">
-                    <AvatarStack
-                      avatars={community.avatars}
-                      extraMembers={community.extraMembers}
+                    <SeedAvatar
+                      fallback={formatGroupFallback(conversation.name)}
+                      tone="bg-sky-100 text-sky-700"
+                      className="size-12"
                     />
+
                     <div className="min-w-0">
                       <p className="truncate text-base font-semibold tracking-tight text-slate-900">
-                        {community.name}
+                        {conversation.name?.trim() || "Nhóm không tên"}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {community.members} thành viên
-                        <span className="mx-2 text-slate-300">•</span>
-                        {community.activityLabel}
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1">
+                          <UsersRound className="size-3.5" />
+                          {conversation.numberMember} thành viên
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="truncate">{formatActivityLabel(conversation)}</span>
                       </p>
                     </div>
                   </div>
-                  <InlineMoreButton />
-                </div>
+
+                  <div className="ml-4 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    <MessageCircleMore className="size-3.5" />
+                    Mở chat
+                  </div>
+                </button>
               ))}
             </div>
           )}

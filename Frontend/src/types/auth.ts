@@ -6,11 +6,13 @@ export interface RegisterRequest {
   gender: "MALE" | "FEMALE" | "OTHER"
   dateOfBirth: string
   password: string
+  firebaseIdToken: string
 }
 
 export interface LoginRequest {
   phoneNumber: string
   password: string
+  firebaseIdToken: string
 }
 
 export interface ResendVerificationEmailRequest {
@@ -21,6 +23,12 @@ export interface ResendVerificationEmailRequest {
 export interface ForgotPasswordRequest {
   phoneNumber: string
   email: string
+}
+
+export interface ResetPasswordWithOtpRequest {
+  phoneNumber: string
+  firebaseIdToken: string
+  newPassword: string
 }
 
 export interface ChangePasswordRequest {
