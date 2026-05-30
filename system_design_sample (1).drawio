@@ -1,0 +1,306 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="29.6.4">
+  <diagram id="5AhaWh3AuZvlseeU0SGa" name="System Design">
+    <mxGraphModel dx="983" dy="506" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cicd" parent="1" style="swimlane;dashed=1;fillColor=#f9f9f9;" value="DevOps Workflow" vertex="1">
+          <mxGeometry height="600" width="140" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="dev" parent="cicd" style="shape=mxgraph.aws4.general_user;fillColor=#D2D3D3" value="Developer" vertex="1">
+          <mxGeometry height="40" width="65" x="37.5" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="git" parent="cicd" style="shape=mxgraph.aws4.codecommit;fillColor=#7531B3" value="&#xa;&#xa;&#xa;&#xa;&#xa;&#xa;Git Repo" vertex="1">
+          <mxGeometry height="60" width="60" x="40" y="149" as="geometry" />
+        </mxCell>
+        <mxCell id="pipeline" parent="cicd" style="shape=mxgraph.aws4.codebuild;fillColor=#7531B3" value="&#xa;&#xa;&#xa;&#xa;&#xa;&#xa;Build/Test" vertex="1">
+          <mxGeometry height="60" width="70" x="35" y="329" as="geometry" />
+        </mxCell>
+        <mxCell id="registry" parent="cicd" style="shape=mxgraph.aws4.ecr;fillColor=#317AD0" value="&#xa;&#xa;&#xa;&#xa;&#xa;ECR Registry" vertex="1">
+          <mxGeometry height="60" width="60" x="40" y="487.5" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" edge="1" parent="cicd" source="dev" target="git" value="git push">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" edge="1" parent="cicd" source="git" target="pipeline" value="trigger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" edge="1" parent="cicd" source="pipeline" target="registry" value="push image">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="internet" parent="1" style="rounded=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;" value="External Network" vertex="1">
+          <mxGeometry height="180" width="680" x="280" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="6X63wUTvmUTPiLmkwJ4N-1" edge="1" parent="internet" source="dns" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0.963;exitY=0.486;exitDx=0;exitDy=0;exitPerimeter=0;" target="Jzn0Ljn8yJgbOARLegNS-1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="6X63wUTvmUTPiLmkwJ4N-2" connectable="0" parent="6X63wUTvmUTPiLmkwJ4N-1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Resolve Domain" vertex="1">
+          <mxGeometry relative="1" x="0.0116" y="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dns" parent="internet" style="shape=mxgraph.aws4.route_53;fillColor=#D05C17;verticalAlign=top;" value="&#xa;&#xa;&#xa;&#xa;&#xa;Route53" vertex="1">
+          <mxGeometry height="57.857142857142854" width="49.52380952380952" x="35.333333333333314" y="39.73783703847366" as="geometry" />
+        </mxCell>
+        <mxCell id="6X63wUTvmUTPiLmkwJ4N-4" edge="1" parent="internet" source="Jzn0Ljn8yJgbOARLegNS-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="gF_ZsQMFE3pl2rFTnFHL-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Jzn0Ljn8yJgbOARLegNS-1" parent="internet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;" value="CDN (CloudFront)" vertex="1">
+          <mxGeometry height="25.71" width="120" x="220" y="55.81" as="geometry" />
+        </mxCell>
+        <mxCell id="gF_ZsQMFE3pl2rFTnFHL-1" parent="internet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;" value="Rate Limiter" vertex="1">
+          <mxGeometry height="25.71" width="77.14" x="380" y="55.82" as="geometry" />
+        </mxCell>
+        <mxCell id="stripe_gateway" parent="internet" style="rounded=1;fillColor=#635BFF;fontColor=#ffffff" value="Stripe Payment API" vertex="1">
+          <mxGeometry height="31.34" width="118.1" x="221.9" y="129.33" as="geometry" />
+        </mxCell>
+        <mxCell id="aws" parent="1" style="swimlane;fillColor=#ffffff;strokeColor=#232F3E;fontStyle=1;verticalAlign=top;" value="AWS Cloud Infrastructure" vertex="1">
+          <mxGeometry height="990" width="1210" x="1000" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="vpc" parent="aws" style="swimlane;fillColor=#f5f5f5;" value="VPC (Tier Architecture)" vertex="1">
+          <mxGeometry height="920" width="1140" x="30" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="public" parent="vpc" style="swimlane;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Tier 1: Public Subnet (Gateway)" vertex="1">
+          <mxGeometry height="140" width="660" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="apigw" parent="public" style="shape=mxgraph.aws4.api_gateway;fillColor=#D05C17" value="&#xa;&#xa;&#xa;&#xa;&#xa;&#xa;API Gateway &#xa;(Check JWT + API rate limit)" vertex="1">
+          <mxGeometry height="70" width="60" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="alb" parent="public" style="shape=mxgraph.aws4.elastic_load_balancing;fillColor=#F58534" value="&#xa;&#xa;&#xa;&#xa;Application Load Balancer (ALB)" vertex="1">
+          <mxGeometry height="70" width="60" x="330" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="l7" edge="1" parent="public" source="apigw" target="alb" value="Forward Request">
+          <mxGeometry relative="1" x="0.0065" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="private_app" parent="vpc" style="swimlane;fillColor=#d5e8d4;strokeColor=#82b366;" value="Tier 2: Private App Subnet (Internal Only)" vertex="1">
+          <mxGeometry height="430" width="660" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="cluster" parent="private_app" style="shape=mxgraph.aws4.eks;fillColor=#E7157B" value="&#xa;&#xa;&#xa;&#xa;&#xa;&#xa;EKS Cluster" vertex="1">
+          <mxGeometry height="70" width="70" x="325" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="SEcids-3a8bnBd4xAD3i-1" parent="private_app" style="swimlane;dashed=1;fillColor=#eeeeee;" value="EC2 Worker Node A" vertex="1">
+          <mxGeometry height="100" width="360" x="10" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="auth" parent="SEcids-3a8bnBd4xAD3i-1" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1" value="Auth Service" vertex="1">
+          <mxGeometry height="41" width="120" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="order" parent="SEcids-3a8bnBd4xAD3i-1" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1" value="Order Service" vertex="1">
+          <mxGeometry height="41" width="120" x="200" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="l9" edge="1" parent="private_app" source="cluster" target="auth" value="REST/gRPC">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l10" edge="1" parent="private_app" source="cluster" style="exitX=0.423;exitY=1.014;exitDx=0;exitDy=0;exitPerimeter=0;" target="order" value="REST/gRPC">
+          <mxGeometry relative="1" x="0.001" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="private_data" parent="vpc" style="swimlane;fillColor=#fff2cc;strokeColor=#d6b656;" value="Tier 3: Data Subnet" vertex="1">
+          <mxGeometry height="160" width="660" x="20" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="db" parent="private_data" style="shape=mxgraph.aws4.rds;fillColor=#2E73B8" value="&#xa;&#xa;&#xa;&#xa;&#xa;&#xa;RDS MySQL" vertex="1">
+          <mxGeometry height="70" width="60" x="240" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cache" parent="private_data" style="shape=mxgraph.aws4.elasticache;fillColor=#C02A2B" value="&#xa;&#xa;&#xa;&#xa;&#xa;Redis" vertex="1">
+          <mxGeometry height="70" width="60" x="80" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kafka_cluster" parent="private_data" style="rounded=1;fillColor=#ff9900;fontColor=#ffffff;fontStyle=1" value="Kafka" vertex="1">
+          <mxGeometry height="50" width="120" x="360" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="l8" edge="1" parent="vpc" source="alb" target="cluster" value="Traffic">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l12" edge="1" parent="vpc" source="order" style="strokeColor=#2E73B8;strokeWidth=2;" target="db" value="SQL Query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l13" edge="1" parent="vpc" source="auth" target="cache" value="Session (Refresh token)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vjPwmzPGfjKJd59nLCIa-1" parent="vpc" style="swimlane;fillColor=#f8cecc;strokeColor=#b85450;" value="Tier 4: Observability" vertex="1">
+          <mxGeometry height="600" width="360" x="740" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="vjPwmzPGfjKJd59nLCIa-2" parent="vjPwmzPGfjKJd59nLCIa-1" style="rounded=1;fillColor=#f8cecc;" value="CloudWatch Logs" vertex="1">
+          <mxGeometry height="40" width="120" x="40" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="vjPwmzPGfjKJd59nLCIa-3" parent="vjPwmzPGfjKJd59nLCIa-1" style="rounded=1;fillColor=#dae8fc;" value="S3 Log Storage" vertex="1">
+          <mxGeometry height="40" width="120" x="200" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="vjPwmzPGfjKJd59nLCIa-4" edge="1" parent="vjPwmzPGfjKJd59nLCIa-1" source="vjPwmzPGfjKJd59nLCIa-2" target="vjPwmzPGfjKJd59nLCIa-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ole6oFYBvDkWYzdq0PSl-2" parent="vjPwmzPGfjKJd59nLCIa-1" style="rounded=1;fillColor=#fff2cc;" value="Prometheus" vertex="1">
+          <mxGeometry height="40" width="100" x="40" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ole6oFYBvDkWYzdq0PSl-3" parent="vjPwmzPGfjKJd59nLCIa-1" style="rounded=1;fillColor=#ffe6cc;" value="Grafana Dashboard" vertex="1">
+          <mxGeometry height="40" width="120" x="190" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ole6oFYBvDkWYzdq0PSl-4" edge="1" parent="vjPwmzPGfjKJd59nLCIa-1" source="ole6oFYBvDkWYzdq0PSl-2" target="ole6oFYBvDkWYzdq0PSl-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" edge="1" parent="vpc" source="cluster" style="strokeColor=#C02A2B;dashed=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;strokeWidth=2;" target="vjPwmzPGfjKJd59nLCIa-2" value="Log">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="840" y="285" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rCcU2ionpRRDa5DWnBMt-1" edge="1" parent="vpc" source="db" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#C02A2B;dashed=1;" target="vjPwmzPGfjKJd59nLCIa-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="760" />
+              <mxPoint x="840" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m1" edge="1" parent="vpc" source="apigw" style="strokeColor=#C02A2B;dashed=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;" target="ole6oFYBvDkWYzdq0PSl-2" value="Metrics">
+          <mxGeometry relative="1" x="-0.0007" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="100" y="75" />
+              <mxPoint x="830" y="75" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rCcU2ionpRRDa5DWnBMt-2" edge="1" parent="vpc" source="order" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#C02A2B;strokeWidth=2;dashed=1;" target="vjPwmzPGfjKJd59nLCIa-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="510" />
+              <mxPoint x="840" y="510" />
+            </Array>
+            <mxPoint x="800" y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="_JkWUhwPoP3IOdHR-yGs-5" connectable="0" parent="rCcU2ionpRRDa5DWnBMt-2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Log" vertex="1">
+          <mxGeometry relative="1" x="-0.0449" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rCcU2ionpRRDa5DWnBMt-3" edge="1" parent="vpc" source="payment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;strokeWidth=2;strokeColor=#C02A2B;" target="vjPwmzPGfjKJd59nLCIa-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="840" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="_JkWUhwPoP3IOdHR-yGs-6" connectable="0" parent="rCcU2ionpRRDa5DWnBMt-3" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Log" vertex="1">
+          <mxGeometry relative="1" x="-0.2021" y="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l11" edge="1" parent="vpc" source="cluster" style="exitX=1.039;exitY=0.775;exitDx=0;exitDy=0;exitPerimeter=0;" target="payment" value="REST/gRPC">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="320" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="XIWg8SBJbxi9EmMmp2PG-2" parent="vpc" style="swimlane;dashed=1;fillColor=#eeeeee;" value="EC2 Worker Node B" vertex="1">
+          <mxGeometry height="100" width="200" x="430" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="payment" parent="XIWg8SBJbxi9EmMmp2PG-2" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1" value="Payment Service" vertex="1">
+          <mxGeometry height="40" width="120" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="_JkWUhwPoP3IOdHR-yGs-7" edge="1" parent="vpc" source="auth" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#C02A2B;strokeWidth=2;dashed=1;" target="vjPwmzPGfjKJd59nLCIa-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="540" />
+            </Array>
+            <mxPoint x="470" y="530" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="_JkWUhwPoP3IOdHR-yGs-8" connectable="0" parent="_JkWUhwPoP3IOdHR-yGs-7" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Log" vertex="1">
+          <mxGeometry relative="1" x="0.1388" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line_kafka_payment" edge="1" parent="vpc" source="kafka_cluster" style="strokeWidth=2;strokeColor=#FF8000;" target="payment" value="Consume Event">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line_order_kafka" edge="1" parent="vpc" source="order" style="strokeColor=#FF8000;strokeWidth=2;" target="kafka_cluster" value="Publish Event">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xH1jbdljeQmIwwKvJtdd-2" edge="1" parent="1" source="pipeline" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.067;entryY=0.522;entryDx=0;entryDy=0;entryPerimeter=0;strokeColor=#4C0099;strokeWidth=2;exitX=0.977;exitY=0.486;exitDx=0;exitDy=0;exitPerimeter=0;" target="cluster">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="397" />
+              <mxPoint x="142" y="397" />
+            </Array>
+            <mxPoint x="142" y="327" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="-mzgp-iEstqhst8azCRL-1" connectable="0" parent="xH1jbdljeQmIwwKvJtdd-2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Apply Manifest (yaml)/Deploy&lt;div&gt;(kuberctl apply YAML)&lt;/div&gt;&lt;div&gt;-&amp;gt; EKS API Server (Control Plane)&lt;/div&gt;" vertex="1">
+          <mxGeometry relative="1" x="-0.1046" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FyasZRxjjKqJqhRTOnko-1" edge="1" parent="1" source="registry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#0000FF;strokeWidth=2;" target="auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="XIWg8SBJbxi9EmMmp2PG-1" connectable="0" parent="FyasZRxjjKqJqhRTOnko-1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Pull image" vertex="1">
+          <mxGeometry relative="1" x="-0.0075" y="2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="MxDy66KwWp0XlzJm6-Cw-1" edge="1" parent="1" source="gF_ZsQMFE3pl2rFTnFHL-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.025;entryY=0.415;entryDx=0;entryDy=0;entryPerimeter=0;" target="apigw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="150" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line_payment_stripe" edge="1" parent="1" source="payment" style="strokeColor=#635BFF;strokeWidth=2;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="stripe_gateway" value="Create Payment Intent">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="720" y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line_stripe_webhook" edge="1" parent="1" source="stripe_gateway" style="entryX=0.006;entryY=0.567;entryDx=0;entryDy=0;entryPerimeter=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;strokeColor=#635BFF;strokeWidth=2;" target="apigw" value="Webhook Callback">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="720" y="230" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4zruMlHUtB4qcEl_Etqq-2" parent="1" style="text;html=1;strokeColor=#82b366;fillColor=#d5e8d4;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=1;padding=10;fontSize=11;" value="&lt;b&gt;QUY TRÌNH CHECK AUTH (XÁC THỰC):&lt;/b&gt;&lt;br&gt;1. User gửi request kèm &lt;b&gt;JWT Token&lt;/b&gt; trong Header.&lt;br&gt;2. API Gateway chặn lại, gọi API &lt;i&gt;GET /validate&lt;/i&gt; sang &lt;b&gt;Auth Service&lt;/b&gt;.&lt;br&gt;3. Auth Service kiểm tra Token trong &lt;b&gt;Redis&lt;/b&gt; (còn hạn không? đã logout chưa?).&lt;br&gt;4. Nếu OK, Gateway đính thêm&amp;nbsp;&lt;span style=&quot;font-size: 8pt; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237)); background-color: transparent;&quot;&gt;&amp;nbsp;X-User-ID, X-User-Role&lt;/span&gt;&amp;nbsp;vào Header và cho phép đi tiếp vào EKS." vertex="1">
+          <mxGeometry height="80" width="520" x="40" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="jrxKDeu34Ku4zPwbpvSs-1" parent="1" style="shape=actor;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="36" width="30" x="325" y="4" as="geometry" />
+        </mxCell>
+        <mxCell id="jrxKDeu34Ku4zPwbpvSs-3" edge="1" parent="1" source="jrxKDeu34Ku4zPwbpvSs-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340" y="120" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="jrxKDeu34Ku4zPwbpvSs-4" connectable="0" parent="jrxKDeu34Ku4zPwbpvSs-3" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="DNS Query" vertex="1">
+          <mxGeometry relative="1" x="-0.2042" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="jrxKDeu34Ku4zPwbpvSs-5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="Client" vertex="1">
+          <mxGeometry height="30" width="50" x="275" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="NaVJF0oHeJBTjOtBW-QP-1" parent="1" style="text;html=1;strokeColor=#82b366;fillColor=#d5e8d4;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=1;padding=10;fontSize=11;spacing=2;spacingBottom=8;spacingLeft=6;" value="&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;&lt;b&gt;QUY TRÌNH CHECK AUTH (XÁC THỰC – KHÔNG QUA AUTH SERVICE):&lt;/b&gt;&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;1. User gửi request kèm &lt;b&gt;JWT Token&lt;/b&gt; trong &lt;b&gt;Header&lt;/b&gt;.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;2. API Gateway chặn request và trích xuất token từ header Authorization: Bearer &amp;lt;JWT&amp;gt;.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;&lt;span style=&quot;background: transparent;&quot;&gt;3. &lt;/span&gt;Gateway tự verify JWT signature bằng Public Key / Secret Key để đảm bảo token được ký bởi hệ thống.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;4. Gateway kiểm tra exp (expiration) trong payload để xác nhận token còn hiệu lực.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;5. Nếu token hợp lệ, Gateway trích xuất thông tin người dùng (ví dụ: user_id, role).&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;6. Gateway đính thêm thông tin vào header request (ví dụ: X-User-ID, X-User-Role).&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;7. Gateway forward request đến ALB → EKS Cluster để các service xử lý.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1.15px; margin-bottom: 0.15cm; background: transparent; font-size: medium; font-variant-numeric: normal; font-variant-east-asian: normal; font-variant-alternates: normal; font-variant-position: normal; font-variant-emoji: normal;&quot;&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;font style=&quot;font-size: 8pt;&quot;&gt;8. Nếu token không hợp lệ hoặc hết hạn → Gateway trả về 401 Unauthorized.&lt;/font&gt;&lt;/font&gt;&lt;/font&gt;&lt;/p&gt;" vertex="1">
+          <mxGeometry height="190" width="520" x="40" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="wGo9E-O1Luv6ZqZxfxSb-1" parent="1" style="text;html=1;strokeColor=#d80027;fillColor=#f8cecc;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=1;padding=10;fontSize=11;spacingLeft=6;spacingRight=3;" value="&lt;b&gt;AMAZON EKS (KUBERNETES):&lt;/b&gt;&lt;br&gt;1. &lt;b&gt;Control Plane:&lt;/b&gt; AWS quản lý API Server, Scheduler để điều phối hệ thống.&lt;br&gt;2. &lt;b&gt;Worker Nodes:&lt;/b&gt; Các máy chủ ảo (EC2) chạy các Service dạng &lt;b&gt;Pods&lt;/b&gt;.&lt;br&gt;3. &lt;b&gt;Auto-Scaling:&lt;/b&gt; Tự động tăng số lượng Pod khi CPU cao và tự phục hồi (Self-healing) khi Service bị lỗi." vertex="1">
+          <mxGeometry height="110" width="310" x="2230" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="CggfvcGbD-rbv6qczdP1-1" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#000000;darkOpacity=0.05;fillColor=#FFF9B2;strokeColor=none;fillStyle=solid;direction=west;gradientDirection=north;gradientColor=#FFF2A1;shadow=1;size=20;pointerEvents=1;verticalAlign=top;" value="&lt;b style=&quot;text-align: left;&quot;&gt;CI/CD Flow:&amp;nbsp;&lt;/b&gt;&lt;span style=&quot;text-align: left;&quot;&gt;mọi thay đổi source code đều được tự động Build thành Docker Image và Deploy lên EKS Cluster&lt;/span&gt;" vertex="1">
+          <mxGeometry height="40" width="320" x="150" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="CggfvcGbD-rbv6qczdP1-2" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#000000;darkOpacity=0.05;fillColor=#FFF9B2;strokeColor=none;fillStyle=solid;direction=west;gradientDirection=north;gradientColor=#FFF2A1;shadow=1;size=20;pointerEvents=1;verticalAlign=top;align=left;spacingLeft=6;" value="&lt;b style=&quot;font-size: 11px;&quot;&gt;Route53 (DNS Service):&lt;/b&gt;&lt;div&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;- Đóng vai trò phân giải tên miền (ví dụ: myapp.com) thành địa chỉ IP của hệ thống.&amp;nbsp;&lt;/span&gt;&lt;div style=&quot;font-size: 11px;&quot;&gt;- Health Check để điều hướng user đến server đang hoạt động tốt nhất.&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;Rate Limiter:&lt;/b&gt;&amp;nbsp;cấu hình ở server&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="120" width="320" x="680" y="15.809999999999988" as="geometry" />
+        </mxCell>
+        <mxCell id="CggfvcGbD-rbv6qczdP1-3" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#000000;darkOpacity=0.05;fillColor=#FFF9B2;strokeColor=none;fillStyle=solid;direction=west;gradientDirection=north;gradientColor=#FFF2A1;shadow=1;size=20;pointerEvents=1;" value="&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;&lt;b&gt;Auth Service:&lt;/b&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;1. verify signature&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;2. check expiration&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;3. check Redis blacklist&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;4. check logout&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;b&gt;Ưu điểm:&lt;/b&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;1. Có thể revoke token ngay lập tức (check ở Redis).&amp;nbsp;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Nếu logout thì request sau sẽ bị&amp;nbsp;&lt;b&gt;reject&lt;/b&gt;&amp;nbsp;ngay&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;2.&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Dễ maintain hơn do code tập trung&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;3.&amp;nbsp;&lt;/span&gt;&lt;span data-start=&quot;522&quot; data-end=&quot;553&quot; style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Dễ mở rộng các rule&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;&amp;nbsp; &amp;nbsp; Có thể kiểm tra thêm: device login, IP, block user,...&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&lt;b&gt;Nhược điểm:&lt;/b&gt;&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;1. Tăng latency&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;2.&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Auth Service thành bottleneck&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&amp;nbsp; &amp;nbsp;&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Nếu traffic lớn, Auth Service phải xử lý rất nhiều request validate.&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.15cm;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;3.&amp;nbsp;&lt;/span&gt;&lt;span data-start=&quot;868&quot; data-end=&quot;895&quot; style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Single point of failure&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;line-height: 1px; margin-bottom: 0.15cm; background: transparent;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;&amp;nbsp; &amp;nbsp; Nếu Auth Service down thì toàn bộ request API có thể bị fail.&lt;/span&gt;&lt;/p&gt;&lt;div style=&quot;font-size: 11px; text-align: left;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;4.&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Tăng network traffic: 1 request của user + 1 request validate&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="270" width="391" x="540" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="CggfvcGbD-rbv6qczdP1-4" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#000000;darkOpacity=0.05;fillColor=#FFF9B2;strokeColor=none;fillStyle=solid;direction=west;gradientDirection=north;gradientColor=#FFF2A1;shadow=1;size=20;pointerEvents=1;" value="&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&lt;b&gt;Ưu điểm:&lt;/b&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;1. Giảm latency đáng kể&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp;Không cần gọi API /validate → Gateway verify JWT trực tiếp → response nhanh hơn.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;2. Không tạo bottleneck ở Auth Service&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp;Auth Service không phải xử lý hàng nghìn request validate mỗi giây.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;3. Giảm network traffic&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Chỉ có 1 request từ client → gateway, không phát sinh thêm request validate nội bộ.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;4. Scalable tốt hơn&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp;Vì JWT là stateless, Gateway chỉ cần public key/secret để verify → dễ scale ngang&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;5. Hệ thống vẫn hoạt động nếu Auth Service down&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Các API khác vẫn chạy bình thường miễn là JWT còn hạn.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&lt;b&gt;Nhược điểm:&lt;/b&gt;&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;1. Không revoke token ngay lập tức&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Nếu user logout hoặc token bị lộ thì JWT vẫn hợp lệ cho tới khi exp hết hạn.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;2. Không kiểm tra được trạng thái session&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Gateway chỉ kiểm tra signature và exp, không biết user đã logout hay bị block hay chưa.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;3. Khó áp dụng các rule auth phức tạp&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;&amp;nbsp; &amp;nbsp; Ví dụ: giới hạn số thiết bị login, block theo IP … vì Gateway không query Redis/ DB.&lt;/p&gt;&lt;p align=&quot;left&quot; style=&quot;font-size: 11px; background: transparent; line-height: 1px; margin-bottom: 0.2cm;&quot;&gt;4. Cần quản lý key ký JWT cẩn thận&lt;/p&gt;" vertex="1">
+          <mxGeometry height="270" width="490" x="460" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="9Ks9FYwOGJzeDRIUs4cS-1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;fontSize=15;" value="Fig 4. System Design" vertex="1">
+          <mxGeometry height="30" width="400" x="1199" y="1137" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

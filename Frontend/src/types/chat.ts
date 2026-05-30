@@ -29,6 +29,49 @@ export interface ChatMessageResponse {
   callInfo?: ChatCallInfo
 }
 
+export interface SemanticSearchMessageResponse {
+  score: number
+  message: ChatMessageResponse
+}
+
+export type AiThreadRole = "USER" | "ASSISTANT"
+export type AiThreadScope = "CURRENT_CONVERSATION" | "SELECTED_CONVERSATIONS" | "MY_ALL_CONVERSATIONS"
+
+export interface AiAssistantCitationResponse {
+  messageId: string
+  conversationId: string
+  senderIdentityUserId: string
+  timeSent?: string
+  snippet: string
+  score: number
+}
+
+export interface AiAssistantTurnResponse {
+  idTurn: string
+  role: AiThreadRole
+  content: string
+  createdAt: string
+  citations: AiAssistantCitationResponse[]
+}
+
+export interface AiAssistantThreadSummaryResponse {
+  idThread: string
+  title: string
+  defaultConversationId?: string
+  createdAt: string
+  updatedAt: string
+  lastAssistantMessage?: string
+}
+
+export interface AiAssistantThreadDetailResponse {
+  idThread: string
+  title: string
+  defaultConversationId?: string
+  createdAt: string
+  updatedAt: string
+  turns: AiAssistantTurnResponse[]
+}
+
 export type CallSignalType = "OFFER" | "ACCEPT" | "ICE_CANDIDATE" | "REJECT" | "END"
 export type CallOutcome = "COMPLETED" | "NO_ANSWER" | "REJECTED" | "CANCELED"
 

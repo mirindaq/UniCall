@@ -9,6 +9,7 @@ import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
+import iuh.fit.chat_service.dtos.response.SemanticSearchMessageResponse;
 import iuh.fit.chat_service.entities.Attachment;
 import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.GroupManagementSettings;
@@ -25,6 +26,7 @@ import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.chat_service.services.AiAssistantService;
 import iuh.fit.chat_service.services.ConversationBlockService;
+import iuh.fit.chat_service.services.MessageVectorSearchService;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
@@ -47,6 +49,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +93,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final ConversationRepository conversationRepository;
     private final ChatConversationService chatConversationService;
     private final AiAssistantService aiAssistantService;
+    private final MessageVectorSearchService messageVectorSearchService;
     @Qualifier("aiAssistantExecutor")
     private final Executor aiAssistantExecutor;
     private final ConversationBlockService conversationBlockService;
@@ -144,6 +148,83 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 PageRequest.of(page - 1, limit, Sort.by(Sort.Direction.DESC, "timeSent"))
         );
         return PageResponse.fromPage(result, MessageResponse::from);
+    }
+
+    @Override
+    public List<SemanticSearchMessageResponse> semanticSearchMessages(
+            String identityUserId,
+            String conversationId,
+            String query,
+            int limit
+    ) {
+        chatConversationService.requireParticipant(conversationId, identityUserId);
+        if (!StringUtils.hasText(query)) {
+            throw new InvalidParamException("query không được để trống");
+        }
+
+        int normalizedLimit = Math.max(1, limit);
+        normalizedLimit = Math.min(normalizedLimit, 50);
+        String normalizedQuery = query.trim();
+
+        List<MessageVectorSearchService.ScoredPoint> scoredPoints = messageVectorSearchService.search(
+                conversationId,
+                normalizedQuery,
+                Math.min(200, normalizedLimit * 3)
+        );
+
+        if (scoredPoints.isEmpty()) {
+            String regexKeyword = Pattern.quote(normalizedQuery);
+            Page<Message> fallback = messageRepository.searchVisibleForParticipant(
+                    conversationId,
+                    identityUserId,
+                    regexKeyword,
+                    PageRequest.of(0, normalizedLimit, Sort.by(Sort.Direction.DESC, "timeSent"))
+            );
+            return fallback.getContent().stream()
+                    .map(message -> SemanticSearchMessageResponse.builder()
+                            .score(0d)
+                            .message(MessageResponse.from(message))
+                            .build())
+                    .toList();
+        }
+
+        List<String> orderedIds = scoredPoints.stream()
+                .map(MessageVectorSearchService.ScoredPoint::messageId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (orderedIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Message> visibleById = messageRepository
+                .findVisibleByIdsForParticipant(orderedIds, conversationId, identityUserId)
+                .stream()
+                .collect(Collectors.toMap(
+                        Message::getIdMessage,
+                        message -> message,
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+        if (visibleById.isEmpty()) {
+            return List.of();
+        }
+
+        List<SemanticSearchMessageResponse> responses = new ArrayList<>();
+        for (MessageVectorSearchService.ScoredPoint point : scoredPoints) {
+            if (responses.size() >= normalizedLimit) {
+                break;
+            }
+            Message matched = visibleById.get(point.messageId());
+            if (matched == null) {
+                continue;
+            }
+            responses.add(SemanticSearchMessageResponse.builder()
+                    .score(point.score())
+                    .message(MessageResponse.from(matched))
+                    .build());
+        }
+        return responses;
     }
 
     @Override

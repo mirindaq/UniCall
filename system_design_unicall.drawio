@@ -1,0 +1,466 @@
+<mxfile host="app.diagrams.net" agent="VS Code" version="29.6.4">
+  <diagram id="UniCallSystemDesign" name="UniCall System Design">
+    <mxGraphModel dx="2200" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== EXTERNAL NETWORK ==================== -->
+        <mxCell id="internet" parent="1" style="rounded=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontSize=13;fontStyle=1;" value="External Network" vertex="1">
+          <mxGeometry x="40" y="40" width="700" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Client -->
+        <mxCell id="client_mobile" parent="internet" style="shape=mxgraph.aws4.mobile_client;fillColor=#232F3E;strokeColor=none;" value="&#xa;&#xa;&#xa;&#xa;Mobile App&#xa;(React Native)" vertex="1">
+          <mxGeometry x="30" y="50" width="50" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client_web" parent="internet" style="shape=mxgraph.aws4.client;fillColor=#232F3E;strokeColor=none;" value="&#xa;&#xa;&#xa;&#xa;Web App&#xa;(React + Vite)" vertex="1">
+          <mxGeometry x="30" y="130" width="50" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- External Services -->
+        <mxCell id="keycloak" parent="internet" style="rounded=1;fillColor=#4DB33D;fontColor=#ffffff;fontStyle=1;" value="Keycloak&#xa;(OAuth2/JWT)" vertex="1">
+          <mxGeometry x="420" y="40" width="120" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="firebase" parent="internet" style="rounded=1;fillColor=#FFCA28;fontColor=#000000;fontStyle=1;" value="Firebase&#xa;(OTP)" vertex="1">
+          <mxGeometry x="560" y="40" width="100" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="livekit" parent="internet" style="rounded=1;fillColor=#7C3AED;fontColor=#ffffff;fontStyle=1;" value="LiveKit&#xa;(WebRTC)" vertex="1">
+          <mxGeometry x="420" y="100" width="120" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gemini" parent="internet" style="rounded=1;fillColor=#4285F4;fontColor=#ffffff;fontStyle=1;" value="Google Gemini AI&#xa;(Chat Assistant)" vertex="1">
+          <mxGeometry x="420" y="155" width="130" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="aws_s3" parent="internet" style="rounded=1;fillColor=#FF9900;fontColor=#ffffff;fontStyle=1;" value="AWS S3&#xa;(File Storage)" vertex="1">
+          <mxGeometry x="560" y="100" width="110" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== API GATEWAY LAYER ==================== -->
+        <mxCell id="gateway_layer" parent="1" style="swimlane;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" value="API Gateway Layer (Port 8088)" vertex="1">
+          <mxGeometry x="40" y="280" width="700" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api_gateway" parent="gateway_layer" style="rounded=1;fillColor=#1976D2;fontColor=#ffffff;fontStyle=1;fontSize=11;" value="Spring Cloud Gateway&#xa;(Reactive WebFlux)&#xa;- JWT Validation&#xa;- Route Forwarding&#xa;- CORS &amp; WebSocket Proxy" vertex="1">
+          <mxGeometry x="200" y="30" width="250" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eureka" parent="gateway_layer" style="rounded=1;fillColor=#E91E63;fontColor=#ffffff;fontStyle=1;fontSize=11;" value="Eureka Discovery&#xa;Service (8761)&#xa;Service Registry" vertex="1">
+          <mxGeometry x="520" y="35" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== MICROSERVICES LAYER ==================== -->
+        <mxCell id="services_layer" parent="1" style="swimlane;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" value="Microservices Layer (Private)" vertex="1">
+          <mxGeometry x="40" y="450" width="1100" height="380" as="geometry" />
+        </mxCell>
+
+        <!-- Identity Service -->
+        <mxCell id="identity_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Identity Service&#xa;(8082 / gRPC:9092)&#xa;&#xa;Auth, Registration&#xa;Token Management" vertex="1">
+          <mxGeometry x="20" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- User Service -->
+        <mxCell id="user_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="User Service&#xa;(8081 / gRPC:9091)&#xa;&#xa;Profiles, Settings&#xa;Privacy Preferences" vertex="1">
+          <mxGeometry x="200" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Chat Service -->
+        <mxCell id="chat_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Chat Service&#xa;(8083)&#xa;&#xa;Messaging, WebSocket&#xa;Video Calls, AI Chat" vertex="1">
+          <mxGeometry x="380" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Friend Service -->
+        <mxCell id="friend_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Friend Service&#xa;(8084 / gRPC:9098)&#xa;&#xa;Friend Requests&#xa;Relationships, Block" vertex="1">
+          <mxGeometry x="560" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Post Service -->
+        <mxCell id="post_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Post Service&#xa;(8089 / gRPC:9087)&#xa;&#xa;Posts, Comments&#xa;Likes, Shares" vertex="1">
+          <mxGeometry x="740" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Notification Service -->
+        <mxCell id="notification_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Notification Service&#xa;(8085)&#xa;&#xa;Push Notifications&#xa;Notification History" vertex="1">
+          <mxGeometry x="20" y="200" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- File Service -->
+        <mxCell id="file_svc" parent="services_layer" style="rounded=1;fillColor=#6BAE75;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="File Service&#xa;(8087 / gRPC:9097)&#xa;&#xa;Upload/Download&#xa;Avatar Management" vertex="1">
+          <mxGeometry x="200" y="200" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Saga Orchestrator -->
+        <mxCell id="saga_svc" parent="services_layer" style="rounded=1;fillColor=#FF6F00;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="Saga Orchestrator&#xa;(8086)&#xa;&#xa;Distributed Transactions&#xa;Coordination" vertex="1">
+          <mxGeometry x="380" y="200" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Common Service -->
+        <mxCell id="common_svc" parent="services_layer" style="rounded=1;fillColor=#9E9E9E;fontColor=#ffffff;fontStyle=1;fontSize=10;dashed=1;" value="common-service&#xa;(Shared Library)&#xa;&#xa;DTOs, Exceptions&#xa;Security Utilities" vertex="1">
+          <mxGeometry x="740" y="200" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Proto Common -->
+        <mxCell id="proto_common" parent="services_layer" style="rounded=1;fillColor=#9E9E9E;fontColor=#ffffff;fontStyle=1;fontSize=10;dashed=1;" value="proto-common&#xa;(Shared Library)&#xa;&#xa;Protobuf .proto files&#xa;gRPC Contracts" vertex="1">
+          <mxGeometry x="920" y="200" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== DATA LAYER ==================== -->
+        <mxCell id="data_layer" parent="1" style="swimlane;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" value="Data Layer" vertex="1">
+          <mxGeometry x="40" y="870" width="1100" height="160" as="geometry" />
+        </mxCell>
+
+        <!-- MySQL databases -->
+        <mxCell id="mysql_user" parent="data_layer" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#2E73B8;fontColor=#ffffff;fontSize=9;fontStyle=1;" value="MySQL&#xa;unicall_user_service" vertex="1">
+          <mxGeometry x="30" y="40" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mysql_friend" parent="data_layer" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#2E73B8;fontColor=#ffffff;fontSize=9;fontStyle=1;" value="MySQL&#xa;unicall_friend_service" vertex="1">
+          <mxGeometry x="180" y="40" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mysql_notification" parent="data_layer" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#2E73B8;fontColor=#ffffff;fontSize=9;fontStyle=1;" value="MySQL&#xa;unicall_notification" vertex="1">
+          <mxGeometry x="330" y="40" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mysql_post" parent="data_layer" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#2E73B8;fontColor=#ffffff;fontSize=9;fontStyle=1;" value="MySQL&#xa;unicall_post_service" vertex="1">
+          <mxGeometry x="480" y="40" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- MongoDB -->
+        <mxCell id="mongodb_chat" parent="data_layer" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#4DB33D;fontColor=#ffffff;fontSize=9;fontStyle=1;" value="MongoDB&#xa;unicall_chat_service" vertex="1">
+          <mxGeometry x="640" y="40" width="130" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- RabbitMQ -->
+        <mxCell id="rabbitmq" parent="data_layer" style="rounded=1;fillColor=#FF6600;fontColor=#ffffff;fontStyle=1;fontSize=10;" value="RabbitMQ&#xa;Message Broker&#xa;(Event-Driven)" vertex="1">
+          <mxGeometry x="820" y="40" width="140" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== CONNECTIONS ==================== -->
+
+        <!-- Client to Gateway -->
+        <mxCell id="conn_mobile_gw" parent="1" source="client_mobile" target="api_gateway" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_mobile_gw_label" parent="conn_mobile_gw" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=9;" value="REST / WebSocket" vertex="1">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="conn_web_gw" parent="1" source="client_web" target="api_gateway" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Gateway to Eureka -->
+        <mxCell id="conn_gw_eureka" parent="1" source="api_gateway" target="eureka" style="strokeWidth=2;strokeColor=#E91E63;dashed=1;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_eureka_label" parent="conn_gw_eureka" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=9;" value="Service Discovery" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Gateway to Services -->
+        <mxCell id="conn_gw_identity" parent="1" source="api_gateway" target="identity_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1.5;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_identity_label" parent="conn_gw_identity" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="/api/v1/auth/**" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="conn_gw_user" parent="1" source="api_gateway" target="user_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1.5;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_user_label" parent="conn_gw_user" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="/api/v1/users/**" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="conn_gw_chat" parent="1" source="api_gateway" target="chat_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1.5;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_chat_label" parent="conn_gw_chat" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="/api/v1/chat/** &amp; /ws/**" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="conn_gw_friend" parent="1" source="api_gateway" target="friend_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1.5;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_friend_label" parent="conn_gw_friend" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="/api/v1/friends/**" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="conn_gw_post" parent="1" source="api_gateway" target="post_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1.5;strokeColor=#1976D2;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_gw_post_label" parent="conn_gw_post" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="/api/v1/posts/**" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- gRPC inter-service communication -->
+        <mxCell id="grpc_identity_user" parent="1" source="identity_svc" target="user_svc" style="strokeWidth=2;strokeColor=#FF5722;fontStyle=1;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpc_identity_user_label" parent="grpc_identity_user" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC&#xa;CreateUserProfile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_user_identity" parent="1" source="user_svc" target="identity_svc" style="strokeWidth=2;strokeColor=#FF5722;dashed=1;" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="315" y="560" />
+              <mxPoint x="135" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grpc_user_identity_label" parent="grpc_user_identity" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC VerifyPassword" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_chat_user" parent="1" source="chat_svc" target="user_svc" style="strokeWidth=2;strokeColor=#FF5722;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpc_chat_user_label" parent="grpc_chat_user" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC&#xa;GetUserProfile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_chat_friend" parent="1" source="chat_svc" target="friend_svc" style="strokeWidth=2;strokeColor=#FF5722;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpc_chat_friend_label" parent="grpc_chat_friend" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC&#xa;CheckRelationship" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_friend_user" parent="1" source="friend_svc" target="user_svc" style="strokeWidth=2;strokeColor=#FF5722;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="675" y="560" />
+              <mxPoint x="315" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grpc_friend_user_label" parent="grpc_friend_user" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC GetUserProfile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_post_user" parent="1" source="post_svc" target="user_svc" style="strokeWidth=2;strokeColor=#FF5722;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="855" y="555" />
+              <mxPoint x="315" y="555" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grpc_post_user_label" parent="grpc_post_user" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC GetUserProfile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Services to File Service (gRPC) -->
+        <mxCell id="grpc_user_file" parent="1" source="user_svc" target="file_svc" style="strokeWidth=2;strokeColor=#FF5722;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpc_user_file_label" parent="grpc_user_file" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC UploadAvatar" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_chat_file" parent="1" source="chat_svc" target="file_svc" style="strokeWidth=2;strokeColor=#FF5722;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpc_chat_file_label" parent="grpc_chat_file" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC UploadFile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="grpc_post_file" parent="1" source="post_svc" target="file_svc" style="strokeWidth=2;strokeColor=#FF5722;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="855" y="720" />
+              <mxPoint x="315" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grpc_post_file_label" parent="grpc_post_file" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF5722;" value="gRPC UploadFile" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Chat to RabbitMQ (Publish Event) -->
+        <mxCell id="rabbit_chat_publish" parent="1" source="chat_svc" target="rabbitmq" style="strokeWidth=2;strokeColor=#FF6600;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rabbit_chat_publish_label" parent="rabbit_chat_publish" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF6600;fontStyle=1;" value="Publish Event" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- RabbitMQ to Notification (Consume Event) -->
+        <mxCell id="rabbit_notif_consume" parent="1" source="rabbitmq" target="notification_svc" style="strokeWidth=2;strokeColor=#FF6600;edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rabbit_notif_consume_label" parent="rabbit_notif_consume" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;fontColor=#FF6600;fontStyle=1;" value="Consume Event" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Services to Databases -->
+        <mxCell id="conn_user_mysql" parent="1" source="user_svc" target="mysql_user" style="strokeWidth=2;strokeColor=#2E73B8;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conn_friend_mysql" parent="1" source="friend_svc" target="mysql_friend" style="strokeWidth=2;strokeColor=#2E73B8;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conn_notif_mysql" parent="1" source="notification_svc" target="mysql_notification" style="strokeWidth=2;strokeColor=#2E73B8;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conn_post_mysql" parent="1" source="post_svc" target="mysql_post" style="strokeWidth=2;strokeColor=#2E73B8;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conn_chat_mongo" parent="1" source="chat_svc" target="mongodb_chat" style="strokeWidth=2;strokeColor=#4DB33D;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- File Service to S3 -->
+        <mxCell id="conn_file_s3" parent="1" source="file_svc" target="aws_s3" style="strokeWidth=2;strokeColor=#FF9900;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_file_s3_label" parent="conn_file_s3" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="Upload/Download" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Identity to Keycloak -->
+        <mxCell id="conn_identity_keycloak" parent="1" source="identity_svc" target="keycloak" style="strokeWidth=2;strokeColor=#4DB33D;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_identity_keycloak_label" parent="conn_identity_keycloak" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="OAuth2/JWT" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Identity to Firebase -->
+        <mxCell id="conn_identity_firebase" parent="1" source="identity_svc" target="firebase" style="strokeWidth=2;strokeColor=#FFCA28;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_identity_firebase_label" parent="conn_identity_firebase" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="OTP Verify" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Chat to LiveKit -->
+        <mxCell id="conn_chat_livekit" parent="1" source="chat_svc" target="livekit" style="strokeWidth=2;strokeColor=#7C3AED;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_chat_livekit_label" parent="conn_chat_livekit" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="Video/Audio Calls" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Chat to Gemini -->
+        <mxCell id="conn_chat_gemini" parent="1" source="chat_svc" target="gemini" style="strokeWidth=2;strokeColor=#4285F4;edgeStyle=orthogonalEdgeStyle;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="conn_chat_gemini_label" parent="conn_chat_gemini" connectable="0" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=8;" value="AI Assistant" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== LEGEND ==================== -->
+        <mxCell id="legend" parent="1" style="swimlane;fillColor=#F5F5F5;strokeColor=#666666;fontSize=11;fontStyle=1;" value="Legend" vertex="1">
+          <mxGeometry x="1180" y="450" width="220" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_grpc" parent="legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="━━ gRPC (inter-service)" vertex="1">
+          <mxGeometry x="10" y="30" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_grpc_color" parent="legend" style="rounded=0;fillColor=#FF5722;strokeColor=none;" value="" vertex="1">
+          <mxGeometry x="10" y="38" width="30" height="4" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_rest" parent="legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="━━ REST/HTTP (client → gateway)" vertex="1">
+          <mxGeometry x="10" y="60" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_rest_color" parent="legend" style="rounded=0;fillColor=#1976D2;strokeColor=none;" value="" vertex="1">
+          <mxGeometry x="10" y="68" width="30" height="4" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_rabbit" parent="legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="┅┅ RabbitMQ (async event)" vertex="1">
+          <mxGeometry x="10" y="90" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_rabbit_color" parent="legend" style="rounded=0;fillColor=#FF6600;strokeColor=none;" value="" vertex="1">
+          <mxGeometry x="10" y="98" width="30" height="4" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_db" parent="legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="━━ Database connection" vertex="1">
+          <mxGeometry x="10" y="120" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_db_color" parent="legend" style="rounded=0;fillColor=#2E73B8;strokeColor=none;" value="" vertex="1">
+          <mxGeometry x="10" y="128" width="30" height="4" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_ext" parent="legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="━━ External service call" vertex="1">
+          <mxGeometry x="10" y="150" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_ext_color" parent="legend" style="rounded=0;fillColor=#4DB33D;strokeColor=none;" value="" vertex="1">
+          <mxGeometry x="10" y="158" width="30" height="4" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== AUTH FLOW NOTE ==================== -->
+        <mxCell id="auth_note" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#000000;fillColor=#FFF9B2;strokeColor=none;fillStyle=solid;direction=west;gradientDirection=north;gradientColor=#FFF2A1;shadow=1;size=20;verticalAlign=top;align=left;spacingLeft=8;spacingRight=8;fontSize=10;" value="&lt;b&gt;Authentication Flow:&lt;/b&gt;&lt;br&gt;1. Client sends request with JWT in Authorization header&lt;br&gt;2. API Gateway validates JWT signature (Keycloak public key)&lt;br&gt;3. Gateway checks token expiration&lt;br&gt;4. If valid → forwards request to target service&lt;br&gt;5. If invalid → returns 401 Unauthorized&lt;br&gt;&lt;br&gt;&lt;b&gt;Inter-Service Communication:&lt;/b&gt;&lt;br&gt;- Services communicate via gRPC (fast binary protocol)&lt;br&gt;- Contracts defined in proto-common module&lt;br&gt;- Async events via RabbitMQ (notifications)" vertex="1">
+          <mxGeometry x="1180" y="680" width="320" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== TITLE ==================== -->
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;fillColor=none;strokeColor=none;" value="UniCall - Backend System Design Architecture" vertex="1">
+          <mxGeometry x="300" y="1060" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fillColor=none;strokeColor=none;fontColor=#666666;" value="Spring Boot Microservices | gRPC | RabbitMQ | Eureka Discovery | Spring Cloud Gateway" vertex="1">
+          <mxGeometry x="250" y="1090" width="600" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

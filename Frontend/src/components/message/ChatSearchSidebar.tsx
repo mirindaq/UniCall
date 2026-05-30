@@ -6,6 +6,7 @@ import {
   Link as LinkIcon,
   PlayCircle,
   Search,
+  Sparkles,
   UserRound,
   X,
 } from "lucide-react"
@@ -234,6 +235,7 @@ export default function ChatSearchSidebar() {
 
   const [keyword, setKeyword] = useState("")
   const [keywordDebounced, setKeywordDebounced] = useState("")
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic">("keyword")
   const [searchSenderId, setSearchSenderId] = useState("")
   const [searchFromDate, setSearchFromDate] = useState("")
   const [searchToDate, setSearchToDate] = useState("")
@@ -248,6 +250,7 @@ export default function ChatSearchSidebar() {
   const [messageHasMore, setMessageHasMore] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false)
+  const [semanticScoresByMessageId, setSemanticScoresByMessageId] = useState<Record<string, number>>({})
 
   const [attachments, setAttachments] = useState<SearchAttachments>(EMPTY_ATTACHMENTS)
   const [loadingAttachments, setLoadingAttachments] = useState(false)
@@ -325,6 +328,7 @@ export default function ChatSearchSidebar() {
     async (targetPage: number, append: boolean) => {
       if (!selectedConversationId || !keywordDebounced) {
         setMessageResults([])
+        setSemanticScoresByMessageId({})
         setMessagePage(1)
         setMessageHasMore(false)
         setLoadingMessages(false)
@@ -339,31 +343,56 @@ export default function ChatSearchSidebar() {
       }
 
       try {
-        const response = await chatService.searchMessages(
-          selectedConversationId,
-          keywordDebounced,
-          targetPage,
-          SEARCH_PAGE_SIZE,
-        )
-        const rawItems = response.data.items ?? []
-        const filteredItems = rawItems
-          .filter(matchesSearchFilters)
-          .filter((message) => !shouldHideAttachmentPlaceholderMessage(message))
+        if (searchMode === "semantic") {
+          const response = await chatService.semanticSearchMessages(
+            selectedConversationId,
+            keywordDebounced,
+            SEARCH_PAGE_SIZE * 2,
+          )
+          const scored = response.data ?? []
+          const rawItems = scored.map((item) => item.message)
+          const filteredItems = rawItems
+            .filter(matchesSearchFilters)
+            .filter((message) => !shouldHideAttachmentPlaceholderMessage(message))
 
-        setMessageResults((prev) => {
-          if (!append) {
-            return filteredItems
+          const scoreMap: Record<string, number> = {}
+          for (const item of scored) {
+            if (item.message?.idMessage) {
+              scoreMap[item.message.idMessage] = item.score
+            }
           }
+          setSemanticScoresByMessageId(scoreMap)
+          setMessageResults(filteredItems)
+          setMessagePage(1)
+          setMessageHasMore(false)
+        } else {
+          const response = await chatService.searchMessages(
+            selectedConversationId,
+            keywordDebounced,
+            targetPage,
+            SEARCH_PAGE_SIZE,
+          )
+          const rawItems = response.data.items ?? []
+          const filteredItems = rawItems
+            .filter(matchesSearchFilters)
+            .filter((message) => !shouldHideAttachmentPlaceholderMessage(message))
 
-          const existingIds = new Set(prev.map((item) => item.idMessage))
-          const nextItems = filteredItems.filter((item) => !existingIds.has(item.idMessage))
-          return [...prev, ...nextItems]
-        })
+          setMessageResults((prev) => {
+            if (!append) {
+              return filteredItems
+            }
 
-        const currentPage = response.data.page ?? targetPage
-        const totalPage = response.data.totalPage ?? targetPage
-        setMessagePage(targetPage)
-        setMessageHasMore(currentPage < totalPage)
+            const existingIds = new Set(prev.map((item) => item.idMessage))
+            const nextItems = filteredItems.filter((item) => !existingIds.has(item.idMessage))
+            return [...prev, ...nextItems]
+          })
+          setSemanticScoresByMessageId({})
+
+          const currentPage = response.data.page ?? targetPage
+          const totalPage = response.data.totalPage ?? targetPage
+          setMessagePage(targetPage)
+          setMessageHasMore(currentPage < totalPage)
+        }
       } catch {
         if (!append) {
           toast.error("Không tìm kiếm được tin nhắn")
@@ -373,15 +402,18 @@ export default function ChatSearchSidebar() {
         setLoadingMoreMessages(false)
       }
     },
-    [keywordDebounced, matchesSearchFilters, selectedConversationId],
+    [keywordDebounced, matchesSearchFilters, searchMode, selectedConversationId],
   )
 
   const loadMoreMessages = useCallback(() => {
+    if (searchMode === "semantic") {
+      return
+    }
     if (!keywordDebounced || !messageHasMore || loadingMessages || loadingMoreMessages) {
       return
     }
     void fetchMessages(messagePage + 1, true)
-  }, [fetchMessages, keywordDebounced, loadingMessages, loadingMoreMessages, messageHasMore, messagePage])
+  }, [fetchMessages, keywordDebounced, loadingMessages, loadingMoreMessages, messageHasMore, messagePage, searchMode])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -396,12 +428,14 @@ export default function ChatSearchSidebar() {
   useEffect(() => {
     setKeyword("")
     setKeywordDebounced("")
+    setSearchMode("keyword")
     setSearchSenderId("")
     setSearchFromDate("")
     setSearchToDate("")
     setIsSenderPopoverOpen(false)
     setIsDatePopoverOpen(false)
     setMessageResults([])
+    setSemanticScoresByMessageId({})
     setMessagePage(1)
     setMessageHasMore(false)
     setAttachments(EMPTY_ATTACHMENTS)
@@ -460,7 +494,7 @@ export default function ChatSearchSidebar() {
   }, [fetchMessages, searchFromDate, searchSenderId, searchToDate])
 
   useEffect(() => {
-    if (!selectedConversationId || !keywordDebounced) {
+    if (searchMode === "semantic" || !selectedConversationId || !keywordDebounced) {
       setAttachments(EMPTY_ATTACHMENTS)
       setFailedPreviewAttachmentIds(new Set())
       setLoadingAttachments(false)
@@ -531,14 +565,19 @@ export default function ChatSearchSidebar() {
     return () => {
       cancelled = true
     }
-  }, [keywordDebounced, searchFromDate, searchSenderId, searchToDate, selectedConversationId])
+  }, [keywordDebounced, searchFromDate, searchMode, searchSenderId, searchToDate, selectedConversationId])
 
   const hasAttachmentResults =
-    attachments.images.length > 0 || attachments.files.length > 0 || attachments.links.length > 0
+    searchMode === "keyword" &&
+    (attachments.images.length > 0 || attachments.files.length > 0 || attachments.links.length > 0)
   const hasMessageResults = messageResults.length > 0
   const hasAnyResults = hasMessageResults || hasAttachmentResults
   const showEmptyState = !keywordDebounced
-  const showNoResultState = keywordDebounced && !loadingMessages && !loadingAttachments && !hasAnyResults
+  const showNoResultState =
+    keywordDebounced &&
+    !loadingMessages &&
+    (searchMode === "semantic" || !loadingAttachments) &&
+    !hasAnyResults
 
   return (
     <div className="flex h-full w-full max-w-[340px] shrink-0 flex-col border-l bg-background">
@@ -561,7 +600,7 @@ export default function ChatSearchSidebar() {
           <Input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="Nhập từ khóa để tìm kiếm"
+            placeholder={searchMode === "semantic" ? "Mô tả nội dung cần tìm (VD: kế hoạch đi du lịch)" : "Nhập từ khóa để tìm kiếm"}
             className="h-10 rounded-md border-border bg-background pl-9 pr-12 shadow-none"
           />
           {keyword ? (
@@ -573,6 +612,29 @@ export default function ChatSearchSidebar() {
               Xóa
             </button>
           ) : null}
+        </div>
+
+        <div className="mt-2.5 flex items-center gap-2">
+          <Button
+            type="button"
+            variant={searchMode === "keyword" ? "default" : "outline"}
+            size="sm"
+            className="h-8 px-3"
+            onClick={() => setSearchMode("keyword")}
+          >
+            <Search className="mr-1.5 h-3.5 w-3.5" />
+            Từ khóa
+          </Button>
+          <Button
+            type="button"
+            variant={searchMode === "semantic" ? "default" : "outline"}
+            size="sm"
+            className="h-8 px-3"
+            onClick={() => setSearchMode("semantic")}
+          >
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            Ngữ nghĩa AI
+          </Button>
         </div>
 
         <div className="mt-2.5 flex items-center gap-2">
@@ -713,7 +775,9 @@ export default function ChatSearchSidebar() {
               <Search className="h-12 w-12 text-primary/70" />
             </div>
             <p className="max-w-[260px] text-sm leading-6 text-muted-foreground">
-              Hãy nhập từ khóa để bắt đầu tìm kiếm tin nhắn và file trong trò chuyện
+              {searchMode === "semantic"
+                ? "Hãy mô tả nội dung bạn muốn tìm để hệ thống tìm theo ngữ nghĩa."
+                : "Hãy nhập từ khóa để bắt đầu tìm kiếm tin nhắn và file trong trò chuyện"}
             </p>
           </div>
         ) : (
@@ -751,7 +815,14 @@ export default function ChatSearchSidebar() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="truncate text-sm font-medium text-muted-foreground">{senderName}</p>
-                              <span className="w-14 shrink-0 text-right text-xs text-muted-foreground">{messageTime}</span>
+                              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                <span className="w-14 text-right text-xs text-muted-foreground">{messageTime}</span>
+                                {searchMode === "semantic" ? (
+                                  <span className="text-[11px] font-medium text-emerald-600">
+                                    {Math.round((semanticScoresByMessageId[message.idMessage] ?? 0) * 100)}%
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
                             <p className="mt-0.5 line-clamp-2 text-sm text-foreground">
                               {renderHighlightedSearchText(plainText, keywordDebounced)}
@@ -777,6 +848,8 @@ export default function ChatSearchSidebar() {
               ) : null}
             </div>
 
+            {searchMode === "keyword" ? (
+              <>
             <Separator className="bg-border" />
 
             <div className="px-4 py-3">
@@ -917,14 +990,16 @@ export default function ChatSearchSidebar() {
                 </div>
               ) : null}
 
-              {showNoResultState ? (
-                <p className="mt-3 text-center text-sm text-muted-foreground">Không có kết quả phù hợp.</p>
-              ) : null}
             </div>
+              </>
+            ) : null}
+
+            {showNoResultState ? (
+              <p className="mt-3 px-4 pb-3 text-center text-sm text-muted-foreground">Không có kết quả phù hợp.</p>
+            ) : null}
           </>
         )}
       </ScrollArea>
     </div>
   )
 }
-

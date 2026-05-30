@@ -10,6 +10,7 @@ import iuh.fit.chat_service.dtos.response.ConversationBlockStatusResponse;
 import iuh.fit.chat_service.dtos.response.FileUploadResponse;
 import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
+import iuh.fit.chat_service.dtos.response.SemanticSearchMessageResponse;
 import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.chat_service.services.ConversationBlockService;
@@ -169,6 +170,25 @@ public class ChatController {
         PageResponse<MessageResponse> data = chatMessageService.searchMessages(identityUserId, conversationId, keyword, page, limit);
         return ResponseEntity.ok(
                 new ResponseSuccess<>(HttpStatus.OK, "Tìm kiếm tin nhắn thành công", data)
+        );
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages/semantic-search")
+    public ResponseEntity<ResponseSuccess<List<SemanticSearchMessageResponse>>> semanticSearchMessages(
+            @RequestHeader(value = USER_ID_HEADER, required = false) String identityUserId,
+            @PathVariable String conversationId,
+            @RequestParam(name = "query") String query,
+            @RequestParam(name = "limit", defaultValue = "12") int limit
+    ) {
+        requireUser(identityUserId);
+        List<SemanticSearchMessageResponse> data = chatMessageService.semanticSearchMessages(
+                identityUserId,
+                conversationId,
+                query,
+                limit
+        );
+        return ResponseEntity.ok(
+                new ResponseSuccess<>(HttpStatus.OK, "Tìm kiếm ngữ nghĩa thành công", data)
         );
     }
 

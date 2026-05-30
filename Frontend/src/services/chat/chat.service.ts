@@ -3,6 +3,10 @@ import { API_PREFIXES } from "@/constants/api-prefixes"
 import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
   AddGroupMembersRequest,
+  AiAssistantThreadDetailResponse,
+  AiAssistantThreadSummaryResponse,
+  AiAssistantTurnResponse,
+  AiThreadScope,
   ChatAttachment,
   ChatMessageResponse,
   ConversationBlockStatusResponse,
@@ -15,6 +19,7 @@ import type {
   ForwardMessageResponse,
   TransferGroupAdminRequest,
   SfuAccessTokenResponse,
+  SemanticSearchMessageResponse,
   UpdateGroupAvatarRequest,
   UpdateGroupMemberRoleRequest,
   UpdateGroupManagementSettingsRequest,
@@ -55,6 +60,51 @@ export const chatService = {
     const { data } = await axiosClient.get<ResponseSuccess<PageResponse<ChatMessageResponse>>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/search`,
       { params: { keyword, page, limit } }
+    )
+    return data
+  },
+  semanticSearchMessages: async (conversationId: string, query: string, limit = 12) => {
+    const { data } = await axiosClient.get<ResponseSuccess<SemanticSearchMessageResponse[]>>(
+      `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/messages/semantic-search`,
+      { params: { query, limit } }
+    )
+    return data
+  },
+  createAiThread: async (title?: string, conversationId?: string) => {
+    const { data } = await axiosClient.post<ResponseSuccess<AiAssistantThreadSummaryResponse>>(
+      `${CHAT_PREFIX}/ai/threads`,
+      {
+        title: title?.trim() || undefined,
+        conversationId: conversationId?.trim() || undefined,
+      }
+    )
+    return data
+  },
+  listAiThreads: async () => {
+    const { data } = await axiosClient.get<ResponseSuccess<AiAssistantThreadSummaryResponse[]>>(
+      `${CHAT_PREFIX}/ai/threads`
+    )
+    return data
+  },
+  getAiThreadDetail: async (threadId: string) => {
+    const { data } = await axiosClient.get<ResponseSuccess<AiAssistantThreadDetailResponse>>(
+      `${CHAT_PREFIX}/ai/threads/${encodeURIComponent(threadId)}`
+    )
+    return data
+  },
+  askAiThread: async (
+    threadId: string,
+    payload: {
+      query: string
+      scope: AiThreadScope
+      conversationId?: string
+      conversationIds?: string[]
+      limit?: number
+    }
+  ) => {
+    const { data } = await axiosClient.post<ResponseSuccess<AiAssistantTurnResponse>>(
+      `${CHAT_PREFIX}/ai/threads/${encodeURIComponent(threadId)}/ask`,
+      payload
     )
     return data
   },

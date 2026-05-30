@@ -8,6 +8,7 @@ import { displayNameFromProfile } from "@/utils/chat-display.util"
 import GroupMembersPanel from "./GroupMembersPanel"
 import GroupManagePanel from "./GroupManagePanel"
 import ChatInfoMain from "./ChatInfoMain"
+import ChatAiAssistantSidebar from "./ChatAiAssistantSidebar"
 import ChatSearchSidebar from "./ChatSearchSidebar"
 import ChatStorage from "./ChatStorage"
 
@@ -55,6 +56,10 @@ export default function ChatDetails() {
 
   if (selectedConversation && detailsView === "search") {
     return <ChatSearchSidebar />
+  }
+
+  if (selectedConversation && detailsView === "ai") {
+    return <ChatAiAssistantSidebar />
   }
 
   if (currentView === "storage") {

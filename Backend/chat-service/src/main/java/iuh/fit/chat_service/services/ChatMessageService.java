@@ -7,6 +7,7 @@ import iuh.fit.chat_service.dtos.request.UpdateMessageReactionRequest;
 import iuh.fit.chat_service.dtos.response.AttachmentResponse;
 import iuh.fit.chat_service.dtos.response.ForwardMessageResponse;
 import iuh.fit.chat_service.dtos.response.MessageResponse;
+import iuh.fit.chat_service.dtos.response.SemanticSearchMessageResponse;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 
 import java.util.List;
@@ -16,6 +17,13 @@ public interface ChatMessageService {
     PageResponse<MessageResponse> listMessages(String identityUserId, String conversationId, int page, int limit);
 
     PageResponse<MessageResponse> searchMessages(String identityUserId, String conversationId, String keyword, int page, int limit);
+
+    List<SemanticSearchMessageResponse> semanticSearchMessages(
+            String identityUserId,
+            String conversationId,
+            String query,
+            int limit
+    );
 
     MessageResponse getMessageById(String identityUserId, String conversationId, String messageId);
 
