@@ -14,6 +14,7 @@ import { UserChatPage } from "@/pages/user/UserChatPage"
 import { UserFriendsPage } from "@/pages/user/UserFriendsPage"
 import { UserNotificationsPage } from "@/pages/user/UserNotificationsPage"
 import { UserPostsPage } from "@/pages/user/UserPostsPage"
+import { UserTasksPage } from "@/pages/user/UserTasksPage"
 import AdminGuestRoute from "@/routes/AdminGuestRoute"
 import AdminRoute from "@/routes/AdminRoute"
 import GuestRoute from "@/routes/GuestRoute"
@@ -64,6 +65,10 @@ export default function useRouteElements() {
         {
           path: USER_PATH.CHAT,
           element: <UserChatPage />,
+        },
+        {
+          path: USER_PATH.TASKS,
+          element: <UserTasksPage />,
         },
         {
           path: USER_PATH.FRIENDS,

@@ -50,22 +50,27 @@ import type { UserProfile } from "@/types/user.type"
 const userTabs = [
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.CHAT}`,
-    label: "Tin nhan",
+    label: "Tin nhắn",
     icon: MessageCircle,
   },
   {
+    to: `${USER_PATH.ROOT}/${USER_PATH.TASKS}`,
+    label: "Tasks",
+    icon: FolderKanban,
+  },
+  {
     to: `${USER_PATH.ROOT}/${USER_PATH.FRIENDS}`,
-    label: "Ban be",
+    label: "Bạn bè",
     icon: Users,
   },
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.POSTS}`,
-    label: "Bai viet",
+    label: "Bài viết",
     icon: FileText,
   },
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.NOTIFICATIONS}`,
-    label: "Thong bao",
+    label: "Thông báo",
     icon: Bell,
   },
 ]
@@ -201,7 +206,7 @@ export function UserLayout() {
         </div>
 
         <div className="flex w-full flex-col items-center gap-2 px-2">
-          {[CloudUpload, FolderKanban, BriefcaseBusiness].map((Icon, index) => (
+          {[CloudUpload, BriefcaseBusiness].map((Icon, index) => (
             <button
               key={index}
               type="button"
@@ -338,4 +343,3 @@ export function UserLayout() {
     </div>
   )
 }
-
