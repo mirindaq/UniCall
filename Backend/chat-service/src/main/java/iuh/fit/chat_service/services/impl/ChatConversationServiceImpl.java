@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -131,20 +132,31 @@ public class ChatConversationServiceImpl implements ChatConversationService {
                 : LocalDateTime.now();
         String seenMessageId = latestVisible == null ? null : latestVisible.getIdMessage();
 
-        MessageReadStatus status = messageReadStatusRepository.findByIdConversation(conversationId)
-                .orElseGet(() -> {
-                    MessageReadStatus created = new MessageReadStatus();
-                    created.setIdConversation(conversationId);
-                    return created;
-                });
+        List<MessageReadStatus> statuses = messageReadStatusRepository
+                .findByIdConversationOrderByTimeSeenDesc(conversationId);
+        MessageReadStatus status = statuses.isEmpty()
+                ? new MessageReadStatus()
+                : statuses.get(0);
+        if (!statuses.isEmpty() && statuses.size() > 1) {
+            messageReadStatusRepository.deleteAll(statuses.subList(1, statuses.size()));
+        }
+        if (!StringUtils.hasText(status.getIdConversation())) {
+            status.setIdConversation(conversationId);
+        }
 
         List<MessageReadStatus.SeenInfo> seenBy = status.getSeenBy();
         if (seenBy == null) {
             seenBy = new ArrayList<>();
+        } else {
+            seenBy = new ArrayList<>(seenBy);
+            seenBy.removeIf(Objects::isNull);
         }
 
         boolean updated = false;
         for (MessageReadStatus.SeenInfo seenInfo : seenBy) {
+            if (seenInfo == null) {
+                continue;
+            }
             if (identityUserId.equals(seenInfo.getIdAccount())) {
                 seenInfo.setTimeSeen(seenAt);
                 updated = true;

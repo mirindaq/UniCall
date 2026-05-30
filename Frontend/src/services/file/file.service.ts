@@ -4,6 +4,7 @@ import type { ResponseSuccess } from "@/types/api-response"
 import type { AttachmentType } from "@/types/chat"
 
 const CHAT_PREFIX = API_PREFIXES.chat
+const FILE_PREFIX = API_PREFIXES.files
 
 export interface FileUploadResponse {
   url: string
@@ -62,6 +63,22 @@ export const fileService = {
     const { data } = await axiosClient.get<ResponseSuccess<AttachmentResponse[]>>(
       `${CHAT_PREFIX}/conversations/${encodeURIComponent(conversationId)}/attachments`,
       { params }
+    )
+    return data
+  },
+
+  deleteFile: async (url: string): Promise<ResponseSuccess<void>> => {
+    const { data } = await axiosClient.delete<ResponseSuccess<void>>(
+      FILE_PREFIX,
+      { data: { url } }
+    )
+    return data
+  },
+
+  deleteFiles: async (urls: string[]): Promise<ResponseSuccess<void>> => {
+    const { data } = await axiosClient.delete<ResponseSuccess<void>>(
+      `${FILE_PREFIX}/batch`,
+      { data: { urls } }
     )
     return data
   },
