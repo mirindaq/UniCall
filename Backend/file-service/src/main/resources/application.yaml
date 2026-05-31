@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
   application:
     name: file-service
   servlet:
@@ -13,7 +15,7 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
 
 server:
-  port: 8087
+  port: ${FILE_SERVICE_PORT:8087}
 
 grpc:
   server:
@@ -27,7 +29,7 @@ eureka:
     prefer-ip-address: true
 aws:
   s3:
-    region: ${AWS_REGION:}
-    bucket: ${AWS_S3_BUCKET:}
+    region: ${AWS_REGION:ap-southeast-1}
+    bucket: ${AWS_S3_BUCKET:unicall-bucket}
     access-key: ${AWS_ACCESS_KEY_ID:}
     secret-key: ${AWS_SECRET_ACCESS_KEY:}

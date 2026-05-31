@@ -322,9 +322,9 @@ export default function StorageFiles() {
   }
 
   const handleOpenInNewTab = (url: string) => {
-    const opened = window.open(url, "_blank", "noopener,noreferrer")
-    // if (!opened) {
-    // }
+    if (!window.open(url, "_blank", "noopener,noreferrer")) {
+      return
+    }
   }
 
   if (loadingAttachments && attachments.length === 0) {

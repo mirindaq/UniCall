@@ -2,7 +2,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  type LocalTrackPublication,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication,

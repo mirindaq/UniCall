@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
   application:
     name: chat-service
   rabbitmq:
@@ -17,11 +19,22 @@ spring:
       # host: localhost
       # port: 27017
       # database: unicall_chat_service
-      uri: mongodb://localhost:27017/unicall_chat_service
+      uri: ${CHAT_MONGODB_URI:mongodb://localhost:27017/unicall_chat_service}
       auto-index-creation: true
+  ai:
+    model:
+      embedding:
+        text: google-genai
+    google:
+      genai:
+        embedding:
+          api-key: ${AI_ASSISTANT_API_KEY:}
+          text:
+            options:
+              model: gemini-embedding-001
 
 server:
-  port: 8083
+  port: ${CHAT_SERVICE_PORT:8083}
 
 api:
   prefix: /api/v1
@@ -34,20 +47,45 @@ app:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
   livekit:
     enabled: ${LIVEKIT_ENABLED:true}
-    url: ${LIVEKIT_URL:ws://192.168.222.128:7880}
+    url: ${LIVEKIT_URL:ws://localhost:7880}
     api-key: ${LIVEKIT_API_KEY:devkey}
     api-secret: ${LIVEKIT_API_SECRET:secret}
     token-ttl-seconds: ${LIVEKIT_TOKEN_TTL_SECONDS:3600}
   ai-assistant:
     enabled: ${AI_ASSISTANT_ENABLED:true}
     base-url: ${AI_ASSISTANT_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
-    text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-flash}
+    text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-pro}
     image-model: ${AI_ASSISTANT_IMAGE_MODEL:gemini-2.5-flash-image}
     api-key: ${AI_ASSISTANT_API_KEY:}
     text-system-prompt: ${AI_ASSISTANT_TEXT_SYSTEM_PROMPT:Bạn là UniCall AI, trả lời hữu ích, lịch sự bằng tiếng Việt.}
     image-system-prompt: ${AI_ASSISTANT_IMAGE_SYSTEM_PROMPT:Bạn là UniCallImage, tạo mô tả ảnh ngắn gọn bằng tiếng Việt.}
     connect-timeout-ms: ${AI_ASSISTANT_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${AI_ASSISTANT_READ_TIMEOUT_MS:30000}
+    vector-search:
+      enabled: ${AI_ASSISTANT_VECTOR_SEARCH_ENABLED:true}
+      embedding-model: ${AI_ASSISTANT_EMBEDDING_MODEL:gemini-embedding-001}
+      default-limit: ${AI_ASSISTANT_VECTOR_SEARCH_DEFAULT_LIMIT:12}
+      max-limit: ${AI_ASSISTANT_VECTOR_SEARCH_MAX_LIMIT:50}
+      min-content-length: ${AI_ASSISTANT_VECTOR_SEARCH_MIN_CONTENT_LENGTH:3}
+      rabbitmq:
+        exchange: ${AI_ASSISTANT_VECTOR_RABBIT_EXCHANGE:unicall.chat.ai.vector.exchange}
+        queue: ${AI_ASSISTANT_VECTOR_RABBIT_QUEUE:unicall.chat.ai.vector.queue}
+        routing-key: ${AI_ASSISTANT_VECTOR_RABBIT_ROUTING_KEY:chat.ai.vector.index}
+      qdrant:
+        base-url: ${AI_ASSISTANT_QDRANT_BASE_URL:http://localhost:6333}
+        collection: ${AI_ASSISTANT_QDRANT_COLLECTION:unicall_chat_messages}
+        api-key: ${AI_ASSISTANT_QDRANT_API_KEY:}
+        timeout-ms: ${AI_ASSISTANT_QDRANT_TIMEOUT_MS:5000}
+        auto-create-collection: ${AI_ASSISTANT_QDRANT_AUTO_CREATE_COLLECTION:true}
+        vector-size: ${AI_ASSISTANT_QDRANT_VECTOR_SIZE:0}
+        distance: ${AI_ASSISTANT_QDRANT_DISTANCE:Cosine}
+    task-tools:
+      base-url: ${AI_ASSISTANT_TASK_TOOLS_BASE_URL:http://localhost:8090/api/v1/tasks}
+      connect-timeout-ms: ${AI_ASSISTANT_TASK_TOOLS_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${AI_ASSISTANT_TASK_TOOLS_READ_TIMEOUT_MS:8000}
+      default-limit: ${AI_ASSISTANT_TASK_TOOLS_DEFAULT_LIMIT:20}
+      max-limit: ${AI_ASSISTANT_TASK_TOOLS_MAX_LIMIT:100}
+      default-due-soon-days: ${AI_ASSISTANT_TASK_TOOLS_DEFAULT_DUE_SOON_DAYS:3}
 
 grpc:
   client:

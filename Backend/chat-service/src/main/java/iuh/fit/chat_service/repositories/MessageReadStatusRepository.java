@@ -10,5 +10,7 @@ public interface MessageReadStatusRepository extends MongoRepository<MessageRead
 
     Optional<MessageReadStatus> findByIdConversation(String idConversation);
 
+    List<MessageReadStatus> findByIdConversationOrderByTimeSeenDesc(String idConversation);
+
     List<MessageReadStatus> findByIdConversationIn(List<String> conversationIds);
 }

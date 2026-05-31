@@ -6,7 +6,9 @@ export const API_PREFIXES = {
   friends: `${API_V1_PREFIX}/friends`,
   friendRequests: `${API_V1_PREFIX}/friend-requestes`,
   chat: `${API_V1_PREFIX}/chat`,
+  aiChat: `${API_V1_PREFIX}/ai/chat`,
   conversations: `${API_V1_PREFIX}/conversations`,
+  tasks: `${API_V1_PREFIX}/tasks`,
   files: `${API_V1_PREFIX}/files`,
   notifications: `/api-gateway/notification-service${API_V1_PREFIX}/notifications`,
 } as const

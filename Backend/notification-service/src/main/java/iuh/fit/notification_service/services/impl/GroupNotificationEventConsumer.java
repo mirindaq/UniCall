@@ -53,21 +53,27 @@ public class GroupNotificationEventConsumer {
 
     private String buildTitle(GroupNotificationEvent event) {
         return switch (event.getType()) {
-            case GROUP_MEMBER_ADDED -> "Thanh vien moi trong nhom";
-            case GROUP_MEMBER_LEFT -> "Thanh vien da roi nhom";
-            case GROUP_MEMBER_KICKED -> "Thanh vien da bi xoa khoi nhom";
+            case GROUP_MEMBER_ADDED -> "Thành viên mới trong nhóm";
+            case GROUP_MEMBER_LEFT -> "Thành viên đã rời nhóm";
+            case GROUP_MEMBER_KICKED -> "Thành viên đã bị xóa khỏi nhóm";
+            case TASK_GROUP_MEMBER_ADDED -> "Bạn được thêm vào nhóm công việc";
+            case TASK_GROUP_MEMBER_KICKED -> "Bạn đã bị kích khỏi nhóm công việc";
+            case TASK_ITEM_ASSIGNED -> "Bạn có công việc mới";
+            case TASK_ITEM_UPDATED -> "Công việc được cập nhật";
+            case TASK_ITEM_COMMENTED -> "Công việc có bình luận mới";
+            case TASK_ITEM_DUE_SOON -> "Công việc sắp đến hạn";
         };
     }
 
     private String buildContent(GroupNotificationEvent event) {
         String groupName = event.getConversationName() == null || event.getConversationName().isBlank()
-                ? "Nhom"
+                ? "Nhóm"
                 : event.getConversationName().trim();
 
         if (event.getContent() != null && !event.getContent().isBlank()) {
             return groupName + ": " + event.getContent().trim();
         }
 
-        return groupName + ": Co cap nhat thanh vien.";
+        return groupName + ": Có cập nhật thành viên.";
     }
 }

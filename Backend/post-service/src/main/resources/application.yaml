@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
   application:
     name: post-service
   servlet:
@@ -6,9 +8,9 @@ spring:
       max-file-size: 25MB
       max-request-size: 100MB
   datasource:
-    url: jdbc:mysql://localhost:3306/unicall_post_service?createDatabaseIfNotExist=true
-    username: springstudent
-    password: springstudent
+    url: ${POST_DB_URL:jdbc:mysql://localhost:3306/unicall_post_service?createDatabaseIfNotExist=true}
+    username: ${POST_DB_USERNAME:springstudent}
+    password: ${POST_DB_PASSWORD:springstudent}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -23,14 +25,14 @@ api:
   prefix: /api/v1
 
 server:
-  port: 8089
+  port: ${POST_SERVICE_PORT:8089}
 
 grpc:
   server:
     port: ${POST_SERVICE_GRPC_PORT:9087}
   client:
     file-service:
-      address: static://localhost:9097
+      address: ${FILE_SERVICE_GRPC_ADDRESS:static://localhost:9097}
       negotiation-type: plaintext
   user-service:
     host: ${USER_SERVICE_GRPC_HOST:localhost}
