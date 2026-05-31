@@ -14,6 +14,7 @@ import type {
   AssistantThreadMessageResponse,
   AssistantToolCode,
 } from "@/types/assistant"
+import { generateUuid } from "@/utils/uuid.util"
 
 type AssistantMessageRole = "user" | "assistant"
 
@@ -37,7 +38,7 @@ function formatTime(value: string) {
 
 function toAssistantMessage(response: AssistantAskResponse): AssistantMessageItem {
   return {
-    id: crypto.randomUUID(),
+    id: generateUuid(),
     role: "assistant",
     content: response.answer || "Mình chưa có câu trả lời phù hợp.",
     createdAt: new Date().toISOString(),
@@ -53,7 +54,7 @@ function toUiRole(role?: AssistantThreadMessageResponse["role"]): AssistantMessa
 
 function fromHistoryMessage(message: AssistantThreadMessageResponse): AssistantMessageItem {
   return {
-    id: message.id || crypto.randomUUID(),
+    id: message.id || generateUuid(),
     role: toUiRole(message.role),
     content: message.content || "",
     createdAt: message.createdAt || new Date().toISOString(),
@@ -119,7 +120,7 @@ export function UserAiAssistantPage() {
     }
 
     const userMessage: AssistantMessageItem = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       role: "user",
       content: question,
       createdAt: new Date().toISOString(),
@@ -138,7 +139,7 @@ export function UserAiAssistantPage() {
       setMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: generateUuid(),
           role: "assistant",
           content: "AI Assistant tạm thời chưa phản hồi. Bạn thử lại sau nhé.",
           createdAt: new Date().toISOString(),

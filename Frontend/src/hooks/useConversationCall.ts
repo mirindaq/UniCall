@@ -12,6 +12,7 @@ import type {
   ConversationType,
   UserRealtimeEvent,
 } from "@/types/chat"
+import { generateUuid } from "@/utils/uuid.util"
 
 type CallPhase = "idle" | "outgoing" | "incoming" | "connecting" | "in-call"
 
@@ -77,10 +78,7 @@ const getMediaErrorMessage = (audioOnly: boolean, error: unknown): string => {
   return `Không thể mở thiết bị media (${error.name}). Vui lòng thử lại.`
 }
 
-const buildCallId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+const buildCallId = () => generateUuid()
 
 export function useConversationCall({
   conversationId,

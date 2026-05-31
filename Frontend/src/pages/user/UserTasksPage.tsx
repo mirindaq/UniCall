@@ -80,6 +80,7 @@ import type {
   TaskPriority,
   UpdateTaskItemPayload,
 } from "@/types/task"
+import { generateUuid } from "@/utils/uuid.util"
 
 type TaskView = "list" | "kanban" | "gantt" | "dashboard"
 type TaskScope = "group" | "my"
@@ -2759,10 +2760,7 @@ function renderCommentContent(content?: string | null) {
 }
 
 function buildLocalId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID()
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return generateUuid()
 }
 
 function isTaskComplete(task: TaskItem) {

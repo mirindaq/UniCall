@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Bot,
   CalendarDays,
   Check,
@@ -635,6 +636,7 @@ export default function ChatWindow() {
     conversations,
     refetchConversations,
     onRealtimeConversation,
+    selectConversation,
   } = useChatPage()
 
   selectedIdRef.current = selectedConversationId
@@ -3398,6 +3400,19 @@ export default function ChatWindow() {
     <div className="relative flex h-full min-w-0 flex-1 flex-col bg-muted/20">
       <div className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-4">
         <div className="flex min-w-0 items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="-ml-2 lg:hidden"
+            title="Quay lại danh sách"
+            onClick={() => {
+              setDetailsView("main")
+              setDetailsPanelOpen(false)
+              selectConversation(null)
+            }}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <Avatar size="lg">
             <AvatarImage src={headerAvatar} alt={headerTitle} />
             <AvatarFallback>
@@ -3437,6 +3452,17 @@ export default function ChatWindow() {
                 : undefined
             )}
             onClick={() => {
+              const isDesktopViewport =
+                typeof window !== "undefined" &&
+                window.matchMedia("(min-width: 1024px)").matches
+
+              if (!isDesktopViewport) {
+                setIsMessageSearchOpen((prev) => !prev)
+                setDetailsView("main")
+                setDetailsPanelOpen(false)
+                return
+              }
+
               if (isDetailsPanelOpen && detailsView === "search") {
                 setDetailsView("main")
                 return
@@ -3478,7 +3504,7 @@ export default function ChatWindow() {
             variant="ghost"
             size="icon-sm"
             className={cn(
-              "text-primary",
+              "hidden text-primary lg:inline-flex",
               isDetailsPanelOpen ? "bg-blue-50" : undefined
             )}
             onClick={() => {
@@ -3556,7 +3582,7 @@ export default function ChatWindow() {
       ) : null}
 
       {isMessageSearchOpen ? (
-        <div className="absolute top-16 right-0 bottom-0 z-30 w-[380px] border-l bg-slate-100 shadow-[-8px_0_24px_rgba(15,23,42,0.08)]">
+        <div className="absolute top-16 right-0 bottom-0 z-30 w-full border-l bg-slate-100 shadow-[-8px_0_24px_rgba(15,23,42,0.08)] sm:w-[380px]">
           <div className="flex h-full flex-col">
             <div className="border-b bg-white px-4 pt-3 pb-4">
               <div className="mb-3 flex items-center justify-between">
@@ -5385,4 +5411,3 @@ export default function ChatWindow() {
     </div>
   )
 }
-
