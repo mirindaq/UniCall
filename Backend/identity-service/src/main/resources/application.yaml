@@ -19,8 +19,8 @@ app:
       password: ${ADMIN_BOOTSTRAP_PASSWORD:Admin@123}
       role: ${ADMIN_BOOTSTRAP_ROLE:admin}
   firebase:
-    enabled: ${FIREBASE_OTP_ENABLED:true}
-    credentials-path: ${FIREBASE_CREDENTIALS_PATH:./src/main/resources/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
+    enabled: ${FIREBASE_OTP_ENABLED:false}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:classpath:unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
   security:
     cookie:
       secure: ${COOKIE_SECURE:false}
