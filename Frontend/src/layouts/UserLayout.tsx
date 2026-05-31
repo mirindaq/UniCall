@@ -1,5 +1,6 @@
 import {
   Bell,
+  Bot,
   BriefcaseBusiness,
   ChevronRight,
   CircleHelp,
@@ -52,6 +53,11 @@ const userTabs = [
     to: `${USER_PATH.ROOT}/${USER_PATH.CHAT}`,
     label: "Tin nhắn",
     icon: MessageCircle,
+  },
+  {
+    to: `${USER_PATH.ROOT}/${USER_PATH.AI_ASSISTANT}`,
+    label: "AI Assistant",
+    icon: Bot,
   },
   {
     to: `${USER_PATH.ROOT}/${USER_PATH.TASKS}`,
@@ -319,8 +325,6 @@ export function UserLayout() {
             callerName={globalCallPeer?.name ?? "Người dùng"}
             callerAvatar={globalCallPeer?.avatar}
             audioOnly={globalCall.activeCall?.audioOnly ?? true}
-            selfParticipantId={identityUserId}
-            remoteParticipantMedia={globalCall.remoteParticipantMedia}
             startedAt={globalCall.activeCall?.startedAt}
             ringDeadlineAt={globalCall.ringDeadlineAt}
             ringDurationMs={globalCall.ringDurationMs}

@@ -12,6 +12,7 @@ import { AuthPage } from "@/pages/auth/AuthPage"
 import { HomePage } from "@/pages/home/HomePage"
 import { UserChatPage } from "@/pages/user/UserChatPage"
 import { UserFriendsPage } from "@/pages/user/UserFriendsPage"
+import { UserAiAssistantPage } from "@/pages/user/UserAiAssistantPage"
 import { UserNotificationsPage } from "@/pages/user/UserNotificationsPage"
 import { UserPostsPage } from "@/pages/user/UserPostsPage"
 import { UserTasksPage } from "@/pages/user/UserTasksPage"
@@ -65,6 +66,10 @@ export default function useRouteElements() {
         {
           path: USER_PATH.CHAT,
           element: <UserChatPage />,
+        },
+        {
+          path: USER_PATH.AI_ASSISTANT,
+          element: <UserAiAssistantPage />,
         },
         {
           path: USER_PATH.TASKS,
