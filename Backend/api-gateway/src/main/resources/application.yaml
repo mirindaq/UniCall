@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
   application:
     name: api-gateway
   main:
@@ -50,6 +52,10 @@ spring:
               uri: lb://CHAT-SERVICE
               predicates:
                 - Path=/api/v1/conversations/**
+            - id: ai-chat-api
+              uri: lb://CHAT-SERVICE
+              predicates:
+                - Path=/api/v1/ai/chat/**
             - id: task-api
               uri: lb://TASK-SERVICE
               predicates:
@@ -73,7 +79,7 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
 
 server:
-  port: 8088
+  port: ${API_GATEWAY_PORT:8088}
 
 app:
   security:

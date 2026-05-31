@@ -14,6 +14,8 @@ import iuh.fit.chat_service.entities.Conversation;
 import iuh.fit.chat_service.entities.GroupManagementSettings;
 import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.entities.ParticipantInfo;
+import iuh.fit.chat_service.events.MessageVectorIndexAction;
+import iuh.fit.chat_service.events.MessageVectorIndexEvent;
 import iuh.fit.chat_service.enums.AttachmentType;
 import iuh.fit.chat_service.enums.ConversationType;
 import iuh.fit.chat_service.enums.MessageEnum;
@@ -25,6 +27,7 @@ import iuh.fit.chat_service.services.ChatConversationService;
 import iuh.fit.chat_service.services.ChatMessageService;
 import iuh.fit.chat_service.services.AiAssistantService;
 import iuh.fit.chat_service.services.ConversationBlockService;
+import iuh.fit.chat_service.services.MessageVectorIndexEventPublisher;
 import iuh.fit.chat_service.services.RealtimeEventPublisher;
 import iuh.fit.common_service.dtos.response.base.PageResponse;
 import iuh.fit.common_service.exceptions.InvalidParamException;
@@ -92,6 +95,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final AiAssistantService aiAssistantService;
     @Qualifier("aiAssistantExecutor")
     private final Executor aiAssistantExecutor;
+    private final MessageVectorIndexEventPublisher messageVectorIndexEventPublisher;
     private final ConversationBlockService conversationBlockService;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
@@ -274,6 +278,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
         MessageResponse dto = MessageResponse.from(saved);
         broadcastToParticipants(conversation, dto);
+        scheduleVectorUpsert(saved);
         scheduleAiReplyIfNeeded(conversationId, identityUserId, normalizedContent);
         return dto;
     }
@@ -301,6 +306,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
+        scheduleVectorDelete(saved.getIdMessage());
         return dto;
     }
 
@@ -592,7 +598,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         }
         hidden.add(identityUserId);
         message.setHiddenForAccountIds(hidden);
-        messageRepository.save(message);
+        Message saved = messageRepository.save(message);
+        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+        scheduleVectorUpsert(saved);
     }
 
     private Message requireMessageInConversation(String conversationId, String messageId) {
@@ -726,6 +734,40 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         conversationRepository.save(conversation);
 
         broadcastToParticipants(conversation, MessageResponse.from(saved));
+        scheduleVectorUpsert(saved);
+    }
+
+    private void scheduleVectorUpsert(Message message) {
+        if (message == null || !StringUtils.hasText(message.getIdMessage())) {
+            return;
+        }
+        try {
+            messageVectorIndexEventPublisher.publish(
+                    MessageVectorIndexEvent.builder()
+                            .action(MessageVectorIndexAction.UPSERT)
+                            .conversationId(message.getIdConversation())
+                            .messageId(message.getIdMessage())
+                            .build()
+            );
+        } catch (Exception ignored) {
+            // Vector index là tính năng bổ sung, không làm gián đoạn luồng chat chính.
+        }
+    }
+
+    private void scheduleVectorDelete(String messageId) {
+        if (!StringUtils.hasText(messageId)) {
+            return;
+        }
+        try {
+            messageVectorIndexEventPublisher.publish(
+                    MessageVectorIndexEvent.builder()
+                            .action(MessageVectorIndexAction.DELETE)
+                            .messageId(messageId.trim())
+                            .build()
+            );
+        } catch (Exception ignored) {
+            // Vector index là tính năng bổ sung, không làm gián đoạn luồng chat chính.
+        }
     }
 
     private static List<MessageAttachmentRequest> toAttachmentRequests(List<Attachment> attachments) {

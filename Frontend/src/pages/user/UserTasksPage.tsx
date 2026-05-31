@@ -17,9 +17,9 @@ import {
   CheckCircle2,
   ChevronDown,
   Columns3,
+  Copy,
   Flag,
   GanttChartSquare,
-  Image,
   LayoutDashboard,
   List,
   MoreHorizontal,
@@ -926,6 +926,17 @@ export function UserTasksPage() {
     await handleMarkCompleteForTask(selectedTask)
   }
 
+  const handleCopyTaskId = async () => {
+    if (!selectedTask?.id) return
+    try {
+      await navigator.clipboard.writeText(selectedTask.id)
+      toast.success("Đã copy Task ID")
+    } catch (error) {
+      console.error("copy task id error", error)
+      toast.error("Không thể copy Task ID")
+    }
+  }
+
   const handleMarkCompleteForTask = async (task: TaskItem) => {
     const group = groups.find((item) => item.id === task.groupId) ?? selectedTaskGroup
     if (!group) {
@@ -1271,6 +1282,16 @@ export function UserTasksPage() {
                   </div>
                   <span className="text-slate-300">•</span>
                   <span>{selectedTaskGroup?.name || "Task group"}</span>
+                  <span className="text-slate-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyTaskId()}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+                    title="Copy Task ID"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy ID
+                  </button>
                 </div>
               </div>
 
@@ -2217,8 +2238,6 @@ function GanttView({
 }) {
   const DAY_MS = 24 * 60 * 60 * 1000
   const dayWidth = 60
-  const groupRowHeight = 40
-  const taskRowHeight = 52
 
   const timeline = useMemo(() => {
     type GanttGroupRow = {
@@ -2617,13 +2636,6 @@ function DashboardView({
   )
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleDateString()
-}
-
 function startOfDayTimestamp(value: string | number | Date) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return Date.now()
@@ -2761,12 +2773,6 @@ function isOverdue(value?: string | null) {
   if (!value) return false
   const date = new Date(value)
   return !Number.isNaN(date.getTime()) && date.getTime() < Date.now()
-}
-
-function formatAssignees(assigneeIds?: string[], resolveUserName?: (userId: string) => string) {
-  if (!assigneeIds || assigneeIds.length === 0) return "Unassigned"
-  if (!resolveUserName) return assigneeIds.join(", ")
-  return assigneeIds.map((id) => resolveUserName(id)).join(", ")
 }
 
 function buildDisplayName(firstName?: string | null, lastName?: string | null) {
