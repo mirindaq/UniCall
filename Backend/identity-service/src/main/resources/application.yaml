@@ -1,11 +1,11 @@
 spring:
   config:
-    import: optional:file:.env[.properties]
+    import: optional:file:../.env[.properties]
   application:
     name: identity-service
 
 server:
-  port: 8082
+  port: ${IDENTITY_SERVICE_PORT:8082}
 
 app:
   prefix: ${API_PREFIX:/api/v1}
@@ -20,7 +20,7 @@ app:
       role: ${ADMIN_BOOTSTRAP_ROLE:admin}
   firebase:
     enabled: ${FIREBASE_OTP_ENABLED:true}
-    credentials-path: ${FIREBASE_CREDENTIALS_PATH:C:/Users/Hoang/Downloads/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:./src/main/resources/unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json}
   security:
     cookie:
       secure: ${COOKIE_SECURE:false}

@@ -1,8 +1,10 @@
 spring:
+  config:
+    import: optional:file:../.env[.properties]
   application:
     name: notification-service
   datasource:
-    url: ${NOTIFICATION_DB_URL:jdbc:mysql://172.16.80.111:3306/unicall_notification_service?createDatabaseIfNotExist=true}
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/unicall_notification_service?createDatabaseIfNotExist=true}
     username: ${NOTIFICATION_DB_USERNAME:springstudent}
     password: ${NOTIFICATION_DB_PASSWORD:springstudent}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -12,7 +14,7 @@ spring:
     show-sql: false
     open-in-view: false
   rabbitmq:
-    host: ${RABBITMQ_HOST:172.16.80.111}
+    host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:admin123}
@@ -20,7 +22,7 @@ spring:
 server:
   servlet:
     context-path: /notification-service
-  port: 8085
+  port: ${NOTIFICATION_SERVICE_PORT:8085}
 
 api:
   prefix: /api/v1
