@@ -3,6 +3,7 @@ const API_V1_PREFIX = "/api/v1"
 export const API_PREFIXES = {
   auth: `${API_V1_PREFIX}/auth`,
   users: `${API_V1_PREFIX}/users`,
+  posts: `${API_V1_PREFIX}/posts`,
   friends: `${API_V1_PREFIX}/friends`,
   friendRequests: `${API_V1_PREFIX}/friend-requestes`,
   chat: `${API_V1_PREFIX}/chat`,

@@ -100,3 +100,24 @@ export interface AdminManagedUser {
   isActive: boolean
   deletionPending: boolean
 }
+
+export interface AdminManagedPost {
+  id: string
+  authorId: string
+  authorName: string
+  content: string
+  status: "PUBLISHED" | "HIDDEN" | "DELETED"
+  flaggedCount: number
+  createdAt: string
+}
+
+export interface AdminManagedGroup {
+  id: string
+  name: string
+  ownerId: string
+  ownerName: string
+  memberCount: number
+  isPrivate: boolean
+  pendingCount: number
+  createdAt: string
+}

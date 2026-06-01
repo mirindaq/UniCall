@@ -2,10 +2,11 @@ import axios from "axios"
 import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
 import { API_PREFIXES } from "@/constants/api-prefixes"
-import type { PageResponse, ResponseSuccess } from "@/types/api-response"
-import type { AdminManagedUser } from "@/types/admin"
 import type {
   AccountDeletionStatus,
+  AdminManagedGroup,
+  AdminManagedPost,
+  AdminManagedUser,
   FriendInvitePrivacy,
   PhoneSearchPrivacy,
   RequestAccountDeletionPayload,
@@ -16,14 +17,22 @@ import type {
 } from "@/types/user.type"
 
 const USER_API_PREFIX = API_PREFIXES.users
+const POSTS_API_PREFIX = API_PREFIXES.posts
+const CONVERSATIONS_API_PREFIX = API_PREFIXES.conversations
 const MY_PROFILE_CACHE_TTL_MS = 15_000
 const PROFILE_CACHE_TTL_MS = 5 * 60_000
 
 let myProfileCache: ResponseSuccess<UserProfile> | null = null
 let myProfileCacheAt = 0
 let myProfilePending: Promise<ResponseSuccess<UserProfile>> | null = null
-const profileByIdentityCache = new Map<string, { data: ResponseSuccess<UserProfile>; at: number }>()
-const profileByIdentityPending = new Map<string, Promise<ResponseSuccess<UserProfile>>>()
+const profileByIdentityCache = new Map<
+  string,
+  { data: ResponseSuccess<UserProfile>; at: number }
+>()
+const profileByIdentityPending = new Map<
+  string,
+  Promise<ResponseSuccess<UserProfile>>
+>()
 
 const setMyProfileCache = (value: ResponseSuccess<UserProfile>) => {
   myProfileCache = value
@@ -31,7 +40,11 @@ const setMyProfileCache = (value: ResponseSuccess<UserProfile>) => {
 }
 
 export const userService = {
-  getMyProfile: async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<ResponseSuccess<UserProfile>> => {
+  getMyProfile: async ({
+    forceRefresh = false,
+  }: {
+    forceRefresh?: boolean
+  } = {}): Promise<ResponseSuccess<UserProfile>> => {
     if (
       !forceRefresh &&
       myProfileCache != null &&
@@ -57,8 +70,13 @@ export const userService = {
     return myProfilePending
   },
 
-  updateMyProfile: async (payload: UpdateMyProfileRequest): Promise<ResponseSuccess<UserProfile>> => {
-    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/me`, payload)
+  updateMyProfile: async (
+    payload: UpdateMyProfileRequest
+  ): Promise<ResponseSuccess<UserProfile>> => {
+    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(
+      `${USER_API_PREFIX}/me`,
+      payload
+    )
     setMyProfileCache(response.data)
     return response.data
   },
@@ -66,9 +84,13 @@ export const userService = {
   updateMyAvatar: async (file: File): Promise<ResponseSuccess<UserProfile>> => {
     const form = new FormData()
     form.append("file", file)
-    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(`${USER_API_PREFIX}/me/avatar`, form, {
-      headers: { "Content-Type": "multipart/form-data" },
-    })
+    const response = await axiosClient.put<ResponseSuccess<UserProfile>>(
+      `${USER_API_PREFIX}/me/avatar`,
+      form,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      }
+    )
     setMyProfileCache(response.data)
     return response.data
   },
@@ -80,7 +102,7 @@ export const userService = {
   },
 
   getProfileByIdentityUserId: async (
-    identityUserId: string,
+    identityUserId: string
   ): Promise<ResponseSuccess<UserProfile>> => {
     const key = identityUserId.trim()
     const cached = profileByIdentityCache.get(key)
@@ -116,82 +138,89 @@ export const userService = {
     limit = 10,
     sortBy,
     search,
-  }: UserSearchQuery): Promise<ResponseSuccess<PageResponse<UserSearchItem>>> => {
-    const response = await axiosClient.get<ResponseSuccess<PageResponse<UserSearchItem>>>(`${USER_API_PREFIX}/search`, {
-      params: {
-        keyword,
-        page,
-        limit,
-        sortBy,
-        search,
-      },
+  }: UserSearchQuery): Promise<
+    ResponseSuccess<PageResponse<UserSearchItem>>
+  > => {
+    const response = await axiosClient.get<
+      ResponseSuccess<PageResponse<UserSearchItem>>
+    >(`${USER_API_PREFIX}/search`, {
+      params: { keyword, page, limit, sortBy, search },
     })
     return response.data
   },
 
-  getMyFriendInvitePrivacy: async (): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
-    const response = await axiosClient.get<ResponseSuccess<FriendInvitePrivacy>>(
-      `${USER_API_PREFIX}/me/privacy/friend-invites`,
-    )
+  getMyFriendInvitePrivacy: async (): Promise<
+    ResponseSuccess<FriendInvitePrivacy>
+  > => {
+    const response = await axiosClient.get<
+      ResponseSuccess<FriendInvitePrivacy>
+    >(`${USER_API_PREFIX}/me/privacy/friend-invites`)
     return response.data
   },
 
   updateMyFriendInvitePrivacy: async (
-    allowFriendInvites: boolean,
+    allowFriendInvites: boolean
   ): Promise<ResponseSuccess<FriendInvitePrivacy>> => {
-    const response = await axiosClient.put<ResponseSuccess<FriendInvitePrivacy>>(
-      `${USER_API_PREFIX}/me/privacy/friend-invites`,
-      { allowFriendInvites },
-    )
+    const response = await axiosClient.put<
+      ResponseSuccess<FriendInvitePrivacy>
+    >(`${USER_API_PREFIX}/me/privacy/friend-invites`, { allowFriendInvites })
     return response.data
   },
 
-  getMyPhoneSearchPrivacy: async (): Promise<ResponseSuccess<PhoneSearchPrivacy>> => {
+  getMyPhoneSearchPrivacy: async (): Promise<
+    ResponseSuccess<PhoneSearchPrivacy>
+  > => {
     const response = await axiosClient.get<ResponseSuccess<PhoneSearchPrivacy>>(
-      `${USER_API_PREFIX}/me/privacy/phone-search`,
+      `${USER_API_PREFIX}/me/privacy/phone-search`
     )
     return response.data
   },
 
   updateMyPhoneSearchPrivacy: async (
-    allowPhoneSearch: boolean,
+    allowPhoneSearch: boolean
   ): Promise<ResponseSuccess<PhoneSearchPrivacy>> => {
     const response = await axiosClient.put<ResponseSuccess<PhoneSearchPrivacy>>(
       `${USER_API_PREFIX}/me/privacy/phone-search`,
-      { allowPhoneSearch },
+      { allowPhoneSearch }
     )
     return response.data
   },
 
   requestMyAccountDeletion: async (
-    payload: RequestAccountDeletionPayload,
+    payload: RequestAccountDeletionPayload
   ): Promise<ResponseSuccess<AccountDeletionStatus>> => {
-    const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
-      `${USER_API_PREFIX}/me/deletion-request`,
-      payload,
-    )
+    const response = await axiosClient.post<
+      ResponseSuccess<AccountDeletionStatus>
+    >(`${USER_API_PREFIX}/me/deletion-request`, payload)
     return response.data
   },
 
-  getMyAccountDeletionStatus: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
-    const response = await axiosClient.get<ResponseSuccess<AccountDeletionStatus>>(
-      `${USER_API_PREFIX}/me/deletion-request/status`,
-    )
+  getMyAccountDeletionStatus: async (): Promise<
+    ResponseSuccess<AccountDeletionStatus>
+  > => {
+    const response = await axiosClient.get<
+      ResponseSuccess<AccountDeletionStatus>
+    >(`${USER_API_PREFIX}/me/deletion-request/status`)
     return response.data
   },
 
-  cancelMyAccountDeletionRequest: async (): Promise<ResponseSuccess<AccountDeletionStatus>> => {
-    const response = await axiosClient.post<ResponseSuccess<AccountDeletionStatus>>(
-      `${USER_API_PREFIX}/me/deletion-request/cancel`,
-    )
+  cancelMyAccountDeletionRequest: async (): Promise<
+    ResponseSuccess<AccountDeletionStatus>
+  > => {
+    const response = await axiosClient.post<
+      ResponseSuccess<AccountDeletionStatus>
+    >(`${USER_API_PREFIX}/me/deletion-request/cancel`)
     return response.data
   },
 
   checkAdminAccess: async (): Promise<ResponseSuccess<boolean>> => {
-    const response = await axios.get<ResponseSuccess<boolean>>(buildApiUrl(`${USER_API_PREFIX}/admin/access`), {
-      withCredentials: true,
-      headers: { "Content-Type": "application/json" },
-    })
+    const response = await axios.get<ResponseSuccess<boolean>>(
+      buildApiUrl(`${USER_API_PREFIX}/admin/access`),
+      {
+        withCredentials: true,
+        headers: { "Content-Type": "application/json" },
+      }
+    )
     return response.data
   },
 
@@ -204,29 +233,85 @@ export const userService = {
     page?: number
     limit?: number
   }): Promise<ResponseSuccess<PageResponse<AdminManagedUser>>> => {
-    const response = await axiosClient.get<ResponseSuccess<PageResponse<AdminManagedUser>>>(
-      `${USER_API_PREFIX}/admin/users`,
-      {
-        params: {
-          keyword,
-          page,
-          limit,
-        },
-      }
-    )
+    const response = await axiosClient.get<
+      ResponseSuccess<PageResponse<AdminManagedUser>>
+    >(`${USER_API_PREFIX}/admin/users`, { params: { keyword, page, limit } })
     return response.data
   },
 
-  blockUserByAdmin: async (identityUserId: string): Promise<ResponseSuccess<AdminManagedUser>> => {
+  blockUserByAdmin: async (
+    identityUserId: string
+  ): Promise<ResponseSuccess<AdminManagedUser>> => {
     const response = await axiosClient.put<ResponseSuccess<AdminManagedUser>>(
       `${USER_API_PREFIX}/admin/users/${identityUserId}/block`
     )
     return response.data
   },
 
-  unblockUserByAdmin: async (identityUserId: string): Promise<ResponseSuccess<AdminManagedUser>> => {
+  unblockUserByAdmin: async (
+    identityUserId: string
+  ): Promise<ResponseSuccess<AdminManagedUser>> => {
     const response = await axiosClient.put<ResponseSuccess<AdminManagedUser>>(
       `${USER_API_PREFIX}/admin/users/${identityUserId}/unblock`
+    )
+    return response.data
+  },
+
+  getAdminPosts: async ({
+    keyword,
+    page = 1,
+    limit = 20,
+  }: {
+    keyword?: string
+    page?: number
+    limit?: number
+  }): Promise<ResponseSuccess<PageResponse<AdminManagedPost>>> => {
+    const response = await axiosClient.get<
+      ResponseSuccess<PageResponse<AdminManagedPost>>
+    >(`${POSTS_API_PREFIX}/admin/posts`, { params: { keyword, page, limit } })
+    return response.data
+  },
+
+  hidePostByAdmin: async (
+    postId: string
+  ): Promise<ResponseSuccess<AdminManagedPost>> => {
+    const response = await axiosClient.put<ResponseSuccess<AdminManagedPost>>(
+      `${POSTS_API_PREFIX}/admin/posts/${postId}/hide`
+    )
+    return response.data
+  },
+
+  restorePostByAdmin: async (
+    postId: string
+  ): Promise<ResponseSuccess<AdminManagedPost>> => {
+    const response = await axiosClient.put<ResponseSuccess<AdminManagedPost>>(
+      `${POSTS_API_PREFIX}/admin/posts/${postId}/restore`
+    )
+    return response.data
+  },
+
+  getAdminGroups: async ({
+    keyword,
+    page = 1,
+    limit = 20,
+  }: {
+    keyword?: string
+    page?: number
+    limit?: number
+  }): Promise<ResponseSuccess<PageResponse<AdminManagedGroup>>> => {
+    const response = await axiosClient.get<
+      ResponseSuccess<PageResponse<AdminManagedGroup>>
+    >(`${CONVERSATIONS_API_PREFIX}/admin/groups`, {
+      params: { keyword, page, limit },
+    })
+    return response.data
+  },
+
+  toggleGroupVisibilityByAdmin: async (
+    groupId: string
+  ): Promise<ResponseSuccess<AdminManagedGroup>> => {
+    const response = await axiosClient.put<ResponseSuccess<AdminManagedGroup>>(
+      `${CONVERSATIONS_API_PREFIX}/admin/groups/${groupId}/visibility`
     )
     return response.data
   },

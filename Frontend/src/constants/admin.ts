@@ -2,7 +2,7 @@ export const ADMIN_PATH = {
   ROOT: "/admin",
   DASHBOARD: "dashboard",
   USERS: "users",
-  CONVERSATIONS: "conversations",
+  POSTS: "posts",
   GROUPS: "groups",
   MODERATION: "moderation",
   REPORTS: "reports",

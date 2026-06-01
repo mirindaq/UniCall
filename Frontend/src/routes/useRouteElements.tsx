@@ -6,7 +6,9 @@ import { USER_PATH } from "@/constants/user"
 import { AdminLayout } from "@/layouts/AdminLayout"
 import { UserLayout } from "@/layouts/UserLayout"
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage"
+import { AdminPostsPage } from "@/pages/admin/AdminPostsPage"
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage"
+import { AdminGroupsPage } from "@/pages/admin/AdminGroupsPage"
 import { AdminLoginPage } from "@/pages/auth/AdminLoginPage"
 import { AuthPage } from "@/pages/auth/AuthPage"
 import { HomePage } from "@/pages/home/HomePage"
@@ -61,7 +63,9 @@ export default function useRouteElements() {
       children: [
         {
           index: true,
-          element: <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />,
+          element: (
+            <Navigate to={`${USER_PATH.ROOT}/${USER_PATH.CHAT}`} replace />
+          ),
         },
         {
           path: USER_PATH.CHAT,
@@ -110,6 +114,14 @@ export default function useRouteElements() {
         {
           path: ADMIN_PATH.USERS,
           element: <AdminUsersPage />,
+        },
+        {
+          path: ADMIN_PATH.POSTS,
+          element: <AdminPostsPage />,
+        },
+        {
+          path: ADMIN_PATH.GROUPS,
+          element: <AdminGroupsPage />,
         },
       ],
     },
