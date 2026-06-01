@@ -113,7 +113,7 @@ export function UserProfileDialog({ open, onOpenChange, onProfileChanged }: User
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] min-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white">
         <DialogHeader className="flex-row items-center justify-between">
           <DialogTitle className="text-lg text-slate-900">Thông tin cá nhân</DialogTitle>
         </DialogHeader>

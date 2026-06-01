@@ -261,7 +261,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] min-w-[920px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white p-0">
         <DialogHeader className="border-b border-slate-200 px-6 py-4">
           <DialogTitle className="text-lg text-slate-900">Cài đặt</DialogTitle>
         </DialogHeader>
@@ -269,8 +269,8 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
         {isLoading || !profile ? (
           <div className="px-6 py-8 text-center text-sm text-slate-500">Đang tải dữ liệu cài đặt...</div>
         ) : (
-          <div className="grid h-[72vh] grid-cols-[220px_1fr]">
-            <aside className="border-r border-slate-200 bg-slate-50 p-3">
+          <div className="grid h-[78vh] grid-cols-1 lg:h-[72vh] lg:grid-cols-[220px_1fr]">
+            <aside className="border-b border-slate-200 bg-slate-50 p-3 lg:border-r lg:border-b-0">
               <button
                 type="button"
                 className={`mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${
@@ -297,7 +297,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
               </button>
             </aside>
 
-            <section className="overflow-y-auto bg-slate-50 p-5">
+            <section className="overflow-y-auto bg-slate-50 p-3 sm:p-5">
               {activeTab === "privacy" ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">

@@ -169,7 +169,7 @@ export function FriendInvitationsTab() {
 
   if (isLoadingRequests) {
     return (
-      <div className="flex h-full min-h-0 flex-col p-4">
+      <div className="flex h-full min-h-0 flex-col p-3 sm:p-4">
         <div className="grid flex-1 place-items-center rounded-2xl bg-slate-100">
           <p className="text-sm text-slate-500">Đang tải lời mời kết bạn...</p>
         </div>
@@ -187,7 +187,7 @@ export function FriendInvitationsTab() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-4">
+    <div className="flex h-full min-h-0 flex-col p-3 sm:p-4">
       <div className="grid flex-1 min-h-0 gap-6 overflow-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
         <section className="space-y-4">
           <FriendshipCollapsibleTitle

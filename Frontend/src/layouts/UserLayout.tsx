@@ -172,8 +172,8 @@ export function UserLayout() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-100">
-      <aside className="flex w-16 shrink-0 flex-col items-center justify-between bg-blue-600 py-4 text-white shadow-lg">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-slate-100 md:h-screen md:flex-row">
+      <aside className="hidden w-16 shrink-0 flex-col items-center justify-between bg-blue-600 py-4 text-white shadow-lg md:flex">
         <div className="flex w-full flex-col items-center gap-4">
           <button
             type="button"
@@ -280,11 +280,92 @@ export function UserLayout() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 md:hidden">
+        <p className="text-sm font-semibold text-slate-900">UniCall</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex size-9 items-center justify-center rounded-full bg-blue-600/10"
+            onClick={() => setIsProfileOpen(true)}
+          >
+            <Avatar className="size-8 border border-blue-200">
+              <AvatarImage src={me?.avatar ?? undefined} alt="my-avatar" />
+              <AvatarFallback className="bg-blue-100 text-xs font-semibold text-blue-700">
+                {`${me?.firstName?.[0] ?? "U"}${me?.lastName?.[0] ?? ""}`.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-700"
+                title="Cài đặt"
+              >
+                <Settings className="size-4.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="bottom"
+              align="end"
+              sideOffset={8}
+              className="w-56 rounded-xl border border-slate-200 p-1.5 shadow-lg"
+            >
+              <DropdownMenuItem
+                className="h-10 rounded-md px-2.5"
+                onSelect={() => setIsProfileOpen(true)}
+              >
+                <User className="mr-2 size-4.5 text-slate-700" />
+                <span className="text-sm text-slate-800">Thông tin tài khoản</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="h-10 rounded-md px-2.5"
+                onSelect={() => setIsSettingsOpen(true)}
+              >
+                <Settings className="mr-2 size-4.5 text-slate-700" />
+                <span className="text-sm text-slate-800">Cài đặt</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="h-10 rounded-md px-2.5 text-red-600 focus:bg-red-50 focus:text-red-600"
+                onClick={() => setIsConfirmLogoutOpen(true)}
+              >
+                <LogOut className="mr-2 size-4.5" />
+                <span className="text-sm">Đăng xuất</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <section className="flex-1 overflow-hidden bg-white">
           <Outlet />
         </section>
       </main>
+
+      <nav className="grid shrink-0 grid-cols-6 border-t border-slate-200 bg-white px-1 py-1 md:hidden">
+        {userTabs.map((tab) => {
+          const Icon = tab.icon
+          return (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              className={({ isActive }) =>
+                `flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] transition ${
+                  isActive
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-500 hover:bg-slate-50"
+                }`
+              }
+            >
+              <Icon className="size-4" />
+              <span className="truncate">{tab.label}</span>
+            </NavLink>
+          )
+        })}
+      </nav>
 
       <AlertDialog open={isConfirmLogoutOpen} onOpenChange={setIsConfirmLogoutOpen}>
         <AlertDialogContent size="sm" className="max-w-md rounded-xl">

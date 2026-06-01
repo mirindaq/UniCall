@@ -128,14 +128,14 @@ export function AdminLayout() {
       </Sidebar>
 
       <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-2 border-b bg-background/95 px-6 backdrop-blur supports-backdrop-filter:bg-background/70">
+        <header className="sticky top-0 z-10 flex h-16 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-backdrop-filter:bg-background/70 sm:px-6">
           <SidebarTrigger className="-ml-1" />
           <div className="ml-2">
             <p className="text-sm font-semibold text-slate-900">Trang quản trị UniCall</p>
-            <p className="text-xs text-slate-500">Mock template theo kiến trúc admin layout</p>
+            <p className="hidden text-xs text-slate-500 sm:block">Mock template theo kiến trúc admin layout</p>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <Button variant="ghost" size="icon" className="relative">
               <BellIcon className="size-5" />
               <Badge className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full p-0 text-[10px]">
@@ -143,7 +143,7 @@ export function AdminLayout() {
               </Badge>
             </Button>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="hidden h-6 sm:block" />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -155,11 +155,11 @@ export function AdminLayout() {
                     <AvatarImage src="/avatars/admin.png" alt={userName} />
                     <AvatarFallback className="rounded-lg">{getInitials(userName)}</AvatarFallback>
                   </Avatar>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
+                  <div className="hidden flex-1 text-left text-sm leading-tight sm:grid">
                     <span className="truncate font-semibold">{userName}</span>
                     <span className="truncate text-xs">{userRole}</span>
                   </div>
-                  <ChevronUpIcon className="ml-auto size-4" />
+                  <ChevronUpIcon className="ml-auto hidden size-4 sm:block" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
 
@@ -198,8 +198,8 @@ export function AdminLayout() {
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col bg-slate-50 p-4">
-          <div className="flex flex-1 flex-col rounded-lg bg-white p-6 shadow-sm">
+        <div className="flex flex-1 flex-col bg-slate-50 p-2 sm:p-4">
+          <div className="flex flex-1 flex-col rounded-lg bg-white p-3 shadow-sm sm:p-6">
             <Outlet />
           </div>
         </div>

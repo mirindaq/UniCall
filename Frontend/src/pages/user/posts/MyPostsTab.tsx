@@ -154,7 +154,7 @@ export function MyPostsTab() {
     <>
       <div className="flex h-full flex-col">
         <ScrollArea className="flex-1">
-          <div className="mx-auto max-w-2xl space-y-4 p-4">
+          <div className="mx-auto max-w-2xl space-y-4 p-3 sm:p-4">
             {/* Loading State */}
             {isLoadingPosts && (
               <div className="flex items-center justify-center py-12">

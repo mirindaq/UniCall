@@ -325,14 +325,13 @@ export function FeedTab() {
   const myName = myProfile
     ? `${myProfile.lastName ?? ""} ${myProfile.firstName ?? ""}`.trim()
     : "Me"
-  console.log('my profile: ', myProfile);
-
   const currentUserId = myProfile?.identityUserId
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-4 p-4">        {/* Create Post Card */}
+        <div className="mx-auto max-w-2xl space-y-4 p-3 sm:p-4">
+          {/* Create Post Card */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-start gap-3">
@@ -383,8 +382,8 @@ export function FeedTab() {
             )}
 
             <Separator className="mx-4" />
-            <CardFooter className="pt-3 flex items-center justify-between">
-              <div className="flex gap-2 items-center">
+            <CardFooter className="flex flex-col items-stretch justify-between gap-3 pt-3 sm:flex-row sm:items-center">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -414,7 +413,7 @@ export function FeedTab() {
                   Video
                 </Button>
                 <Select value={postPrivacy} onValueChange={(value) => setPostPrivacy(value as PostPrivacy)}>
-                  <SelectTrigger className="w-35 h-8 text-xs">
+                  <SelectTrigger className="h-8 w-[132px] text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -436,7 +435,7 @@ export function FeedTab() {
               <Button
                 onClick={handleCreatePost}
                 disabled={(!newPostContent.trim() && selectedFiles.length === 0) || isCreating}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
               >
                 {isCreating ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -449,20 +448,6 @@ export function FeedTab() {
           {/* Loading State */}
           {isLoadingFeed && (
             <div className="flex items-center justify-center py-12">
-
-              {/* Load More Button */}
-              {!isLoadingFeed && currentPage < totalPages && (
-                <div className="flex justify-center pt-4">
-                  <Button
-                    variant="secondary"
-                    onClick={handleLoadMore}
-                    disabled={isLoadingMore}
-                    className="h-10 rounded-xl bg-slate-100 px-6 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-                  >
-                    {isLoadingMore ? "Đang tải..." : "Xem thêm"}
-                  </Button>
-                </div>
-              )}
               <Loader2 className="size-8 animate-spin text-primary" />
             </div>
           )}
@@ -483,9 +468,6 @@ export function FeedTab() {
           {!isLoadingFeed &&
             posts.map((post) => {
               const isMyPost = post.authorId === currentUserId
-              {
-                console.log('isMyPost: ', isMyPost, '. ', post.authorId, '. ', currentUserId);
-              }
               return (
                 <PostCard
                   key={post.id}
@@ -499,6 +481,19 @@ export function FeedTab() {
                 />
               )
             })}
+
+          {!isLoadingFeed && currentPage < totalPages ? (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="secondary"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+                className="h-10 rounded-xl bg-slate-100 px-6 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              >
+                {isLoadingMore ? "Đang tải..." : "Xem thêm"}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
 

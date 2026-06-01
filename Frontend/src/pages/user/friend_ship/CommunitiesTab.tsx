@@ -83,9 +83,9 @@ export function CommunitiesTab() {
     <div className="flex h-full min-h-0 flex-col">
       <FriendshipTabTitle title={`Danh sách nhóm (${groupConversations.length})`} />
 
-      <div className="flex min-h-0 flex-1 p-4">
+      <div className="flex min-h-0 flex-1 p-3 sm:p-4">
         <div className="flex h-full min-h-0 w-full flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+          <div className="flex flex-col gap-3 rounded-xl bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">Nhóm của bạn</p>
               <p className="mt-1 text-xs text-slate-500">
@@ -96,6 +96,7 @@ export function CommunitiesTab() {
             <Button
               variant="outline"
               size="sm"
+              className="w-full sm:w-auto"
               onClick={() => void refetch()}
               disabled={isLoading || isRefetching}
             >
@@ -125,7 +126,7 @@ export function CommunitiesTab() {
                   key={conversation.idConversation}
                   type="button"
                   onClick={() => openGroupConversation(conversation.idConversation)}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50"
+                  className="flex w-full flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/50 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-center gap-4">
                     <SeedAvatar
@@ -149,7 +150,7 @@ export function CommunitiesTab() {
                     </div>
                   </div>
 
-                  <div className="ml-4 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 sm:ml-4">
                     <MessageCircleMore className="size-3.5" />
                     Mở chat
                   </div>

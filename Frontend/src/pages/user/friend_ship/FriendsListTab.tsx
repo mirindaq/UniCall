@@ -241,9 +241,9 @@ export function FriendsListTab() {
     <div className="flex h-full min-h-0 flex-col">
       <FriendshipTabTitle title={`Bạn bè (${filteredFriends.length})`} />
 
-      <div className="flex min-h-0 flex-1 p-4">
+      <div className="flex min-h-0 flex-1 p-3 sm:p-4">
         <div className="flex h-full min-h-0 w-full flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <div className="grid gap-3 lg:grid-cols-[320px_320px]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FriendshipIconSelect
               icon={ArrowUpDown}
               value={sortBy}
@@ -293,7 +293,7 @@ export function FriendsListTab() {
                     {items.map((friend: any) => (
                       <div
                         key={friend.id}
-                        className="flex items-center justify-between rounded-xl px-2 py-2.5 transition hover:bg-slate-50"
+                        className="flex flex-col gap-2 rounded-xl px-2 py-2.5 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="flex min-w-0 items-center gap-4">
                           <Avatar size="lg">
@@ -315,7 +315,7 @@ export function FriendsListTab() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                          className="w-full text-red-600 hover:bg-red-50 hover:text-red-700 sm:w-auto"
                           onClick={() => setRemoveTarget({ id: friend.id, name: friend.name })}
                         >
                           Hủy kết bạn

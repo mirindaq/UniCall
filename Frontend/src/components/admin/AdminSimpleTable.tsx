@@ -16,24 +16,26 @@ interface AdminSimpleTableProps<T> {
 export function AdminSimpleTable<T>({ columns, rows }: AdminSimpleTableProps<T>) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((column) => (
-              <TableHead key={column.key}>{column.title}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row, index) => (
-            <TableRow key={index}>
+      <div className="overflow-x-auto">
+        <Table className="min-w-[760px]">
+          <TableHeader>
+            <TableRow>
               {columns.map((column) => (
-                <TableCell key={column.key}>{column.render(row)}</TableCell>
+                <TableHead key={column.key}>{column.title}</TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, index) => (
+              <TableRow key={index}>
+                {columns.map((column) => (
+                  <TableCell key={column.key}>{column.render(row)}</TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }

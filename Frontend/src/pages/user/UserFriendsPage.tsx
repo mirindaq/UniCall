@@ -48,12 +48,12 @@ export function UserFriendsPage() {
   }
 
   return (
-    <div className="flex h-full w-full min-h-0 overflow-hidden bg-background lg:flex-row">
+    <div className="flex h-full w-full min-h-0 flex-col overflow-hidden bg-background lg:flex-row">
       <FriendshipSidebar tabs={friendTabs} activeTab={activeTab} onChangeTab={setActiveTab} />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <FriendshipPageHeader title={selectedTab.label} icon={selectedTab.icon} />
-        <div className="flex-1 min-h-0 overflow-hidden">{renderContent()}</div>
+        <div className="min-h-0 flex-1 overflow-hidden">{renderContent()}</div>
       </section>
     </div>
   )

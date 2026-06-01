@@ -128,27 +128,29 @@ export function FriendshipSidebar<T extends string>({
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-2 px-3 py-0">
-          {tabs.map((tab) => {
-            const TabIcon = tab.icon
+        <div className="px-3 py-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+            {tabs.map((tab) => {
+              const TabIcon = tab.icon
 
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => onChangeTab(tab.value)}
-                className={cn(
-                  "flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition",
-                  activeTab === tab.value
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-700 hover:bg-slate-50",
-                )}
-              >
-                <TabIcon className="size-5 shrink-0" />
-                <span className="line-clamp-2">{tab.label}</span>
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => onChangeTab(tab.value)}
+                  className={cn(
+                    "flex min-h-11 min-w-[170px] items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition lg:min-h-12 lg:w-full lg:min-w-0 lg:gap-3 lg:py-3",
+                    activeTab === tab.value
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  <TabIcon className="size-4.5 shrink-0 lg:size-5" />
+                  <span className="line-clamp-2">{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 

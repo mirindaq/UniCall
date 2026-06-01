@@ -959,8 +959,8 @@ export function UserTasksPage() {
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-[#f5f6fa] text-slate-800">
-        <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <div className="flex h-full min-h-0 flex-col bg-[#f5f6fa] text-slate-800 lg:flex-row">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
           <div className="px-5 py-4">
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900">Tasks</h2>
@@ -1025,7 +1025,7 @@ export function UserTasksPage() {
         </aside>
 
         <main className="min-w-0 flex-1 overflow-auto">
-          <div className="border-b border-slate-200 bg-white px-5 py-4">
+          <div className="border-b border-slate-200 bg-white px-3 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -1043,6 +1043,51 @@ export function UserTasksPage() {
                       ? `${selectedGroup.memberIds.length} thành viên`
                       : "Chọn task group để bắt đầu"}
                 </p>
+                <div className="mt-3 space-y-2 lg:hidden">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant={scope === "my" ? "default" : "outline"}
+                      className={scope === "my" ? "h-9 rounded-md bg-slate-900 px-3 text-white hover:bg-slate-800" : "h-9 rounded-md"}
+                      onClick={() => setScope("my")}
+                    >
+                      All My Tasks
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-md"
+                      onClick={() => setIsCreateGroupOpen(true)}
+                    >
+                      <Plus className="mr-1 size-4" />
+                      New Group
+                    </Button>
+                  </div>
+
+                  {groups.length > 0 ? (
+                    <Select
+                      value={scope === "group" && selectedGroupId ? selectedGroupId : "__my__"}
+                      onValueChange={(value) => {
+                        if (value === "__my__") {
+                          setScope("my")
+                          return
+                        }
+                        setScope("group")
+                        setSelectedGroupId(value)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full rounded-md border-slate-200 bg-white text-sm">
+                        <SelectValue placeholder="Chọn task group" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__my__">All My Tasks</SelectItem>
+                        {groups.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </div>
               </div>
 
               {selectedGroup ? (
@@ -1080,7 +1125,7 @@ export function UserTasksPage() {
             </div>
           </div>
 
-          <div className="px-5 py-4">
+          <div className="px-3 py-4 sm:px-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 {scope === "group" ? (
@@ -1235,9 +1280,9 @@ export function UserTasksPage() {
 
       <Sheet open={Boolean(selectedTask)} onOpenChange={(open) => (!open ? closeTaskDetail() : undefined)}>
         {selectedTask ? (
-          <SheetContent side="right" className="w-full p-0 sm:max-w-[460px]!">
+          <SheetContent side="right" className="w-full p-0 sm:max-w-[460px]">
             <div className="flex h-full min-h-0 flex-col bg-slate-50">
-              <div className="border-b border-slate-200 bg-white px-5 py-4 pr-12">
+              <div className="border-b border-slate-200 bg-white px-3 py-4 pr-10 sm:px-5 sm:pr-12">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant={isTaskComplete(selectedTask) ? "secondary" : "outline"}
@@ -1266,7 +1311,7 @@ export function UserTasksPage() {
                   <div className="text-xs text-slate-400">Tạo lúc {formatDateTime(selectedTask.createdAt)}</div>
                 </div>
                 <Input
-                  className={`mt-3 h-11 border-slate-200 bg-slate-50 text-3xl font-semibold ${
+                  className={`mt-3 h-11 border-slate-200 bg-slate-50 text-2xl font-semibold sm:text-3xl ${
                     isTaskComplete(selectedTask) ? "text-slate-400 line-through" : "text-slate-900"
                   }`}
                   value={detailTitle}
@@ -1296,7 +1341,7 @@ export function UserTasksPage() {
                 </div>
               </div>
 
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-5">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <InfoCard icon={User} label="Assignee">
                     <div className="space-y-2">
@@ -1745,7 +1790,7 @@ export function UserTasksPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nhóm trạng thái</p>
                 <Select value={taskColumnId} onValueChange={setTaskColumnId}>
@@ -1843,7 +1888,7 @@ export function UserTasksPage() {
               ) : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input
                 className="h-11 rounded-lg"
                 type="date"
@@ -1961,7 +2006,7 @@ function ListView({
             <div className="px-4 py-6 text-sm text-slate-400">Không có task</div>
           ) : (
             <div className="overflow-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-[980px] text-sm">
                 <thead className="border-b border-slate-100 bg-slate-50/70 text-slate-500">
                   <tr>
                     <th className="w-10 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide"></th>
@@ -2101,11 +2146,11 @@ function KanbanView({
 }) {
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex min-w-max gap-3">
+      <div className="flex min-w-max gap-3 px-0.5">
         {groupedTasks.map((column) => (
           <div
             key={column.columnId}
-            className={`w-80 rounded-xl border p-3 transition ${
+            className={`w-[85vw] max-w-[360px] rounded-xl border p-3 transition sm:w-80 ${
               enableDnD && (dragOverColumnId === column.columnId || dragOverColumnOrderId === column.columnId)
                 ? "border-blue-300 bg-blue-50"
                 : "border-slate-200 bg-white"
@@ -2348,8 +2393,9 @@ function GanttView({
   const todayLineLeft = timeline.todayIndex !== null ? timeline.todayIndex * dayWidth : null
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="grid grid-cols-[520px_minmax(720px,1fr)]">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="min-w-[1240px]">
+        <div className="grid grid-cols-[520px_minmax(720px,1fr)]">
         <div className="border-r border-slate-200 bg-white">
           <div className="grid h-[74px] grid-cols-[minmax(0,1fr)_120px] items-end border-b border-slate-200 px-4 pb-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Task Title</p>
@@ -2495,6 +2541,7 @@ function GanttView({
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
@@ -2834,7 +2881,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
           Smart Analysis
         </span>
       </div>
-      <p className={`mt-4 text-[78px] leading-none font-semibold tracking-tight ${accent}`}>{value}</p>
+      <p className={`mt-4 text-5xl leading-none font-semibold tracking-tight sm:text-6xl xl:text-[78px] ${accent}`}>{value}</p>
     </div>
   )
 }

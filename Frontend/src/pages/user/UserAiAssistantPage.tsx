@@ -151,7 +151,7 @@ export function UserAiAssistantPage() {
   }
 
   return (
-    <div className="h-full w-full bg-slate-100 p-4 md:p-6">
+    <div className="h-full w-full bg-slate-100 p-2.5 sm:p-4 md:p-6">
       <section className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-200 bg-linear-to-r from-blue-50 via-cyan-50 to-sky-50 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -190,7 +190,7 @@ export function UserAiAssistantPage() {
                 className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-3xl rounded-2xl border px-4 py-3 shadow-xs ${
+                  className={`w-full rounded-2xl border px-3 py-3 shadow-xs sm:w-auto sm:max-w-3xl sm:px-4 ${
                     message.role === "user"
                       ? "border-blue-600 bg-blue-600 text-white"
                       : "border-slate-200 bg-white text-slate-800"
@@ -288,14 +288,14 @@ export function UserAiAssistantPage() {
                 }
               }}
             />
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-slate-500">
                 Enter để gửi, Shift + Enter để xuống dòng.
               </p>
               <Button
                 type="submit"
                 disabled={!canSend}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 hover:bg-blue-700"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 hover:bg-blue-700 sm:w-auto"
               >
                 <CornerDownLeft className="size-4" />
                 Gửi
