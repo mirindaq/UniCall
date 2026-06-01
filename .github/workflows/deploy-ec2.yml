@@ -1,0 +1,176 @@
+name: Deploy To EC2
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+jobs:
+  connect-ec2:
+    if: github.event_name != 'pull_request' || github.head_ref == 'develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check EC2 SSH connection
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          request_pty: true
+          script: |
+            set -euo pipefail
+            sudo -n true
+            echo "EC2 connected successfully."
+            sudo uname -a
+
+  clone-project:
+    if: github.event_name != 'pull_request' || github.head_ref == 'develop'
+    runs-on: ubuntu-latest
+    needs: connect-ec2
+    timeout-minutes: 15
+    steps:
+      - name: Clone or pull source on EC2
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          request_pty: true
+          envs: BRANCH_NAME
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/home/danhdd/deploy"
+            REPO_URL="https://github.com/mirindaq/UniCall.git"
+            BRANCH_NAME="${BRANCH_NAME:-main}"
+            EXPECTED_DIR="/home/danhdd/deploy"
+
+            if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+              echo "Invalid deploy directory: $APP_DIR"
+              exit 1
+            fi
+
+            if ! sudo test -d "$APP_DIR"; then
+              echo "Deploy directory does not exist: $APP_DIR"
+              exit 1
+            fi
+
+            cd "$APP_DIR"
+
+            echo "Cleaning directory: $APP_DIR"
+            sudo find "$APP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+
+            echo "Cloning repository: $REPO_URL (branch: $BRANCH_NAME)"
+            sudo git clone --branch "$BRANCH_NAME" --single-branch "$REPO_URL" .
+
+  fake-ci:
+    if: github.event_name != 'pull_request' || github.head_ref == 'develop'
+    runs-on: ubuntu-latest
+    needs: clone-project
+    timeout-minutes: 5
+    steps:
+      - name: Fake CI (5s)
+        run: |
+          echo "Running fake CI..."
+          sleep 5
+          echo "Fake CI passed."
+
+  deploy:
+    if: github.event_name != 'pull_request' || github.head_ref == 'develop'
+    runs-on: ubuntu-latest
+    needs: fake-ci
+    timeout-minutes: 30
+    steps:
+      - name: Deploy docker compose on EC2
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          request_pty: true
+          envs: BRANCH_NAME
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/home/danhdd/deploy"
+            REPO_URL="https://github.com/mirindaq/UniCall.git"
+            BRANCH_NAME="${BRANCH_NAME:-main}"
+            EXPECTED_DIR="/home/danhdd/deploy"
+
+            if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+              echo "Invalid deploy directory: $APP_DIR"
+              exit 1
+            fi
+
+            if ! sudo test -d "$APP_DIR/.git"; then
+              echo "Repository missing. Clone first: $REPO_URL (branch: $BRANCH_NAME)"
+              sudo git clone --branch "$BRANCH_NAME" --single-branch "$REPO_URL" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            BACKEND_ENV_SRC="/home/danhdd/.env"
+            FRONTEND_ENV_SRC="/home/danhdd/fe.env"
+            FIREBASE_JSON_NAME="unicall-dddf4-firebase-adminsdk-fbsvc-7b9c486043.json"
+            FIREBASE_JSON_SRC="/home/danhdd/$FIREBASE_JSON_NAME"
+
+            BACKEND_ENV_DEST="$APP_DIR/Backend/.env"
+            FRONTEND_ENV_DEST="$APP_DIR/Frontend/.env"
+            FIREBASE_JSON_DEST="$APP_DIR/Backend/identity-service/src/main/resources/$FIREBASE_JSON_NAME"
+
+            if [ ! -f "$BACKEND_ENV_SRC" ]; then
+              echo "Missing backend env file: $BACKEND_ENV_SRC"
+              exit 1
+            fi
+
+            if [ ! -f "$FRONTEND_ENV_SRC" ]; then
+              echo "Missing frontend env file: $FRONTEND_ENV_SRC"
+              exit 1
+            fi
+
+            if [ ! -f "$FIREBASE_JSON_SRC" ]; then
+              echo "Missing Firebase credential file: $FIREBASE_JSON_SRC"
+              exit 1
+            fi
+
+            echo "Copying backend env to $BACKEND_ENV_DEST"
+            sudo cp "$BACKEND_ENV_SRC" "$BACKEND_ENV_DEST"
+            sudo chmod 600 "$BACKEND_ENV_DEST"
+
+            echo "Copying frontend env to $FRONTEND_ENV_DEST"
+            sudo cp "$FRONTEND_ENV_SRC" "$FRONTEND_ENV_DEST"
+            sudo chmod 600 "$FRONTEND_ENV_DEST"
+
+            echo "Copying Firebase credential to $FIREBASE_JSON_DEST"
+            sudo cp "$FIREBASE_JSON_SRC" "$FIREBASE_JSON_DEST"
+            sudo chmod 600 "$FIREBASE_JSON_DEST"
+
+            APP_SERVICES="discovery-service api-gateway user-service identity-service file-service friend-service notification-service post-service task-service chat-service saga-orchestrator-service frontend"
+
+            echo "Stopping backend/frontend services only..."
+            sudo docker compose stop $APP_SERVICES || true
+
+            echo "Removing old backend/frontend containers..."
+            sudo docker compose rm -f $APP_SERVICES || true
+
+            echo "Rebuilding and starting backend/frontend services only..."
+            sudo docker compose up -d --build --no-deps --force-recreate $APP_SERVICES
