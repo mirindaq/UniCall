@@ -1,11 +1,19 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 
+import {
+  AuthHero,
+  AuthModal,
+  AuthModalButton,
+  AuthModalFooter,
+  AuthPhoneField,
+  AuthPrimaryButton,
+  AuthScreenLayout,
+  AuthTextField,
+} from '@/components/auth/auth-form-primitives';
 import { authTokenStore } from '@/configurations/axios.config';
 import { authService } from '@/services/auth.service';
 import { getFirebaseAuth, toFirebasePhoneNumber } from '@/services/firebase-phone-auth.service';
@@ -39,7 +47,6 @@ const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
 
     const message = (error.response.data as ResponseError | undefined)?.message;
     if (error.response.status === 401 && !message) {
-      console.log(error.response)
       return 'Số điện thoại hoặc mật khẩu chưa đúng.';
     }
     return message || fallbackMessage;
@@ -377,205 +384,159 @@ export default function LoginScreen() {
   const isForgotOtpBusy = isSendingForgotOtp || isVerifyingForgotOtp;
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-100" edges={['top', 'bottom']}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
-        <ScrollView className="flex-1 px-6" contentContainerClassName="grow pb-6" keyboardShouldPersistTaps="handled">
-          <Pressable className="mt-1 h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white" onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#111827" />
+    <AuthScreenLayout onBack={() => router.back()}>
+      <AuthHero title="Đăng nhập" subtitle="Chào mừng bạn quay lại UniCall" />
+
+      <View className="-mt-3 rounded-3xl border border-slate-100 bg-white p-5 shadow-md shadow-slate-200/80">
+        <View className="gap-4">
+          <AuthPhoneField value={phoneNumber} onChangeText={setPhoneNumber} />
+
+          <AuthTextField
+            label="Mật khẩu"
+            icon="lock-closed-outline"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Nhập mật khẩu"
+            secureToggle
+            secureTextEntry
+          />
+
+          <Pressable className="self-end py-0.5" onPress={() => setShowForgotPasswordModal(true)} hitSlop={8}>
+            <Text className="text-[14px] font-semibold text-[#1e98f3]">Quên mật khẩu?</Text>
           </Pressable>
 
-          <Text className="mt-8 text-center text-3xl font-extrabold tracking-tight text-slate-900">Đăng nhập</Text>
-          <Text className="mt-2 text-center text-base text-slate-500">Chào mừng bạn quay lại UniCall</Text>
+          <AuthPrimaryButton
+            label="Đăng nhập"
+            onPress={() => void handleLogin()}
+            disabled={!canSubmit}
+            loading={isSubmitting}
+          />
+        </View>
+      </View>
 
-          <View className="mt-7 gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <View className="flex-row items-center overflow-hidden rounded-2xl border-2 border-blue-500 bg-white">
-              <View className="w-[92px] items-center justify-center border-r border-slate-300 bg-slate-100 py-4">
-                <Text className="text-base font-medium text-slate-900">+84</Text>
-              </View>
-              <TextInput
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="0123 456 789"
-                placeholderTextColor="#9ca3af"
-                keyboardType="phone-pad"
-                className="flex-1 px-4 py-4 text-base text-slate-900"
-              />
-            </View>
+      <View className="mt-8 flex-row flex-wrap items-center justify-center">
+        <Text className="text-[15px] text-slate-600">Bạn chưa có tài khoản? </Text>
+        <Pressable onPress={() => router.push('/register')} hitSlop={8}>
+          <Text className="text-[15px] font-bold text-[#1e98f3]">Tạo tài khoản</Text>
+        </Pressable>
+      </View>
 
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Mật khẩu"
-              placeholderTextColor="#9ca3af"
-              secureTextEntry
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base text-slate-900"
-            />
-
-            <Pressable className="self-end" onPress={() => setShowForgotPasswordModal(true)}>
-              <Text className="text-sm font-semibold text-blue-600">Quên mật khẩu?</Text>
-            </Pressable>
-
-            <Pressable
-              className={`mt-2 items-center justify-center rounded-full py-4 ${canSubmit ? 'bg-blue-600' : 'bg-slate-300'}`}
-              onPress={handleLogin}
-              disabled={!canSubmit}>
-              <Text className="text-xl font-bold text-white">{isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}</Text>
-            </Pressable>
-          </View>
-
-          <View className="mb-2 mt-auto flex-row flex-wrap items-center justify-center px-4">
-            <Text className="text-base leading-6 text-slate-900">Bạn chưa có tài khoản? </Text>
-            <Pressable onPress={() => router.push('/register')}>
-              <Text className="text-base font-bold leading-6 text-blue-600">Tạo tài khoản</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <Modal
-        transparent
-        animationType="fade"
+      <AuthModal
         visible={showResendVerificationModal}
-        onRequestClose={() => setShowResendVerificationModal(false)}>
-        <View className="flex-1 items-center justify-center bg-black/45 px-5">
-          <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Xác thực email tài khoản</Text>
-            <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Tài khoản chưa kích hoạt. Nhập đúng email đã đăng ký để gửi lại liên kết xác thực.
-            </Text>
-            <TextInput
-              value={resendEmail}
-              onChangeText={setResendEmail}
-              placeholder="Nhập email đã đăng ký"
-              placeholderTextColor="#9ca3af"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+        title="Xác thực email"
+        description="Tài khoản chưa kích hoạt. Nhập email đã đăng ký để gửi lại liên kết xác thực."
+        onClose={() => setShowResendVerificationModal(false)}
+        footer={
+          <AuthModalFooter>
+            <AuthModalButton label="Đóng" onPress={() => setShowResendVerificationModal(false)} />
+            <AuthModalButton
+              label="Gửi lại email"
+              variant="primary"
+              onPress={() => void handleResendVerification()}
+              loading={isResendingVerification}
             />
-            <View className="mt-4 flex-row justify-end gap-2">
-              <Pressable
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
-                onPress={() => setShowResendVerificationModal(false)}>
-                <Text className="font-medium text-slate-700">Đóng</Text>
-              </Pressable>
-              <Pressable
-                className={`rounded-xl px-4 py-2.5 ${isResendingVerification ? 'bg-sky-300' : 'bg-sky-500'}`}
-                onPress={handleResendVerification}
-                disabled={isResendingVerification}>
-                <Text className="font-semibold text-white">
-                  {isResendingVerification ? 'Đang gửi...' : 'Gửi lại email'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+          </AuthModalFooter>
+        }>
+        <AuthTextField
+          label="Email"
+          icon="mail-outline"
+          value={resendEmail}
+          onChangeText={setResendEmail}
+          placeholder="email@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+      </AuthModal>
 
-      <Modal
-        transparent
-        animationType="fade"
+      <AuthModal
         visible={showForgotPasswordModal}
-        onRequestClose={() => setShowForgotPasswordModal(false)}>
-        <View className="flex-1 items-center justify-center bg-black/45 px-5">
-          <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Quên mật khẩu</Text>
-            <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Nhập số điện thoại và mật khẩu mới. UniCall sẽ gửi OTP để xác thực trước khi đổi mật khẩu.
-            </Text>
-            <TextInput
-              value={forgotPasswordPhone}
-              onChangeText={setForgotPasswordPhone}
-              placeholder="Nhập số điện thoại tài khoản"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+        title="Quên mật khẩu"
+        description="Nhập số điện thoại và mật khẩu mới. UniCall sẽ gửi OTP để xác thực."
+        onClose={() => setShowForgotPasswordModal(false)}
+        footer={
+          <AuthModalFooter>
+            <AuthModalButton label="Đóng" onPress={() => setShowForgotPasswordModal(false)} />
+            <AuthModalButton
+              label="Gửi OTP"
+              variant="primary"
+              onPress={() => void handleForgotPassword()}
+              loading={isSubmittingForgotPassword}
             />
-            <TextInput
-              value={forgotPasswordNewPassword}
-              onChangeText={setForgotPasswordNewPassword}
-              placeholder="Mật khẩu mới"
-              placeholderTextColor="#9ca3af"
-              secureTextEntry
-              className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
-            />
-            <TextInput
-              value={forgotPasswordConfirmNewPassword}
-              onChangeText={setForgotPasswordConfirmNewPassword}
-              placeholder="Xác nhận mật khẩu mới"
-              placeholderTextColor="#9ca3af"
-              secureTextEntry
-              className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
-            />
-            <View className="mt-4 flex-row justify-end gap-2">
-              <Pressable
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
-                onPress={() => setShowForgotPasswordModal(false)}>
-                <Text className="font-medium text-slate-700">Đóng</Text>
-              </Pressable>
-              <Pressable
-                className={`rounded-xl px-4 py-2.5 ${isSubmittingForgotPassword ? 'bg-sky-300' : 'bg-sky-500'}`}
-                onPress={handleForgotPassword}
-                disabled={isSubmittingForgotPassword}>
-                <Text className="font-semibold text-white">
-                  {isSubmittingForgotPassword ? 'Đang xử lý...' : 'Gửi OTP'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          </AuthModalFooter>
+        }>
+        <View className="gap-3">
+          <AuthPhoneField
+            label="Số điện thoại tài khoản"
+            value={forgotPasswordPhone}
+            onChangeText={setForgotPasswordPhone}
+          />
+          <AuthTextField
+            label="Mật khẩu mới"
+            icon="lock-closed-outline"
+            value={forgotPasswordNewPassword}
+            onChangeText={setForgotPasswordNewPassword}
+            placeholder="Mật khẩu mới"
+            secureToggle
+            secureTextEntry
+          />
+          <AuthTextField
+            label="Xác nhận mật khẩu"
+            icon="shield-checkmark-outline"
+            value={forgotPasswordConfirmNewPassword}
+            onChangeText={setForgotPasswordConfirmNewPassword}
+            placeholder="Nhập lại mật khẩu"
+            secureToggle
+            secureTextEntry
+          />
         </View>
-      </Modal>
+      </AuthModal>
 
-      <Modal
-        transparent
-        animationType="fade"
+      <AuthModal
         visible={showForgotOtpModal}
-        onRequestClose={() => {
-          if (isForgotOtpBusy) return;
+        title="Xác thực OTP"
+        description={`Nhập mã OTP đã gửi tới ${forgotOtpPhone || 'số điện thoại của bạn'}.`}
+        onClose={() => {
+          if (isForgotOtpBusy) {
+            return;
+          }
           setShowForgotOtpModal(false);
           resetForgotOtpFlow();
-        }}>
-        <View className="flex-1 items-center justify-center bg-black/45 px-5">
-          <View className="w-full max-w-md rounded-2xl bg-white p-5">
-            <Text className="text-lg font-bold text-slate-900">Xác thực OTP</Text>
-            <Text className="mt-2 text-sm leading-5 text-slate-600">
-              Vui lòng nhập mã OTP đã gửi đến số <Text className="font-semibold">{forgotOtpPhone || '*****'}</Text>.
-            </Text>
-            <TextInput
-              value={forgotOtpCode}
-              onChangeText={setForgotOtpCode}
-              placeholder="Nhập mã OTP"
-              placeholderTextColor="#9ca3af"
-              keyboardType="number-pad"
-              className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900"
+        }}
+        footer={
+          <AuthModalFooter>
+            <AuthModalButton
+              label="Hủy"
+              onPress={() => {
+                if (isForgotOtpBusy) {
+                  return;
+                }
+                setShowForgotOtpModal(false);
+                resetForgotOtpFlow();
+              }}
             />
-            <View className="mt-4 flex-row justify-end gap-2">
-              <Pressable
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5"
-                onPress={() => {
-                  if (isForgotOtpBusy) return;
-                  setShowForgotOtpModal(false);
-                  resetForgotOtpFlow();
-                }}>
-                <Text className="font-medium text-slate-700">Hủy</Text>
-              </Pressable>
-              <Pressable
-                className={`rounded-xl px-4 py-2.5 ${isSendingForgotOtp ? 'bg-sky-300' : 'bg-slate-600'}`}
-                onPress={() => void handleSendForgotOtp()}
-                disabled={isSendingForgotOtp}>
-                <Text className="font-semibold text-white">{isSendingForgotOtp ? 'Đang gửi...' : 'Gửi lại OTP'}</Text>
-              </Pressable>
-              <Pressable
-                className={`rounded-xl px-4 py-2.5 ${isVerifyingForgotOtp ? 'bg-sky-300' : 'bg-sky-500'}`}
-                onPress={() => void handleVerifyForgotOtpAndReset()}
-                disabled={isVerifyingForgotOtp || !forgotOtpConfirmation || !forgotOtpCode.trim()}>
-                <Text className="font-semibold text-white">
-                  {isVerifyingForgotOtp ? 'Đang xác thực...' : 'Xác thực'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+            <AuthModalButton
+              label="Gửi lại"
+              onPress={() => void handleSendForgotOtp()}
+              loading={isSendingForgotOtp}
+            />
+            <AuthModalButton
+              label="Xác thực"
+              variant="primary"
+              onPress={() => void handleVerifyForgotOtpAndReset()}
+              loading={isVerifyingForgotOtp}
+              disabled={!forgotOtpConfirmation || !forgotOtpCode.trim()}
+            />
+          </AuthModalFooter>
+        }>
+        <AuthTextField
+          label="Mã OTP"
+          icon="keypad-outline"
+          value={forgotOtpCode}
+          onChangeText={setForgotOtpCode}
+          placeholder="Nhập 6 chữ số"
+          keyboardType="number-pad"
+        />
+      </AuthModal>
+    </AuthScreenLayout>
   );
 }

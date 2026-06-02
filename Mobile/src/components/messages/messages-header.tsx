@@ -9,22 +9,24 @@ interface MessagesHeaderProps {
 
 export function MessagesHeader({ onPressSearch, onPressCreateGroup }: MessagesHeaderProps) {
   return (
-    <View className="bg-[#1e98f3] px-5 pb-2.5 pt-2.5">
-      <View className="flex-row items-center">
-        <Pressable className="mr-2 h-[44px] flex-1 flex-row items-center rounded-2xl bg-[#2ea2f5] px-4" onPress={onPressSearch}>
-          <Ionicons name="search-outline" size={27} color="#ffffff" />
-          <Text allowFontScaling={false} className="ml-3 text-[17px] text-sky-100">
+    <View className="bg-[#1e98f3] px-4 pb-3 pt-2">
+      <View className="flex-row items-center gap-2">
+        <Pressable
+          className="h-11 flex-1 flex-row items-center rounded-full bg-white/95 px-4 shadow-sm"
+          onPress={onPressSearch}>
+          <Ionicons name="search-outline" size={22} color="#64748b" />
+          <Text allowFontScaling={false} className="ml-2.5 text-[16px] text-slate-500">
             Tìm kiếm
           </Text>
         </Pressable>
 
-        <Pressable className="h-10 w-10 items-center justify-center rounded-full">
-          <Ionicons name="qr-code-outline" size={24} color="#ffffff" />
+        <Pressable className="h-10 w-10 items-center justify-center rounded-full bg-white/20">
+          <Ionicons name="qr-code-outline" size={22} color="#ffffff" />
         </Pressable>
         <Pressable
-          className="ml-1 h-10 w-10 items-center justify-center rounded-full"
+          className="h-10 w-10 items-center justify-center rounded-full bg-white/20"
           onPress={onPressCreateGroup}>
-          <Ionicons name="add" size={32} color="#ffffff" />
+          <Ionicons name="add" size={28} color="#ffffff" />
         </Pressable>
       </View>
     </View>

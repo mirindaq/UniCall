@@ -1,5 +1,6 @@
 import type { MockAvatar } from './chat-conversations';
-import type { ChatAttachment, MessageType } from '@/types/chat';
+import type { ChatAttachment, ChatCallInfo, MessageType } from '@/types/chat';
+import type { CallMessageCardTone } from '@/utils/call-message-card';
 import type {
   MessagePreviewData,
   MessageReactionSummaryItem,
@@ -22,6 +23,11 @@ export interface MockChatMessage {
   senderName?: string;
   senderAvatarUrl?: string | null;
   senderAvatarText?: string;
+  senderUserId?: string;
+  callInfo?: ChatCallInfo;
+  callCardTitle?: string;
+  callCardSubtitle?: string;
+  callCardTone?: CallMessageCardTone;
   timeLabel?: string;
   showAvatar?: boolean;
   reactionSummary?: MessageReactionSummaryItem[];

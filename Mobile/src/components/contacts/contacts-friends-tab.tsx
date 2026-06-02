@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
 import { ConversationAvatar } from '@/components/messages/conversation-avatar';
+import { buildMockAvatar } from '@/utils/chat-avatar';
 import type { FriendRequestStatus } from '@/services/friend.service';
 import type { FriendActionItem, FriendContactItem } from '@/types/contacts';
 
@@ -30,38 +31,48 @@ interface ContactsFriendsTabProps {
 }
 
 function FriendActionRow({ action, onPress }: { action: FriendActionItem; onPress?: () => void }) {
-  const iconName = 'person-add';
-
   return (
-    <Pressable className="flex-row items-center px-5 py-4" onPress={onPress}>
-      <View className="h-[42px] w-[42px] items-center justify-center rounded-full bg-[#1e98f3]">
-        <Ionicons name={iconName} size={23} color="#ffffff" />
+    <Pressable
+      className="mx-3 mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-white px-4 py-3.5 shadow-sm shadow-slate-200/50"
+      style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
+      onPress={onPress}>
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-sky-100">
+        <Ionicons name="person-add" size={22} color="#1e98f3" />
       </View>
-      <Text allowFontScaling={false} className="ml-4 text-[17px] text-slate-900">
+      <Text allowFontScaling={false} className="ml-3.5 flex-1 text-[16px] font-medium text-slate-900">
         {action.title}
         {action.countText ? ` (${action.countText})` : ''}
       </Text>
-      <Ionicons name="chevron-forward" size={20} color="#94a3b8" style={{ marginLeft: 'auto' }} />
+      <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
     </Pressable>
   );
 }
 
 function FriendContactRow({ item }: { item: FriendContactViewItem }) {
   return (
-    <View className="flex-row items-center px-5 py-4">
+    <Pressable
+      className="mx-3 mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-white px-4 py-3"
+      style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}>
       {item.avatarUrl ? (
-        <Image source={{ uri: item.avatarUrl }} className="h-[54px] w-[54px] rounded-full bg-slate-200" />
+        <Image
+          source={{ uri: item.avatarUrl }}
+          className="h-[50px] w-[50px] rounded-full border-2 border-white bg-slate-100"
+        />
       ) : (
-        <ConversationAvatar avatar={item.avatar} />
+        <ConversationAvatar avatar={item.avatar} size={50} />
       )}
-      <Text allowFontScaling={false} className="ml-4 flex-1 text-[17px] text-slate-900">
+      <Text allowFontScaling={false} className="ml-3.5 min-w-0 flex-1 text-[16px] font-medium text-slate-900">
         {item.name}
       </Text>
-      <Ionicons name="call-outline" size={24} color="#374151" />
-      <View className="ml-[22px]">
-        <Ionicons name="videocam-outline" size={24} color="#374151" />
+      <View className="flex-row items-center gap-3">
+        <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-50">
+          <Ionicons name="call-outline" size={20} color="#64748b" />
+        </View>
+        <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-50">
+          <Ionicons name="videocam-outline" size={20} color="#64748b" />
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -77,24 +88,29 @@ function InviteCard({
   onAction: (status: FriendRequestStatus) => void;
 }) {
   return (
-    <View className="rounded-2xl border border-slate-200 bg-white p-3">
+    <View className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm shadow-slate-200/40">
       <View className="flex-row items-start">
         {item.avatarUrl ? (
-          <Image source={{ uri: item.avatarUrl }} className="h-[52px] w-[52px] rounded-full bg-slate-200" />
+          <Image
+            source={{ uri: item.avatarUrl }}
+            className="h-[50px] w-[50px] rounded-full border-2 border-white bg-slate-100"
+          />
         ) : (
           <ConversationAvatar
-            size={52}
-            avatar={{ type: 'initials', value: item.fallback, backgroundColor: '#94a3b8' }}
+            size={50}
+            avatar={buildMockAvatar(item.displayName, item.idFriendRequest)}
           />
         )}
-        <View className="ml-3 flex-1">
+        <View className="ml-3 min-w-0 flex-1">
           <Text numberOfLines={1} className="text-[16px] font-semibold text-slate-900">
             {item.displayName}
           </Text>
           {item.timeRequest ? (
-            <Text className="text-[12px] text-slate-500">{new Date(item.timeRequest).toLocaleString('vi-VN')}</Text>
+            <Text className="text-[12px] text-slate-400">
+              {new Date(item.timeRequest).toLocaleString('vi-VN')}
+            </Text>
           ) : null}
-          <Text numberOfLines={2} className="mt-1 text-[13px] text-slate-600">
+          <Text numberOfLines={2} className="mt-1 text-[13px] leading-5 text-slate-600">
             {item.content}
           </Text>
         </View>
@@ -106,7 +122,7 @@ function InviteCard({
             disabled={isProcessing}
             onPress={() => onAction('REJECTED')}
             className="flex-1 items-center rounded-xl bg-slate-100 py-2.5">
-            <Text className="text-[13px] font-semibold text-slate-700">Từ chối</Text>
+            <Text className="text-[13px] font-semibold text-slate-600">Từ chối</Text>
           </Pressable>
           <Pressable
             disabled={isProcessing}
@@ -120,7 +136,7 @@ function InviteCard({
           disabled={isProcessing}
           onPress={() => onAction('CANCELED')}
           className="mt-3 items-center rounded-xl bg-slate-100 py-2.5">
-          <Text className="text-[13px] font-semibold text-slate-700">Thu hồi lời mời</Text>
+          <Text className="text-[13px] font-semibold text-slate-600">Thu hồi lời mời</Text>
         </Pressable>
       )}
     </View>
@@ -151,24 +167,24 @@ export function ContactsFriendsTab({
 
   if (showInvitations) {
     return (
-      <View className="pb-4">
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable onPress={onBackToFriends} className="mr-2 rounded-full p-1">
-            <Ionicons name="arrow-back" size={20} color="#1f2937" />
+      <View className="pb-4 pt-2">
+        <View className="mx-3 mb-3 flex-row items-center rounded-2xl border border-slate-100 bg-white px-3 py-3">
+          <Pressable onPress={onBackToFriends} className="mr-2 rounded-full bg-slate-50 p-2">
+            <Ionicons name="arrow-back" size={20} color="#334155" />
           </Pressable>
           <Text className="text-[17px] font-semibold text-slate-900">Lời mời kết bạn</Text>
         </View>
 
-        <View className="px-4 py-3">
-          <Text className="mb-2 text-[14px] font-semibold text-slate-700">
-            Lời mời đã nhận ({receivedInvitations.length})
+        <View className="px-3 py-1">
+          <Text className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-wide text-slate-400">
+            Đã nhận ({receivedInvitations.length})
           </Text>
           {receivedInvitations.length === 0 ? (
-            <Text className="rounded-xl bg-white px-4 py-5 text-center text-[13px] text-slate-500">
+            <Text className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-[13px] text-slate-500">
               Bạn chưa nhận lời mời kết bạn nào.
             </Text>
           ) : (
-            <View className="gap-2">
+            <View className="gap-2.5">
               {receivedInvitations.map((item) => (
                 <InviteCard
                   key={item.idFriendRequest}
@@ -182,16 +198,16 @@ export function ContactsFriendsTab({
           )}
         </View>
 
-        <View className="px-4 pb-3">
-          <Text className="mb-2 text-[14px] font-semibold text-slate-700">
-            Lời mời đã gửi ({sentInvitations.length})
+        <View className="px-3 py-3">
+          <Text className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-wide text-slate-400">
+            Đã gửi ({sentInvitations.length})
           </Text>
           {sentInvitations.length === 0 ? (
-            <Text className="rounded-xl bg-white px-4 py-5 text-center text-[13px] text-slate-500">
+            <Text className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-[13px] text-slate-500">
               Bạn chưa gửi lời mời kết bạn nào.
             </Text>
           ) : (
-            <View className="gap-2">
+            <View className="gap-2.5">
               {sentInvitations.map((item) => (
                 <InviteCard
                   key={item.idFriendRequest}
@@ -209,34 +225,32 @@ export function ContactsFriendsTab({
   }
 
   return (
-    <View className="pb-4">
-      <View className="bg-white">
-        {friendActions.map((action) => (
-          <FriendActionRow
-            key={action.id}
-            action={action}
-            onPress={action.type === 'invite' ? onOpenInvitations : undefined}
-          />
-        ))}
-      </View>
+    <View className="pb-4 pt-2">
+      {friendActions.map((action) => (
+        <FriendActionRow
+          key={action.id}
+          action={action}
+          onPress={action.type === 'invite' ? onOpenInvitations : undefined}
+        />
+      ))}
 
-      <View className="my-2 h-2 bg-slate-100" />
-
-      <View className="flex-row items-center px-5 py-3">
-        <View className="rounded-full bg-slate-200 px-4 py-2">
-          <Text allowFontScaling={false} className="text-[14px] font-semibold text-slate-900">
-            Tất cả {friendContacts.length}
+      <View className="mx-3 my-3 flex-row items-center px-1">
+        <View className="rounded-full bg-white px-3.5 py-1.5 shadow-sm">
+          <Text allowFontScaling={false} className="text-[13px] font-semibold text-slate-700">
+            Tất cả · {friendContacts.length}
           </Text>
         </View>
       </View>
 
       {sections.map(([section, items]) => (
-        <View key={section}>
-          <View className="flex-row items-center border-b border-slate-100 px-5 py-2.5">
-            <Text allowFontScaling={false} className="text-[15px] font-semibold text-slate-900">
+        <View key={section} className="mb-2">
+          {section ? (
+            <Text
+              allowFontScaling={false}
+              className="mb-2 px-4 text-[12px] font-semibold uppercase tracking-wide text-slate-400">
               {section}
             </Text>
-          </View>
+          ) : null}
           {items.map((item) => (
             <FriendContactRow key={item.id} item={item} />
           ))}

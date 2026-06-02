@@ -2,7 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 
+import { bubbleMineClass, bubbleOtherClass, CHAT_MESSAGE_AVATAR_SIZE } from '@/constants/chat-ui';
 import { ConversationAvatar } from '@/components/messages/conversation-avatar';
+import { buildMockAvatar } from '@/utils/chat-avatar';
+import type { CallMessageCardTone } from '@/utils/call-message-card';
 import type { MockAvatar } from '@/mock/chat-conversations';
 import type { MockChatMessage } from '@/mock/chat-thread-messages';
 import {
@@ -21,7 +24,7 @@ interface ChatMessageRowProps {
 
 function StickerBlock({ url }: { url?: string }) {
   return (
-    <View className="h-[142px] w-[118px] items-center justify-center overflow-hidden rounded-[18px] bg-[#e8ebf2]">
+    <View className="h-[142px] w-[118px] items-center justify-center overflow-hidden rounded-[20px] bg-slate-100">
       {url ? (
         <Image source={{ uri: url }} className="h-full w-full" resizeMode="contain" />
       ) : (
@@ -228,8 +231,8 @@ function ReplyPreview({ preview }: { preview?: MessagePreviewData | null }) {
       : 'image-outline';
 
   return (
-    <View className="mb-1 min-w-[190px] max-w-[280px] rounded-md border-l-2 border-sky-300 bg-sky-50 px-2 py-1.5">
-      <Text allowFontScaling={false} numberOfLines={1} className="text-[10.5px] font-semibold text-sky-700">
+    <View className="mb-1.5 min-w-[190px] max-w-[280px] rounded-xl border-l-[3px] border-sky-400 bg-white/70 px-2.5 py-2">
+      <Text allowFontScaling={false} numberOfLines={1} className="text-[10.5px] font-semibold text-sky-600">
         {preview.senderName || 'Tin nhắn'}
       </Text>
       <View className="mt-1 flex-row items-center">
@@ -265,10 +268,10 @@ export function ChatMessageRow({
   if (message.centeredSystemNotice) {
     return (
       <View className="items-center px-5 py-1.5">
-        <View className="rounded-full bg-slate-200 px-3 py-1">
+        <View className="rounded-full border border-slate-200/80 bg-white/90 px-3.5 py-1.5 shadow-sm">
           <Text
             allowFontScaling={false}
-            className="text-center text-[11px] font-medium text-slate-600">
+            className="text-center text-[11px] font-medium text-slate-500">
             {message.content}
           </Text>
         </View>
@@ -277,12 +280,14 @@ export function ChatMessageRow({
   }
 
   const isMine = message.sender === 'me';
-  const rowAvatar: MockAvatar = {
-    type: 'initials',
-    value: message.senderAvatarText || toFallback(message.senderName),
-    backgroundColor: '#94a3b8',
-  };
+  const avatarDisplayName = message.senderName?.trim() || 'Thành viên';
+  const avatarSeed = message.senderUserId?.trim() || avatarDisplayName;
+  const rowAvatar: MockAvatar = buildMockAvatar(avatarDisplayName, avatarSeed);
+  if (message.senderAvatarText) {
+    rowAvatar.value = message.senderAvatarText;
+  }
   const rowAvatarUrl = message.senderAvatarUrl ?? otherAvatarUrl ?? null;
+  const chatAvatarSize = CHAT_MESSAGE_AVATAR_SIZE;
   const attachments = message.attachments ?? [];
   const stickerAttachment = attachments.find(
     (attachment) => attachment.type === 'STICKER' || attachment.type === 'GIF'
@@ -317,36 +322,69 @@ export function ChatMessageRow({
   let messageBody: React.ReactNode = null;
 
   if (message.rawType === 'CALL') {
+    const tone: CallMessageCardTone = message.callCardTone ?? 'neutral';
+    const isVideoCall = message.callInfo?.audioOnly === false;
+    const cardShellClass =
+      tone === 'danger'
+        ? 'border-red-100 bg-red-50/90'
+        : tone === 'success'
+          ? 'border-emerald-100 bg-emerald-50/90'
+          : isMine
+            ? 'border-sky-100 bg-[#e8f4ff]'
+            : 'border-slate-100 bg-white';
+    const titleClass =
+      tone === 'danger'
+        ? 'text-red-600'
+        : tone === 'success'
+          ? 'text-emerald-700'
+          : 'text-slate-800';
+    const iconWrapClass = isVideoCall ? 'bg-sky-100' : 'bg-emerald-50';
+    const iconColor = isVideoCall ? '#0284c7' : '#059669';
+    const iconName = isVideoCall ? 'videocam' : 'call';
+
     messageBody = (
-      <View className="w-[230px] rounded-[16px] border border-sky-100 bg-sky-50 px-3 py-2.5">
-        <Text allowFontScaling={false} className="text-[12px] font-semibold text-slate-700">
-          {message.content || 'Cuộc gọi'}
-        </Text>
-        <Text allowFontScaling={false} className="mt-0.5 text-[11px] text-slate-500">
-          {message.timeLabel || ''}
-        </Text>
-        <Pressable
-          className={`mt-2 self-start rounded-full px-3 py-1 ${
-            message.callActionDisabled ? 'bg-slate-200' : 'bg-sky-500'
-          }`}
-          disabled={message.callActionDisabled}
-          onPress={() => onPressCallMessage?.(message)}>
-          <Text
-            allowFontScaling={false}
-            className={`text-[11px] font-semibold ${
-              message.callActionDisabled ? 'text-slate-500' : 'text-white'
-            }`}>
-            {message.callActionLabel || 'Tham gia'}
-          </Text>
-        </Pressable>
+      <View
+        className={`min-w-[210px] max-w-[268px] rounded-2xl border px-3.5 py-3 shadow-sm ${cardShellClass}`}>
+        <View className="flex-row items-start">
+          <View
+            className={`mr-2.5 h-9 w-9 items-center justify-center rounded-full ${iconWrapClass}`}>
+            <Ionicons name={iconName} size={18} color={iconColor} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text allowFontScaling={false} className={`text-[13px] font-semibold ${titleClass}`}>
+              {message.callCardTitle || message.content || 'Cuộc gọi'}
+            </Text>
+            {message.callCardSubtitle ? (
+              <Text allowFontScaling={false} className="mt-0.5 text-[12px] leading-5 text-slate-500">
+                {message.callCardSubtitle}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+        {message.callActionLabel ? (
+          <Pressable
+            className={`mt-3 items-center rounded-xl py-2 ${
+              message.callActionDisabled ? 'bg-slate-100' : 'bg-[#1e98f3]'
+            }`}
+            disabled={message.callActionDisabled}
+            onPress={() => onPressCallMessage?.(message)}>
+            <Text
+              allowFontScaling={false}
+              className={`text-[13px] font-semibold ${
+                message.callActionDisabled ? 'text-slate-500' : 'text-white'
+              }`}>
+              {message.callActionLabel}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   } else if (message.kind === 'text' && !hasAttachment) {
     messageBody = (
       <View
-        className={`min-w-[110px] rounded-[16px] px-3.5 py-2.5 ${
+        className={`min-w-[110px] px-3.5 py-2.5 ${
           message.replyPreview ? 'min-w-[180px]' : ''
-        } ${isMine ? 'rounded-br-[8px] bg-[#c8ebfb]' : 'rounded-bl-[8px] bg-white'}`}>
+        } ${isMine ? bubbleMineClass : bubbleOtherClass}`}>
         <ReplyPreview preview={message.replyPreview} />
         <Text allowFontScaling={false} className="text-[13px] text-slate-900">
           {message.recalled ? 'Tin nhắn đã thu hồi' : message.content}
@@ -376,7 +414,7 @@ export function ChatMessageRow({
 
         {imageAttachments.length === 1 ? (
           <Pressable
-            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+            className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm"
             onLongPress={beginAttachmentLongPress}
             delayLongPress={260}
             onPress={() =>
@@ -401,7 +439,7 @@ export function ChatMessageRow({
         ) : null}
 
         {imageAttachments.length > 1 ? (
-          <View className="flex-row flex-wrap gap-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1">
+          <View className="flex-row flex-wrap gap-1 overflow-hidden rounded-2xl border border-slate-100 bg-white p-1 shadow-sm">
             {imageAttachments.slice(0, 4).map((attachment, index) => (
               <Pressable
                 key={`${attachment.url}-${index}`}
@@ -451,7 +489,7 @@ export function ChatMessageRow({
 
         {fileAttachment ? (
           <Pressable
-            className="mt-1 w-[268px] flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
+            className="mt-1 w-[268px] flex-row items-center rounded-2xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm"
             onLongPress={beginAttachmentLongPress}
             delayLongPress={260}
             onPress={() => guardAttachmentPress(() => void openAttachmentUrl(fileAttachment.url))}>
@@ -476,8 +514,8 @@ export function ChatMessageRow({
 
         {shouldRenderCaption ? (
           <View
-            className={`mt-1 min-w-[110px] rounded-[16px] px-3.5 py-2.5 ${
-              isMine ? 'rounded-br-[8px] bg-[#c8ebfb]' : 'rounded-bl-[8px] bg-white'
+            className={`mt-1.5 min-w-[110px] px-3.5 py-2.5 ${
+              isMine ? bubbleMineClass : bubbleOtherClass
             }`}>
             <Text allowFontScaling={false} className="text-[13px] text-slate-900">
               {trimmedContent}
@@ -495,15 +533,21 @@ export function ChatMessageRow({
   }
 
   return (
-    <View className={`px-3 ${isMine ? 'items-end' : 'items-start'}`}>
+    <View className={`px-3.5 ${isMine ? 'items-end' : 'items-start'}`}>
       <View className={`flex-row items-end ${isMine ? 'justify-end' : 'justify-start'}`}>
-        {!isMine && (
-          <View className="mr-2 w-[30px] items-center">
+        {!isMine ? (
+          <View
+            className="mr-2 shrink-0 self-end"
+            style={{ width: chatAvatarSize, minHeight: chatAvatarSize }}>
             {message.showAvatar ? (
-              <ConversationAvatar avatar={rowAvatar || otherAvatar} avatarUrl={rowAvatarUrl} size={30} />
+              <ConversationAvatar
+                avatar={rowAvatarUrl ? rowAvatar : rowAvatar || otherAvatar}
+                avatarUrl={rowAvatarUrl}
+                size={chatAvatarSize}
+              />
             ) : null}
           </View>
-        )}
+        ) : null}
 
         <View className={`max-w-[86%] ${isMine ? 'items-end' : 'items-start'}`}>
           {!isMine && message.senderName ? (
@@ -538,7 +582,7 @@ export function ChatMessageRow({
           ) : null}
 
           {(message.reactionSummary?.length ?? 0) > 0 && (message.reactionTotal ?? 0) > 0 ? (
-            <View className="-mt-1 ml-2 inline-flex flex-row items-center rounded-full border border-slate-200 bg-white px-2 py-[1px]">
+            <View className="-mt-1 ml-2 inline-flex flex-row items-center rounded-full border border-slate-100 bg-white px-2.5 py-0.5 shadow-sm">
               <Text allowFontScaling={false} className="text-[12px] text-slate-700">
                 {message.reactionSummary?.map((item) => item.emoji).join(' ')}
               </Text>

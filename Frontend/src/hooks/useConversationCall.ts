@@ -22,6 +22,7 @@ type ActiveCall = {
   peerUserId?: string
   audioOnly: boolean
   joinedUserIds?: string[]
+  invitedUserIds?: string[]
   startedAt?: number
   ringingStartedAt?: number
 }
@@ -497,6 +498,7 @@ export function useConversationCall({
           peerUserId: peerUserId ?? undefined,
           audioOnly,
           joinedUserIds: currentUserId ? [currentUserId] : [],
+          invitedUserIds: isGroupConversation ? targetUserIds : undefined,
           ringingStartedAt: Date.now(),
         })
 

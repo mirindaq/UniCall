@@ -280,7 +280,7 @@ export default function ContactsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#f3f4f6]">
+    <View className="flex-1 bg-slate-50">
       <AppStatusBarBlue />
       <SafeAreaView edges={['top']} className="bg-[#1e98f3]" />
       <ContactsHeader
@@ -289,7 +289,7 @@ export default function ContactsScreen() {
       />
       <ContactsTabs activeTab={activeTab} onChange={setActiveTab} />
 
-      <ScrollView className="flex-1 bg-[#f3f4f6]" showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 bg-slate-50" showsVerticalScrollIndicator={false}>
         {activeTab === 'friends' ? (
           <ContactsFriendsTab
             friendActions={friendActions}

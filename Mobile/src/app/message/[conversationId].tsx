@@ -5,6 +5,10 @@ import { Alert, FlatList, Image, Modal, Pressable, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import {
+  GroupCallPickerModal,
+  type GroupCallMemberOption,
+} from '@/components/call/GroupCallPickerModal';
 import { ChatDetailContent } from '@/components/chat-detail/chat-detail-content';
 import { ChatDetailHeader } from '@/components/chat-detail/chat-detail-header';
 import { AppStatusBarBlue } from '@/components/ui/app-status-bar-blue';
@@ -31,6 +35,9 @@ import {
   summarizeMessageReactions,
   type MessagePreviewData,
 } from '@/utils/chat-message-preview';
+import { buildMockAvatar, toDisplayInitials } from '@/utils/chat-avatar';
+import { buildCallMessageCardFromMessage } from '@/utils/call-message-card';
+import type { ChatCallInfo } from '@/types/chat';
 
 type UiMessage = {
   idMessage: string;
@@ -50,6 +57,7 @@ type UiMessage = {
   pinnedAt?: string;
   mentionedUserIds?: string[];
   optimisticStatus?: 'SENDING' | 'SENT';
+  callInfo?: ChatCallInfo;
 };
 
 const MESSAGE_PAGE_SIZE = 20;
@@ -77,6 +85,7 @@ const toUiMessage = (message: ChatMessageResponse): UiMessage => ({
   pinnedByAccountId: message.pinnedByAccountId,
   pinnedAt: message.pinnedAt,
   mentionedUserIds: message.mentionedUserIds,
+  callInfo: message.callInfo,
 });
 
 const normalizeId = (value?: string | number | null) => {
@@ -114,17 +123,6 @@ const toDisplayName = (profile?: UserProfile | null, fallback?: string) => {
   }
   const fullName = `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim();
   return fullName || fallback || profile.identityUserId;
-};
-
-const toInitials = (fullName: string) => {
-  const words = fullName.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
-    return 'U';
-  }
-  if (words.length === 1) {
-    return words[0].slice(0, 2).toUpperCase();
-  }
-  return `${words[0][0] ?? ''}${words[words.length - 1][0] ?? ''}`.toUpperCase();
 };
 
 const dedupeMessagesById = (items: UiMessage[]) => {
@@ -200,12 +198,6 @@ type MessageActionItemProps = {
   color?: string;
   danger?: boolean;
   onPress: () => void;
-};
-
-type GroupCallMemberOption = {
-  id: string;
-  name: string;
-  avatar?: string | null;
 };
 
 function MessageActionItem({
@@ -953,6 +945,19 @@ export default function ConversationDetailScreen() {
         reactionStacks: message.reactionStacks,
         reactions: message.reactions,
       });
+      const callCard =
+        message.type === 'CALL'
+          ? (buildCallMessageCardFromMessage(message, myIdentityId) ?? {
+              title: message.content?.trim() || 'Cuộc gọi',
+              subtitle: 'Gọi lại',
+              tone: 'neutral' as const,
+            })
+          : null;
+      const showGroupJoinAction =
+        conversation?.type === 'GROUP' &&
+        message.type === 'CALL' &&
+        message.callInfo?.audioOnly === false &&
+        isCurrentConversationGroupCallOngoing;
 
       return {
         id: message.idMessage,
@@ -981,7 +986,14 @@ export default function ConversationDetailScreen() {
         senderAvatarUrl:
           !centeredSystemNotice && !isMine ? senderProfile?.avatar ?? conversation?.avatar ?? null : null,
         senderAvatarText:
-          !centeredSystemNotice && !isMine ? toInitials(senderDisplayName || headerTitle) : undefined,
+          !centeredSystemNotice && !isMine
+            ? toDisplayInitials(senderDisplayName || headerTitle)
+            : undefined,
+        senderUserId: !centeredSystemNotice && !isMine ? message.idAccountSent : undefined,
+        callInfo: message.callInfo,
+        callCardTitle: callCard?.title,
+        callCardSubtitle: callCard?.subtitle,
+        callCardTone: callCard?.tone,
         timeLabel,
         showAvatar: centeredSystemNotice
           ? false
@@ -992,15 +1004,12 @@ export default function ConversationDetailScreen() {
         reactionTotal: reactionSummary.total,
         pinned: message.pinned,
         callActionLabel:
-          conversation?.type === 'GROUP' && message.type === 'CALL'
-            ? isCurrentConversationGroupCallOngoing
+          message.type === 'CALL'
+            ? showGroupJoinAction
               ? 'Tham gia'
-              : 'Tham gia'
+              : 'Gọi lại'
             : undefined,
-        callActionDisabled:
-          conversation?.type === 'GROUP' && message.type === 'CALL'
-            ? false
-            : undefined,
+        callActionDisabled: message.type === 'CALL' ? false : undefined,
         statusText:
           !centeredSystemNotice && isMine && index === lastMineIndex
             ? message.optimisticStatus === 'SENDING'
@@ -1019,6 +1028,7 @@ export default function ConversationDetailScreen() {
     resolveSenderName,
     senderProfiles,
     isCurrentConversationGroupCallOngoing,
+    myIdentityId,
   ]);
 
   const conversationGalleryImages = useMemo(() => {
@@ -1291,11 +1301,7 @@ export default function ConversationDetailScreen() {
     }
   };
 
-  const avatar = {
-    type: 'initials' as const,
-    value: headerTitle.slice(0, 2).toUpperCase() || 'C',
-    backgroundColor: '#94a3b8',
-  };
+  const avatar = buildMockAvatar(headerTitle, conversationId);
 
   const closeForwardPicker = () => {
     setForwardPickerOpen(false);
@@ -1332,6 +1338,16 @@ export default function ConversationDetailScreen() {
       return [...prev, userId];
     });
   };
+
+  const selectAllGroupCallMembers = useCallback(() => {
+    setGroupCallSelectedUserIds(
+      groupCallSelectableMembers.slice(0, GROUP_CALL_MAX_TARGETS).map((member) => member.id),
+    );
+  }, [groupCallSelectableMembers]);
+
+  const clearGroupCallSelection = useCallback(() => {
+    setGroupCallSelectedUserIds([]);
+  }, []);
 
   const startGroupVideoCall = () => {
     if (!conversationId || !isGroupConversation) {
@@ -1403,7 +1419,7 @@ export default function ConversationDetailScreen() {
   }, [conversationId, joinGroupCallFromConversation]);
 
   return (
-    <View className="flex-1 bg-[#d9dde8]">
+    <View className="flex-1 bg-[#eef3f9]">
       <AppStatusBarBlue />
       <SafeAreaView edges={['top']} className="bg-[#1e98f3]" />
       <ChatDetailHeader
@@ -1594,99 +1610,50 @@ export default function ConversationDetailScreen() {
           setMessageActionTargetId(idMessage);
         }}
         onPressCallMessage={(message) => {
-          if (conversation?.type !== 'GROUP' || message.rawType !== 'CALL') {
+          if (message.rawType !== 'CALL') {
             return;
           }
-          void handleJoinGroupCallFromMessage();
+          if (conversation?.type === 'GROUP') {
+            void handleJoinGroupCallFromMessage();
+            return;
+          }
+          if (!conversationId || !peerUserId) {
+            return;
+          }
+          if (message.callInfo?.audioOnly === false) {
+            void startVideoCall({
+              conversationId,
+              peerUserId,
+              peerName: headerTitle,
+              peerAvatar: conversation?.avatar ?? null,
+              conversationType: 'DOUBLE',
+            });
+            return;
+          }
+          void startAudioCall({
+            conversationId,
+            peerUserId,
+            peerName: headerTitle,
+            peerAvatar: conversation?.avatar ?? null,
+            conversationType: 'DOUBLE',
+          });
         }}
         onLoadMore={loadMoreMessages}
         onScrolledToBottom={() => setShouldScrollToBottom(false)}
       />
 
-      <Modal
+      <GroupCallPickerModal
         visible={isGroupCallPickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsGroupCallPickerOpen(false)}>
-        <Pressable
-          className="flex-1 justify-end bg-black/35"
-          onPress={() => setIsGroupCallPickerOpen(false)}>
-          <Pressable
-            className="max-h-[70%] rounded-t-2xl bg-white px-4 pb-4 pt-3"
-            onPress={(event) => event.stopPropagation()}>
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-base font-semibold text-slate-900">Chọn người tham gia</Text>
-              <Pressable
-                onPress={() => setIsGroupCallPickerOpen(false)}
-                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
-                <Text className="text-slate-600">x</Text>
-              </Pressable>
-            </View>
-            <Text className="mb-2 text-xs text-slate-500">
-              Tối đa {GROUP_CALL_MAX_MEMBERS} người trong cuộc gọi (bao gồm bạn).
-            </Text>
-            <FlatList
-              data={groupCallSelectableMembers}
-              keyExtractor={(item) => item.id}
-              ListEmptyComponent={
-                <View className="py-8">
-                  <Text className="text-center text-sm text-slate-500">
-                    Không có thành viên phù hợp
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => {
-                const isChecked = groupCallSelectedUserIds.includes(item.id);
-                return (
-                  <Pressable
-                    className="mb-2 flex-row items-center rounded-lg border border-slate-200 px-3 py-2.5"
-                    onPress={() => toggleGroupCallMember(item.id)}>
-                    <View
-                      className={`h-5 w-5 items-center justify-center rounded border ${
-                        isChecked ? 'border-blue-500 bg-blue-500' : 'border-slate-300 bg-white'
-                      }`}>
-                      {isChecked ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
-                    </View>
-                    {item.avatar ? (
-                      <Image
-                        source={{ uri: item.avatar }}
-                        className="ml-2.5 h-9 w-9 rounded-full"
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View className="ml-2.5 h-9 w-9 items-center justify-center rounded-full bg-slate-300">
-                        <Text className="text-xs font-semibold text-white">
-                          {item.name.slice(0, 2).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <Text className="ml-2.5 flex-1 text-[14px] text-slate-900" numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                  </Pressable>
-                );
-              }}
-            />
-            <View className="mt-1 flex-row items-center justify-between">
-              <Text className="text-xs text-slate-500">
-                Đã chọn {groupCallSelectedUserIds.length}/{GROUP_CALL_MAX_TARGETS}
-              </Text>
-              <View className="flex-row gap-2">
-                <Pressable
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  onPress={() => setIsGroupCallPickerOpen(false)}>
-                  <Text className="text-sm text-slate-700">Hủy</Text>
-                </Pressable>
-                <Pressable
-                  className="rounded-lg bg-[#1e98f3] px-3 py-2"
-                  onPress={startGroupVideoCall}>
-                  <Text className="text-sm font-medium text-white">Bắt đầu gọi</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        members={groupCallSelectableMembers}
+        selectedUserIds={groupCallSelectedUserIds}
+        maxMembers={GROUP_CALL_MAX_MEMBERS}
+        maxTargets={GROUP_CALL_MAX_TARGETS}
+        onClose={() => setIsGroupCallPickerOpen(false)}
+        onToggleMember={toggleGroupCallMember}
+        onSelectAll={selectAllGroupCallMembers}
+        onClearSelection={clearGroupCallSelection}
+        onStartCall={startGroupVideoCall}
+      />
 
       <Modal
         visible={Boolean(selectedActionMessage)}
