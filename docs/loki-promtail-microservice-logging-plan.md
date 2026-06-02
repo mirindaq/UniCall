@@ -71,6 +71,18 @@ Promtail gan labels tu Docker container:
 - `container`
 - `image`
 
+Promtail chi day flow logs vao Loki de Grafana khong bi roi boi log debug/noise. Cac message duoc giu:
+
+```text
+request completed
+request failed
+grpc request completed
+grpc request cancelled
+notification event consumed...
+```
+
+Log chi tiet van xem duoc bang `docker logs`, nhung khong day vao Loki.
+
 Docker Compose gan labels cho moi service:
 
 ```yaml

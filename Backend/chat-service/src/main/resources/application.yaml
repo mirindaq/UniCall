@@ -112,5 +112,5 @@ eureka:
 
 logging:
   level:
-    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
-    org.mongodb.driver.protocol.command: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: WARN
+    org.mongodb.driver.protocol.command: WARN
