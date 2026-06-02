@@ -254,7 +254,20 @@ Promtail làm các việc:
    - `app`
    - `service`
    - `container`
-4. Push log vào Loki.
+4. Parse log JSON để đọc field `message` và `trace_id`.
+5. Chỉ push flow logs vào Loki.
+
+Các message được giữ lại:
+
+```text
+request completed
+request failed
+grpc request completed
+grpc request cancelled
+notification event consumed...
+```
+
+Các log chi tiết như Mongo debug, driver debug, log nghiệp vụ phụ vẫn còn trong `docker logs`, nhưng không được đẩy vào Loki để màn hình Grafana chỉ tập trung vào luồng request đi qua các service.
 
 ## 9. Loki Lưu Log
 
@@ -382,8 +395,9 @@ Nếu không thấy log:
 1. Kiểm tra Promtail có chạy không.
 2. Kiểm tra container có label `unicall.logging=true` không.
 3. Kiểm tra service có in JSON log không.
-4. Kiểm tra request có đi qua gateway không.
-5. Kiểm tra downstream có nhận `X-Correlation-Id` hoặc `x-correlation-id` không.
+4. Kiểm tra log có message thuộc nhóm flow logs được Promtail giữ lại không.
+5. Kiểm tra request có đi qua gateway không.
+6. Kiểm tra downstream có nhận `X-Correlation-Id` hoặc `x-correlation-id` không.
 
 ## Giới Hạn Hiện Tại
 
