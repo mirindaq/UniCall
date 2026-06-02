@@ -184,6 +184,24 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         );
 
         if (policy != null && policy.primaryTool() != null) {
+            if (resolvedIntent == ChatAssistantIntent.SUMMARIZE_CONVERSATION) {
+                ToolExecutionResult toolExecution = executeConversationSummaryTool(requesterId, question);
+                if (toolExecution.tool() != null) {
+                    toolsUsed.add(toolExecution.tool());
+                }
+                lastToolData = toolExecution.data();
+                Object success = toolExecution.functionResponse().get("success");
+                executionStatus = Boolean.FALSE.equals(success) ? "TOOL_ERROR" : "SUCCESS";
+                log.info(
+                        "AI agent summary data loaded: tool={}, success={}, dataType={}",
+                        toolExecution.tool(),
+                        success,
+                        lastToolData == null ? "null" : lastToolData.getClass().getSimpleName()
+                );
+                String finalAnswer = buildAiFinalAnswer(question, resolvedIntent, policy, executionStatus, lastToolData);
+                return new AgentRunResult(finalAnswer, resolvedIntent, toolsUsed, lastToolData, toolsUsed.size());
+            }
+
             FunctionCallRequest functionCall = buildToolArgs(contents, policy.primaryTool(), question);
             functionCall = normalizeFunctionCall(functionCall, policy.primaryTool(), question);
             log.info(
@@ -227,24 +245,126 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
                 forceSingleFunctionCallingConfig(INTENT_ROUTER_FUNCTION)
         );
         if (response == null) {
-            log.warn("AI intent router got null response, using UNKNOWN intent: questionLength={}", question.length());
-            return ChatAssistantIntent.UNKNOWN;
+            ChatAssistantIntent localIntent = inferStrongIntentByQuestion(question);
+            log.warn("AI intent router got null response, using local strong intent: intent={}, questionLength={}", localIntent, question.length());
+            return localIntent;
         }
         JsonNode candidate = firstCandidate(response);
         if (candidate != null) {
             FunctionCallRequest functionCall = extractFunctionCall(candidate.path("content"));
             ChatAssistantIntent intent = parseIntent(readString(functionCall == null ? null : functionCall.arguments(), "intent"));
             if (intent != null) {
-                return intent;
+                return overrideIntentByQuestion(question, intent);
             }
             String text = extractTextFromContent(candidate.path("content"));
             intent = parseIntent(text);
             if (intent != null) {
-                return intent;
+                return overrideIntentByQuestion(question, intent);
             }
         }
-        log.warn("AI intent router failed, using UNKNOWN intent: questionLength={}", question.length());
+        ChatAssistantIntent localIntent = inferStrongIntentByQuestion(question);
+        log.warn("AI intent router failed, using local strong intent: intent={}, questionLength={}", localIntent, question.length());
+        return localIntent;
+    }
+
+    private ChatAssistantIntent overrideIntentByQuestion(String question, ChatAssistantIntent aiIntent) {
+        ChatAssistantIntent strongIntent = inferStrongIntentByQuestion(question);
+        if (strongIntent == ChatAssistantIntent.UNKNOWN) {
+            return aiIntent;
+        }
+        if (aiIntent == null
+                || aiIntent == ChatAssistantIntent.UNKNOWN
+                || aiIntent == ChatAssistantIntent.GENERAL_QA
+                || aiIntent == ChatAssistantIntent.SMALL_TALK
+                || isDataIntent(strongIntent)) {
+            return strongIntent;
+        }
+        return aiIntent;
+    }
+
+    private ChatAssistantIntent inferStrongIntentByQuestion(String question) {
+        String normalized = normalize(question);
+        if (!StringUtils.hasText(normalized)) {
+            return ChatAssistantIntent.UNKNOWN;
+        }
+        if (containsAny(normalized, "ban co the lam gi", "ban lam duoc gi", "tinh nang cua ban", "chuc nang cua ban", "ai co the lam gi")) {
+            return ChatAssistantIntent.AI_CAPABILITIES;
+        }
+        if (containsAny(normalized, "tom tat hoi thoai", "tong hop hoi thoai", "summary conversation", "summarize conversation")
+                || (containsAny(normalized, "tom tat", "tong hop", "summary", "summarize")
+                && containsAny(normalized, "hoi thoai", "cuoc tro chuyen", "conversation", "chat"))) {
+            return ChatAssistantIntent.SUMMARIZE_CONVERSATION;
+        }
+        if (containsAny(normalized, "ai da noi", "ai noi", "who said")) {
+            return ChatAssistantIntent.FIND_WHO_SAID;
+        }
+        if (containsAny(normalized, "tim trong tat ca hoi thoai", "tim tren tat ca hoi thoai", "tim trong toan bo hoi thoai", "toan bo chat", "tat ca hoi thoai")) {
+            return ChatAssistantIntent.SEARCH_MY_CHAT_SPACE;
+        }
+        if (containsAny(normalized, "tim tin nhan", "tim kiem tin nhan", "search message")
+                && containsAny(normalized, "tu khoa", "keyword")) {
+            return ChatAssistantIntent.SEARCH_KEYWORD;
+        }
+        if (containsAny(normalized, "tim ngu nghia", "semantic search")) {
+            return containsAny(normalized, "tat ca", "toan bo")
+                    ? ChatAssistantIntent.SEARCH_MY_CHAT_SPACE
+                    : ChatAssistantIntent.SEARCH_SEMANTIC;
+        }
+        if (containsAny(normalized, "lay tin nhan", "liet ke tin nhan", "danh sach tin nhan", "messages")
+                && containsAny(normalized, "hoi thoai", "conversation", "chat")) {
+            return ChatAssistantIntent.LIST_MESSAGES;
+        }
+        if (containsAny(normalized, "liet ke hoi thoai", "danh sach hoi thoai", "hoi thoai cua toi", "conversations")) {
+            return ChatAssistantIntent.LIST_CONVERSATIONS;
+        }
+        if (containsAny(normalized, "them comment", "them binh luan", "comment vao task", "comment vao cong viec")) {
+            return ChatAssistantIntent.TASK_COMMENT_CREATE;
+        }
+        if (containsAny(normalized, "liet ke comment", "list comment", "comment cua task", "comment cua cong viec")) {
+            return ChatAssistantIntent.TASK_COMMENT_LIST;
+        }
+        if (containsAny(normalized, "chi tiet task", "chi tiet cong viec", "xem task", "xem chi tiet")) {
+            return ChatAssistantIntent.TASK_DETAIL;
+        }
+        if (containsAny(normalized, "xoa task", "xoa cong viec", "delete task", "remove task")) {
+            return ChatAssistantIntent.TASK_DELETE;
+        }
+        if (containsAny(normalized, "tao task", "tao cong viec", "them task", "them cong viec", "create task")) {
+            return ChatAssistantIntent.TASK_CREATE;
+        }
+        if (containsAny(normalized, "tre han", "qua han", "overdue")) {
+            return ChatAssistantIntent.TASK_LIST_OVERDUE;
+        }
+        if (containsAny(normalized, "sap den han", "gan deadline", "due soon")) {
+            return ChatAssistantIntent.TASK_LIST_DUE_SOON;
+        }
+        if (containsAny(normalized, "cap nhat task", "sua task", "update task", "doi deadline", "doi uu tien")
+                || (containsAny(normalized, "deadline", "uu tien", "gan cho", "assign")
+                && containsAny(normalized, "task", "cong viec"))) {
+            return ChatAssistantIntent.TASK_UPDATE;
+        }
+        if (containsAny(normalized, "nhom task", "nhom cong viec", "task group", "group task")
+                && containsAny(normalized, "liet ke", "danh sach", "lay")) {
+            return ChatAssistantIntent.TASK_LIST_GROUPS;
+        }
+        if (containsAny(normalized, "task trong nhom", "cong viec trong nhom", "task cua nhom")) {
+            return ChatAssistantIntent.TASK_LIST_GROUP_ITEMS;
+        }
+        if (containsAny(normalized, "tim task", "tim cong viec", "task ten", "cong viec ten")) {
+            return ChatAssistantIntent.TASK_FIND_BY_NAME;
+        }
+        if (containsAny(normalized, "task cua toi", "cong viec cua toi", "my tasks", "liet ke task", "danh sach task")) {
+            return ChatAssistantIntent.TASK_LIST_MY_ITEMS;
+        }
         return ChatAssistantIntent.UNKNOWN;
+    }
+
+    private boolean isDataIntent(ChatAssistantIntent intent) {
+        return intent != null
+                && intent != ChatAssistantIntent.UNKNOWN
+                && intent != ChatAssistantIntent.GENERAL_QA
+                && intent != ChatAssistantIntent.SMALL_TALK
+                && intent != ChatAssistantIntent.AI_CAPABILITIES;
     }
 
     private FunctionCallRequest buildToolArgs(List<Map<String, Object>> contents, ChatAssistantTool primaryTool, String question) {
@@ -328,6 +448,7 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             case TASK_LIST_MY_ITEMS -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_TASKS, List.of(), List.of(), List.of(), "Lấy task của tôi.");
             case TASK_LIST_OVERDUE -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_OVERDUE_TASKS, List.of(), List.of(), List.of(), "Lấy task trễ hạn.");
             case TASK_LIST_DUE_SOON -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_DUE_SOON_TASKS, List.of(), List.of(), List.of(), "Lấy task sắp đến hạn.");
+            case SUMMARIZE_CONVERSATION -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_GET_CONVERSATION_MESSAGES, List.of(ChatAssistantTool.CHAT_LIST_MY_CONVERSATIONS), List.of(), List.of("conversationId hoặc conversationNameHint"), "Tóm tắt hội thoại theo tên/ID và khoảng thời gian.");
             default -> new IntentToolPolicy(intent, null, List.of(), List.of(), List.of(), "Intent không cần tool hoặc chưa có policy tool.");
         };
     }
@@ -400,9 +521,29 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         JsonNode candidate = firstCandidate(response);
         String answer = candidate == null ? null : extractTextFromContent(candidate.path("content"));
         if (StringUtils.hasText(answer)) {
+            if (isUnhelpfulDataAnswer(intent, answer, contextData)) {
+                log.warn("AI final answer looked unhelpful for data intent={}, using safety answer", intent);
+                return buildSafetyAnswer(intent, executionStatus, contextData);
+            }
             return answer.trim();
         }
         return buildSafetyAnswer(intent, executionStatus, contextData);
+    }
+
+    private boolean isUnhelpfulDataAnswer(ChatAssistantIntent intent, String answer, Object contextData) {
+        if (!isDataIntent(intent) || contextData == null || !StringUtils.hasText(answer)) {
+            return false;
+        }
+        String normalizedAnswer = normalize(answer);
+        return containsAny(
+                normalizedAnswer,
+                "khong co kha nang",
+                "khong the tom tat",
+                "khong the thuc hien",
+                "chua tao duoc cau tra loi phu hop",
+                "dien dat ro hon",
+                "khong lay duoc du lieu phu hop"
+        );
     }
 
     private String toJsonForPrompt(Object value) {
@@ -430,6 +571,22 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             String hint = asString(map.get("hint"));
             if (StringUtils.hasText(hint)) {
                 return hint;
+            }
+        }
+        if (intent == ChatAssistantIntent.SUMMARIZE_CONVERSATION) {
+            String summaryAnswer = buildChatSummaryFallbackAnswer(intent, contextData);
+            if (StringUtils.hasText(summaryAnswer)) {
+                return summaryAnswer;
+            }
+        }
+        if (intent == ChatAssistantIntent.TASK_LIST_OVERDUE
+                || intent == ChatAssistantIntent.TASK_LIST_DUE_SOON
+                || intent == ChatAssistantIntent.TASK_LIST_MY_ITEMS
+                || intent == ChatAssistantIntent.TASK_LIST_GROUPS
+                || intent == ChatAssistantIntent.TASK_LIST_GROUP_ITEMS) {
+            String taskAnswer = buildTaskFallbackAnswer(intent, contextData);
+            if (StringUtils.hasText(taskAnswer)) {
+                return taskAnswer;
             }
         }
         if (intent == ChatAssistantIntent.SMALL_TALK) {
@@ -1163,6 +1320,8 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
                 - Nếu thiếu nhóm task khi tạo task, hãy nói cần biết task thuộc nhóm task nào.
                 - Nếu executionStatus là TOOL_ERROR thì giải thích lỗi ngắn gọn theo context.
                 - Nếu dữ liệu là danh sách thì trả lời bằng câu dễ đọc, ưu tiên liệt kê tên chính.
+                - Nếu intent là SUMMARIZE_CONVERSATION và context có highlights/tin nhắn, hãy tóm tắt từ dữ liệu đó; không được nói là không có khả năng tóm tắt.
+                - Nếu intent là TASK_LIST_OVERDUE, hãy liệt kê các task trễ hạn từ context; nếu danh sách rỗng thì nói hiện không có task trễ hạn.
                 - Nếu user hỏi khả năng/tính năng AI, hãy dùng capabilities trong context và chia thành 2 nhóm: Hội thoại và Task.
                 - Không bịa dữ liệu ngoài context.
                 """;
@@ -1412,24 +1571,41 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             if (listData.isEmpty()) {
                 return "Không có task phù hợp.";
             }
-            return "Đã lấy " + listData.size() + " task phù hợp cho bạn.";
+            return summarizeTaskList("Danh sách task phù hợp của bạn", listData);
         }
 
         if (intent == ChatAssistantIntent.TASK_LIST_OVERDUE) {
             if (listData.isEmpty()) {
                 return "Hiện tại bạn không có task nào trễ hạn.";
             }
-            return "Bạn có " + listData.size() + " task đang trễ hạn.";
+            return summarizeTaskList("Bạn có " + listData.size() + " task đang trễ hạn", listData);
         }
 
         if (intent == ChatAssistantIntent.TASK_LIST_DUE_SOON) {
             if (listData.isEmpty()) {
                 return "Hiện tại chưa có task sắp đến hạn trong khoảng thời gian bạn hỏi.";
             }
-            return "Bạn có " + listData.size() + " task sắp đến hạn.";
+            return summarizeTaskList("Bạn có " + listData.size() + " task sắp đến hạn", listData);
         }
 
         return null;
+    }
+
+    private String summarizeTaskList(String title, List<?> listData) {
+        List<String> taskNames = listData.stream()
+                .map(item -> firstNonBlank(
+                        readFieldAsString(item, "title"),
+                        readFieldAsString(item, "name"),
+                        readFieldAsString(item, "taskName")
+                ))
+                .filter(StringUtils::hasText)
+                .limit(10)
+                .toList();
+        if (taskNames.isEmpty()) {
+            return title + ".";
+        }
+        String suffix = listData.size() > taskNames.size() ? ", ..." : "";
+        return title + ": " + String.join(", ", taskNames) + suffix + ".";
     }
 
     private String buildChatSummaryFallbackAnswer(ChatAssistantIntent intent, Object data) {
@@ -1666,18 +1842,30 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         }
     }
 
-    private ToolExecutionResult tryRuleBasedChatTool(String requesterId, String question) {
+    private ToolExecutionResult executeConversationSummaryTool(String requesterId, String question) {
         String normalized = firstNonBlank(question, "").toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(normalized)) {
-            return null;
+            return toolExecutionFromFallback(
+                    ChatAssistantTool.CHAT_GET_CONVERSATION_MESSAGES,
+                    Map.of(
+                            "intent", ChatAssistantIntent.SUMMARIZE_CONVERSATION.name(),
+                            "hint", "Bạn muốn tóm tắt hội thoại nào?"
+                    )
+            );
         }
 
         boolean wantsSummary = containsAny(normalized, "tóm tắt", "tom tat", "tổng hợp", "tong hop");
         if (!wantsSummary) {
-            return null;
+            return toolExecutionFromFallback(
+                    ChatAssistantTool.CHAT_GET_CONVERSATION_MESSAGES,
+                    Map.of(
+                            "intent", ChatAssistantIntent.SUMMARIZE_CONVERSATION.name(),
+                            "hint", "Bạn muốn tóm tắt hội thoại nào?"
+                    )
+            );
         }
 
-        String participantHint = extractParticipantNameHint(question);
+        String conversationHint = firstNonBlank(extractConversationNameHint(question), extractParticipantNameHint(question));
         int days = extractDaysHint(question, 3);
         LocalDateTime since = LocalDateTime.now().minusDays(Math.max(1, days));
 
@@ -1692,21 +1880,27 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         }
 
         List<ChatAssistantToolService.ConversationToolItem> matched = conversations;
-        if (StringUtils.hasText(participantHint)) {
-            String normalizedHint = normalize(participantHint);
+        if (StringUtils.hasText(conversationHint)) {
+            String normalizedHint = normalize(conversationHint);
             matched = conversations.stream()
-                    .filter(conversation -> conversation.members() != null)
-                    .filter(conversation -> conversation.members().stream()
-                            .map(ChatAssistantToolService.ConversationMember::displayName)
-                            .filter(StringUtils::hasText)
-                            .map(this::normalize)
-                            .anyMatch(name -> name.contains(normalizedHint) || normalizedHint.contains(name)))
+                    .filter(conversation -> {
+                        String conversationName = normalize(conversation.name());
+                        boolean matchedName = StringUtils.hasText(conversationName)
+                                && (conversationName.contains(normalizedHint) || normalizedHint.contains(conversationName));
+                        boolean matchedMember = conversation.members() != null
+                                && conversation.members().stream()
+                                .map(ChatAssistantToolService.ConversationMember::displayName)
+                                .filter(StringUtils::hasText)
+                                .map(this::normalize)
+                                .anyMatch(name -> name.contains(normalizedHint) || normalizedHint.contains(name));
+                        return matchedName || matchedMember;
+                    })
                     .toList();
         }
 
         if (matched.isEmpty()) {
-            String hint = StringUtils.hasText(participantHint)
-                    ? "Không tìm thấy hội thoại với \"" + participantHint + "\"."
+            String hint = StringUtils.hasText(conversationHint)
+                    ? "Không tìm thấy hội thoại \"" + conversationHint + "\"."
                     : "Không tìm thấy hội thoại phù hợp để tóm tắt.";
             Map<String, Object> data = Map.of(
                     "intent", ChatAssistantIntent.SUMMARIZE_CONVERSATION.name(),
@@ -1772,7 +1966,7 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         data.put("intent", ChatAssistantIntent.SUMMARIZE_CONVERSATION.name());
         data.put("conversationId", picked.conversationId());
         data.put("conversationName", picked.name());
-        data.put("participantHint", participantHint);
+        data.put("conversationHint", conversationHint);
         data.put("days", days);
         data.put("totalMessagesInRange", filtered.size());
         data.put("highlights", highlights);
@@ -2163,6 +2357,55 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             return "LOW";
         }
         return null;
+    }
+
+    private String extractConversationNameHint(String question) {
+        if (!StringUtils.hasText(question)) {
+            return null;
+        }
+        String quoted = extractQuotedText(question);
+        if (StringUtils.hasText(quoted)) {
+            return quoted;
+        }
+
+        String normalized = question.toLowerCase(Locale.ROOT);
+        String[] patterns = new String[]{
+                "hội thoại",
+                "hoi thoai",
+                "cuộc trò chuyện",
+                "cuoc tro chuyen",
+                "conversation",
+                "chat"
+        };
+        int idx = -1;
+        int patternLen = 0;
+        for (String pattern : patterns) {
+            int found = normalized.indexOf(pattern);
+            if (found >= 0) {
+                idx = found;
+                patternLen = pattern.length();
+                break;
+            }
+        }
+        if (idx < 0) {
+            return null;
+        }
+
+        String remainder = question.substring(idx + patternLen).trim();
+        if (!StringUtils.hasText(remainder)) {
+            return null;
+        }
+        remainder = remainder.replaceFirst("(?i)^(nhóm|nhom|group)\\s+", "").trim();
+        String lower = remainder.toLowerCase(Locale.ROOT);
+        int cut = -1;
+        for (String stop : new String[]{" trong vòng", " trong vong", " trong ", " thời gian", " thoi gian", " 3 ngày", " 7 ngày", ","}) {
+            int stopIdx = lower.indexOf(stop);
+            if (stopIdx > 0 && (cut < 0 || stopIdx < cut)) {
+                cut = stopIdx;
+            }
+        }
+        String candidate = cut > 0 ? remainder.substring(0, cut).trim() : remainder.trim();
+        return StringUtils.hasText(candidate) ? trimWrappingQuotes(candidate) : null;
     }
 
     private String extractParticipantNameHint(String question) {
