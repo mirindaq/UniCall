@@ -30,7 +30,7 @@ export function AdminDataPageTemplate<T>({
   tableDescription,
   rows,
   columns,
-  actionLabel = "Tạo mới",
+  actionLabel = "Làm mới",
   onAction,
   onExport,
 }: AdminDataPageTemplateProps<T>) {

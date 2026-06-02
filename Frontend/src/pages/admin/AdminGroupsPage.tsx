@@ -68,8 +68,8 @@ export function AdminGroupsPage() {
           ),
         },
       ]}
-      actionLabel="Tao nhom"
-      onAction={() => toast.info("Chuc nang tao nhom dang phat trien")}
+      // actionLabel="Tao nhom"
+      onAction={() => toast.info("Da lam moi")}
     />
   )
 }

@@ -51,8 +51,8 @@ export function AdminPostsPage() {
               post.status === "PUBLISHED"
                 ? "Dang hien"
                 : post.status === "HIDDEN"
-                  ? "An"
-                  : "Da xoa"
+                  ? "Dang hien"
+                  : "Da an"
             return <Badge variant={variant}>{label}</Badge>
           },
         },
@@ -76,13 +76,13 @@ export function AdminPostsPage() {
                 action(post.id).then(() => refetch())
               }}
             >
-              {post.status === "HIDDEN" ? "Hien lai" : "An bai viet"}
+              {post.status === "HIDDEN" ? "An bai viet" : "Hien lai"}
             </Button>
           ),
         },
       ]}
-      actionLabel="Tao bai viet"
-      onAction={() => toast.info("Chuc nang tao bai viet dang phat trien")}
+      actionLabel="Lam moi"
+      onAction={() => toast.info("Da lam moi")}
     />
   )
 }
