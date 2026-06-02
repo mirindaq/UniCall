@@ -4,20 +4,34 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
+
+import iuh.fit.common_service.observability.TraceContext;
 
 import iuh.fit.notification_service.entities.Notification;
 import iuh.fit.notification_service.events.GroupNotificationEvent;
 import iuh.fit.notification_service.repositories.NotificationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class GroupNotificationEventConsumer {
     private final NotificationRepository notificationRepository;
 
     @RabbitListener(queues = "${app.notification.queue}")
-    public void consume(GroupNotificationEvent event) {
+    public void consume(
+            GroupNotificationEvent event,
+            @Header(name = TraceContext.RABBIT_HEADER, required = false) String traceId
+    ) {
+        try (TraceContext.Scope ignored = TraceContext.open(traceId)) {
+            consumeWithTrace(event);
+        }
+    }
+
+    private void consumeWithTrace(GroupNotificationEvent event) {
         if (event == null || event.getType() == null || event.getRecipientUserIds() == null) {
             return;
         }
@@ -49,6 +63,12 @@ public class GroupNotificationEventConsumer {
         }).toList();
 
         notificationRepository.saveAll(notifications);
+        log.info(
+                "notification event consumed type={} eventId={} recipients={}",
+                event.getType(),
+                event.getEventId(),
+                notifications.size()
+        );
     }
 
     private String buildTitle(GroupNotificationEvent event) {

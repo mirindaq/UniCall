@@ -1,5 +1,6 @@
 package iuh.fit.friend_service.clients;
 
+import iuh.fit.common_service.observability.TraceGrpcClientInterceptor;
 import iuh.fit.unicall.grpc.user.v1.GetFriendInvitePrivacyByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import io.grpc.ManagedChannel;
@@ -36,6 +37,7 @@ public class GrpcUserPrivacyClient {
     void init() {
         channel = ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
+                .intercept(TraceGrpcClientInterceptor.INSTANCE)
                 .build();
         userStub = UserServiceGrpc.newBlockingStub(channel);
     }

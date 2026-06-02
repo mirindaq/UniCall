@@ -3,6 +3,7 @@ package iuh.fit.identity_service.clients;
 import iuh.fit.common_service.exceptions.ConflictException;
 import iuh.fit.common_service.exceptions.InvalidParamException;
 import iuh.fit.common_service.exceptions.ResourceNotFoundException;
+import iuh.fit.common_service.observability.GrpcTrace;
 import iuh.fit.identity_service.dtos.request.auth.RegisterRequest;
 import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
@@ -40,7 +41,7 @@ public class GrpcUserServiceClient {
                 .setDateOfBirth(request.getDateOfBirth().toString())
                 .build();
         try {
-            CreateUserProfileResponse response = userStub
+            CreateUserProfileResponse response = GrpcTrace.withTrace(userStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .createUserProfile(grpcRequest);
 
@@ -69,7 +70,7 @@ public class GrpcUserServiceClient {
                 .setIdentityUserId(identityUserId)
                 .build();
         try {
-            userStub
+            GrpcTrace.withTrace(userStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .cancelAccountDeletionRequest(grpcRequest);
         } catch (StatusRuntimeException ex) {
@@ -82,7 +83,7 @@ public class GrpcUserServiceClient {
                 .setIdentityUserId(identityUserId)
                 .build();
         try {
-            userStub
+            GrpcTrace.withTrace(userStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .getUserProfileByIdentity(grpcRequest);
             return true;

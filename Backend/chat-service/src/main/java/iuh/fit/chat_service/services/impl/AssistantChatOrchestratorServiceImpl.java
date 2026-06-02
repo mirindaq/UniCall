@@ -14,6 +14,7 @@ import iuh.fit.chat_service.services.AssistantChatOrchestratorService;
 import iuh.fit.chat_service.services.ChatAssistantToolService;
 import iuh.fit.chat_service.services.TaskAssistantToolService;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.observability.TraceRestTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
@@ -808,7 +809,7 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
             requestFactory.setConnectTimeout(Math.max(1000, aiAssistantProperties.getConnectTimeoutMs()));
             requestFactory.setReadTimeout(Math.max(1000, aiAssistantProperties.getReadTimeoutMs()));
-            RestTemplate restTemplate = new RestTemplate(requestFactory);
+            RestTemplate restTemplate = TraceRestTemplate.instrument(new RestTemplate(requestFactory));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);

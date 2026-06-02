@@ -8,6 +8,7 @@ import iuh.fit.chat_service.entities.Message;
 import iuh.fit.chat_service.entities.ParticipantInfo;
 import iuh.fit.chat_service.enums.MessageType;
 import iuh.fit.chat_service.services.ConversationMessageVectorService;
+import iuh.fit.common_service.observability.TraceRestTemplate;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -257,7 +258,7 @@ public class ConversationMessageVectorServiceImpl implements ConversationMessage
             SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
             requestFactory.setConnectTimeout(timeoutMs);
             requestFactory.setReadTimeout(timeoutMs);
-            qdrantRestTemplate = new RestTemplate(requestFactory);
+            qdrantRestTemplate = TraceRestTemplate.instrument(new RestTemplate(requestFactory));
             return qdrantRestTemplate;
         }
     }

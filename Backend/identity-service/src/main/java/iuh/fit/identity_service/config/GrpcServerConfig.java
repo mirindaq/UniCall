@@ -1,5 +1,6 @@
 package iuh.fit.identity_service.config;
 
+import iuh.fit.common_service.observability.TraceGrpcServerInterceptor;
 import iuh.fit.identity_service.grpc.GrpcIdentityService;
 import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
@@ -15,9 +16,11 @@ public class GrpcServerConfig {
     @Bean(initMethod = "start", destroyMethod = "shutdown")
     public Server grpcServer(
             @Value("${grpc.server.port:9092}") int grpcPort,
-            GrpcIdentityService grpcIdentityService
+            GrpcIdentityService grpcIdentityService,
+            TraceGrpcServerInterceptor traceGrpcServerInterceptor
     ) throws IOException {
         return NettyServerBuilder.forPort(grpcPort)
+                .intercept(traceGrpcServerInterceptor)
                 .addService(grpcIdentityService)
                 .build();
     }

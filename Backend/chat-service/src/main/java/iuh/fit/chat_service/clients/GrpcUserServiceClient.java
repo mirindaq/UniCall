@@ -1,5 +1,6 @@
 package iuh.fit.chat_service.clients;
 
+import iuh.fit.common_service.observability.GrpcTrace;
 import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityResponse;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
@@ -35,7 +36,7 @@ public class GrpcUserServiceClient {
                 .build();
 
         try {
-            GetUserProfileByIdentityResponse response = userStub
+            GetUserProfileByIdentityResponse response = GrpcTrace.withTrace(userStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .getUserProfileByIdentity(request);
 

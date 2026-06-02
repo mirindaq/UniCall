@@ -2,6 +2,7 @@ package iuh.fit.user_service.clients;
 
 import com.google.protobuf.ByteString;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.observability.TraceGrpcClientInterceptor;
 import iuh.fit.unicall.grpc.file.v1.FileServiceGrpc;
 import iuh.fit.unicall.grpc.file.v1.UploadAvatarRequest;
 import iuh.fit.unicall.grpc.file.v1.UploadAvatarResponse;
@@ -42,6 +43,7 @@ public class GrpcFileServiceClient {
     void init() {
         channel = ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
+                .intercept(TraceGrpcClientInterceptor.INSTANCE)
                 .build();
         fileStub = FileServiceGrpc.newBlockingStub(channel);
     }

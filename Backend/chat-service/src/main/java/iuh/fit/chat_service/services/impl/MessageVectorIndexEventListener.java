@@ -7,9 +7,11 @@ import iuh.fit.chat_service.events.MessageVectorIndexEvent;
 import iuh.fit.chat_service.repositories.ConversationRepository;
 import iuh.fit.chat_service.repositories.MessageRepository;
 import iuh.fit.chat_service.services.ConversationMessageVectorService;
+import iuh.fit.common_service.observability.TraceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,7 +25,16 @@ public class MessageVectorIndexEventListener {
     private final ConversationMessageVectorService conversationMessageVectorService;
 
     @RabbitListener(queues = "${app.ai-assistant.vector-search.rabbitmq.queue}")
-    public void consume(MessageVectorIndexEvent event) {
+    public void consume(
+            MessageVectorIndexEvent event,
+            @Header(name = TraceContext.RABBIT_HEADER, required = false) String traceId
+    ) {
+        try (TraceContext.Scope ignored = TraceContext.open(traceId)) {
+            consumeWithTrace(event);
+        }
+    }
+
+    private void consumeWithTrace(MessageVectorIndexEvent event) {
         if (event == null || event.getAction() == null || !StringUtils.hasText(event.getMessageId())) {
             return;
         }

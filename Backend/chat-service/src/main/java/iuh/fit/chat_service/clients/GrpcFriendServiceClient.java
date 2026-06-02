@@ -1,5 +1,6 @@
 package iuh.fit.chat_service.clients;
 
+import iuh.fit.common_service.observability.GrpcTrace;
 import iuh.fit.unicall.grpc.friend.v1.CheckRelationshipRequest;
 import iuh.fit.unicall.grpc.friend.v1.CheckRelationshipResponse;
 import iuh.fit.unicall.grpc.friend.v1.FriendServiceGrpc;
@@ -38,7 +39,7 @@ public class GrpcFriendServiceClient {
                 .build();
 
         try {
-            CheckRelationshipResponse response = friendStub
+            CheckRelationshipResponse response = GrpcTrace.withTrace(friendStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .checkRelationship(request);
 

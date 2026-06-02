@@ -1,5 +1,6 @@
 package iuh.fit.chat_service.clients;
 
+import iuh.fit.common_service.observability.GrpcTrace;
 import iuh.fit.unicall.grpc.file.v1.FileServiceGrpc;
 import iuh.fit.unicall.grpc.file.v1.UploadFileRequest;
 import iuh.fit.unicall.grpc.file.v1.UploadFileResponse;
@@ -41,7 +42,7 @@ public class GrpcFileServiceClient {
                 .build();
 
         try {
-            UploadFileResponse response = fileStub
+            UploadFileResponse response = GrpcTrace.withTrace(fileStub)
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .uploadFile(request);
 

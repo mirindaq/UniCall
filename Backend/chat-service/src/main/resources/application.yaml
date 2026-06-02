@@ -52,7 +52,7 @@ app:
   ai-assistant:
     enabled: ${AI_ASSISTANT_ENABLED:true}
     base-url: ${AI_ASSISTANT_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
-    text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-pro}
+    text-model: ${AI_ASSISTANT_TEXT_MODEL:gemini-2.5-flash}
     image-model: ${AI_ASSISTANT_IMAGE_MODEL:gemini-2.5-flash-image}
     api-key: ${AI_ASSISTANT_API_KEY:}
     text-system-prompt: ${AI_ASSISTANT_TEXT_SYSTEM_PROMPT:Bạn là UniCall AI, trả lời hữu ích, lịch sự bằng tiếng Việt.}

@@ -1,6 +1,7 @@
 package iuh.fit.user_service.clients;
 
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.observability.TraceGrpcClientInterceptor;
 import iuh.fit.unicall.grpc.identity.v1.IdentityServiceGrpc;
 import iuh.fit.unicall.grpc.identity.v1.VerifyPasswordRequest;
 import io.grpc.ManagedChannel;
@@ -37,6 +38,7 @@ public class GrpcIdentityServiceClient {
     void init() {
         channel = ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
+                .intercept(TraceGrpcClientInterceptor.INSTANCE)
                 .build();
         identityStub = IdentityServiceGrpc.newBlockingStub(channel);
     }

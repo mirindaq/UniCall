@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import iuh.fit.chat_service.config.AiAssistantProperties;
 import iuh.fit.chat_service.services.AiAssistantService;
+import iuh.fit.common_service.observability.TraceRestTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -130,7 +131,7 @@ public class AiAssistantServiceImpl implements AiAssistantService {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.max(1000, properties.getConnectTimeoutMs()));
         requestFactory.setReadTimeout(Math.max(1000, properties.getReadTimeoutMs()));
-        RestTemplate restTemplate = new RestTemplate(requestFactory);
+        RestTemplate restTemplate = TraceRestTemplate.instrument(new RestTemplate(requestFactory));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

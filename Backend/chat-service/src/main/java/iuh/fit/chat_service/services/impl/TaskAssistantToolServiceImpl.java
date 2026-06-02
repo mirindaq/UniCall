@@ -6,6 +6,7 @@ import iuh.fit.chat_service.clients.GrpcUserServiceClient;
 import iuh.fit.chat_service.config.AiAssistantProperties;
 import iuh.fit.chat_service.services.TaskAssistantToolService;
 import iuh.fit.common_service.exceptions.InvalidParamException;
+import iuh.fit.common_service.observability.TraceRestTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -1024,7 +1025,7 @@ public class TaskAssistantToolServiceImpl implements TaskAssistantToolService {
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        return new RestTemplate(requestFactory);
+        return TraceRestTemplate.instrument(new RestTemplate(requestFactory));
     }
 
     private String buildUrl(String baseUrl, String path, Map<String, String> query) {
