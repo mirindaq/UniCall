@@ -9,6 +9,7 @@ export type UserProfile = {
   dateOfBirth: string
   avatar?: string | null
   isActive: boolean
+  role?: string | null
   allowFriendInvites?: boolean
 }
 

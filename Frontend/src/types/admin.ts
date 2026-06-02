@@ -106,7 +106,7 @@ export interface AdminManagedPost {
   authorId: string
   authorName: string
   content: string
-  status: "PUBLISHED" | "HIDDEN" | "DELETED"
+  status: "ACTIVE" | "HIDDEN" | "DELETED"
   flaggedCount: number
   createdAt: string
 }
@@ -118,6 +118,15 @@ export interface AdminManagedGroup {
   ownerName: string
   memberCount: number
   isPrivate: boolean
+  memberApprovalEnabled: boolean
   pendingCount: number
   createdAt: string
+}
+
+export interface AdminGroupMember {
+  identityUserId: string
+  displayName: string
+  role: string | null
+  nickname: string | null
+  joinedAt: string | null
 }

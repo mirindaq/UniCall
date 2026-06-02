@@ -139,6 +139,9 @@ public class UserProfileServiceImpl implements UserProfileService {
     @Transactional
     public AccountDeletionStatusResponse cancelAccountDeletionRequest(String identityUserId) {
         User user = getAuthenticatedUserProfile(identityUserId);
+        if (!Boolean.TRUE.equals(user.getDeletionPending())) {
+            return AccountDeletionStatusResponse.from(user, ACCOUNT_DELETION_GRACE_DAYS);
+        }
         user.setDeletionPending(false);
         user.setDeletionRequestedAt(null);
         user.setDeletionReason(null);

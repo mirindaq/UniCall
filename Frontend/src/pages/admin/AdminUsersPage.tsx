@@ -42,14 +42,14 @@ export function AdminUsersPage() {
       setTotalPage(Math.max(response.data.totalPage, 1))
       setTotalItem(response.data.totalItem)
     } catch {
-      toast.error("Khong the tai danh sach nguoi dung")
+      toast.error("Không thể tải danh sách người dùng")
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadUsers()
+    void loadUsers()
   }, [])
 
   const handleSearch = async () => {
@@ -71,14 +71,14 @@ export function AdminUsersPage() {
     try {
       if (user.isActive) {
         await userService.blockUserByAdmin(user.identityUserId)
-        toast.success("Da chan nguoi dung")
+        toast.success("Đã chặn người dùng")
       } else {
         await userService.unblockUserByAdmin(user.identityUserId)
-        toast.success("Da mo chan nguoi dung")
+        toast.success("Đã mở chặn người dùng")
       }
       await loadUsers(page, keyword)
     } catch {
-      toast.error("Khong the cap nhat trang thai nguoi dung")
+      toast.error("Không thể cập nhật trạng thái người dùng")
     }
   }
 
@@ -100,22 +100,21 @@ export function AdminUsersPage() {
 
   const columns = useMemo(
     () => [
-      { key: "identityUserId", title: "User ID", render: (row: AdminManagedUser) => row.identityUserId },
-      { key: "fullName", title: "Ho ten", render: (row: AdminManagedUser) => row.fullName },
-      { key: "phoneNumber", title: "So dien thoai", render: (row: AdminManagedUser) => row.phoneNumber },
+      { key: "fullName", title: "Họ tên", render: (row: AdminManagedUser) => row.fullName },
+      { key: "phoneNumber", title: "Số điện thoại", render: (row: AdminManagedUser) => row.phoneNumber },
       { key: "email", title: "Email", render: (row: AdminManagedUser) => row.email },
       {
         key: "status",
-        title: "Trang thai",
+        title: "Trạng thái",
         render: (row: AdminManagedUser) => (
           <Badge variant={row.isActive ? "secondary" : "destructive"}>
-            {row.isActive ? "Hoạt động" : "Bi chặn"}
+            {row.isActive ? "Hoạt động" : "Bị chặn"}
           </Badge>
         ),
       },
       {
         key: "actions",
-        title: "Thao tac",
+        title: "Thao tác",
         render: (row: AdminManagedUser) => (
           <Button
             variant={row.isActive ? "destructive" : "secondary"}
@@ -127,14 +126,14 @@ export function AdminUsersPage() {
         ),
       },
     ],
-    [keyword]
+    [page, keyword]
   )
 
   return (
     <div className="space-y-4">
       <AdminPageHeader
-        title="Quan ly nguoi dung"
-        description="Danh sach tai khoan va thao tac chan/mo chan."
+        title="Quản lý người dùng"
+        description="Danh sách tài khoản và thao tác chặn/mở chặn."
       />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -143,16 +142,16 @@ export function AdminUsersPage() {
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               className="pl-9"
-              placeholder="Tim theo user id, ten, so dien thoai, email..."
+              placeholder="Tìm theo user id, tên, số điện thoại, email..."
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
             />
           </div>
           <Button variant="outline" onClick={() => void handleSearch()} disabled={loading}>
-            Tim
+            Tìm
           </Button>
           <Button onClick={() => void handleRefresh()} disabled={loading}>
-            {loading ? "Dang tai..." : "Lam moi"}
+            {loading ? "Đang tải..." : "Làm mới"}
           </Button>
         </div>
       </section>
@@ -162,8 +161,8 @@ export function AdminUsersPage() {
       <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-600">
-            Hien thi <span className="font-semibold text-slate-900">{rows.length}</span> /{" "}
-            <span className="font-semibold text-slate-900">{totalItem}</span> tai khoan
+            Hiển thị <span className="font-semibold text-slate-900">{rows.length}</span> /{" "}
+            <span className="font-semibold text-slate-900">{totalItem}</span> tài khoản
           </p>
 
           <Pagination className="mx-0 w-auto justify-start sm:justify-end">
@@ -171,7 +170,7 @@ export function AdminUsersPage() {
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
-                  text="Truoc"
+                  text="Trước"
                   onClick={(event) => {
                     event.preventDefault()
                     void handlePageChange(page - 1)

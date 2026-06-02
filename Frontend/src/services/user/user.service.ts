@@ -2,11 +2,15 @@ import axios from "axios"
 import axiosClient from "@/configurations/axios.config"
 import { buildApiUrl } from "@/constants/api"
 import { API_PREFIXES } from "@/constants/api-prefixes"
+import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type {
-  AccountDeletionStatus,
+  AdminGroupMember,
   AdminManagedGroup,
   AdminManagedPost,
   AdminManagedUser,
+} from "@/types/admin"
+import type {
+  AccountDeletionStatus,
   FriendInvitePrivacy,
   PhoneSearchPrivacy,
   RequestAccountDeletionPayload,
@@ -258,17 +262,26 @@ export const userService = {
   },
 
   getAdminPosts: async ({
+    authorIds,
     keyword,
     page = 1,
     limit = 20,
   }: {
+    authorIds?: string[]
     keyword?: string
     page?: number
     limit?: number
   }): Promise<ResponseSuccess<PageResponse<AdminManagedPost>>> => {
     const response = await axiosClient.get<
       ResponseSuccess<PageResponse<AdminManagedPost>>
-    >(`${POSTS_API_PREFIX}/admin/posts`, { params: { keyword, page, limit } })
+    >(`${POSTS_API_PREFIX}/admin/posts`, {
+      params: {
+        authorIds: authorIds?.length ? authorIds.join(",") : undefined,
+        keyword,
+        page,
+        limit,
+      },
+    })
     return response.data
   },
 
@@ -304,6 +317,15 @@ export const userService = {
     >(`${CONVERSATIONS_API_PREFIX}/admin/groups`, {
       params: { keyword, page, limit },
     })
+    return response.data
+  },
+
+  getAdminGroupMembers: async (
+    groupId: string
+  ): Promise<ResponseSuccess<AdminGroupMember[]>> => {
+    const response = await axiosClient.get<ResponseSuccess<AdminGroupMember[]>>(
+      `${CONVERSATIONS_API_PREFIX}/admin/groups/${groupId}/members`
+    )
     return response.data
   },
 

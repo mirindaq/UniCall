@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react"
 import { Navigate, useLocation } from "react-router"
 import { Loader2 } from "lucide-react"
 
-import { ADMIN_PATH } from "@/constants/admin"
 import { AUTH_PATH } from "@/constants/auth"
 import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
@@ -40,7 +39,7 @@ export default function AdminProtectedRoute({
       }
     }
 
-    check()
+    void check()
     return () => {
       mounted = false
     }
@@ -58,7 +57,7 @@ export default function AdminProtectedRoute({
       <main className="flex min-h-svh items-center justify-center bg-slate-50 px-4">
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm">
           <Loader2 className="size-4 animate-spin" />
-          Dang xac thuc phien...
+          Đang xác thực phiên...
         </div>
       </main>
     )

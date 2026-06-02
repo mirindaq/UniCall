@@ -31,8 +31,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { AUTH_PATH } from "@/constants/auth"
-import { useAuth } from "@/contexts/auth-context"
 import { adminNavGroups, isAdminNavItemActive, type AdminNavItem } from "@/constants/admin-navigation"
+import { useAuth } from "@/contexts/auth-context"
 import { authService } from "@/services/auth/auth.service"
 
 function SidebarLogo() {
@@ -65,7 +65,7 @@ export function AdminLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const userName = "Quản trị viên"
-  const userRole = "System Admin"
+  const userRole = "Quản trị hệ thống"
 
   const getInitials = (name: string) => {
     return name
@@ -132,7 +132,7 @@ export function AdminLayout() {
           <SidebarTrigger className="-ml-1" />
           <div className="ml-2">
             <p className="text-sm font-semibold text-slate-900">Trang quản trị UniCall</p>
-            <p className="text-xs text-slate-500">Mock template theo kiến trúc admin layout</p>
+            <p className="text-xs text-slate-500">Bảng quản trị hệ thống UniCall</p>
           </div>
 
           <div className="ml-auto flex items-center gap-3">

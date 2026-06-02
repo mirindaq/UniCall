@@ -9,8 +9,8 @@ spring:
       max-request-size: 100MB
   datasource:
     url: ${POST_DB_URL:jdbc:mysql://localhost:3306/unicall_post_service?createDatabaseIfNotExist=true}
-    username: ${POST_DB_USERNAME:root}
-    password: ${POST_DB_PASSWORD:12345}
+    username: ${POST_DB_USERNAME:springstudent}
+    password: ${POST_DB_PASSWORD:springstudent}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -33,6 +33,9 @@ grpc:
   client:
     file-service:
       address: ${FILE_SERVICE_GRPC_ADDRESS:static://localhost:9097}
+      negotiation-type: plaintext
+    user-service:
+      address: ${USER_SERVICE_GRPC_ADDRESS:static://localhost:9091}
       negotiation-type: plaintext
   user-service:
     host: ${USER_SERVICE_GRPC_HOST:localhost}

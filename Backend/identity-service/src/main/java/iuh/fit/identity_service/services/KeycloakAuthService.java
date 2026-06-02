@@ -25,5 +25,7 @@ public interface KeycloakAuthService {
 
     AuthTokenResponse refreshToken(String refreshToken);
 
+    String extractSubjectFromAccessToken(String accessToken);
+
     void revokeRefreshToken(String refreshToken);
 }

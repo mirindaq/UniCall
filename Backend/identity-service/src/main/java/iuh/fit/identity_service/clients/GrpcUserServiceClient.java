@@ -9,6 +9,7 @@ import iuh.fit.unicall.grpc.user.v1.CancelAccountDeletionByIdentityRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileRequest;
 import iuh.fit.unicall.grpc.user.v1.CreateUserProfileResponse;
 import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityRequest;
+import iuh.fit.unicall.grpc.user.v1.GetUserProfileByIdentityResponse;
 import iuh.fit.unicall.grpc.user.v1.UserServiceGrpc;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -72,6 +73,20 @@ public class GrpcUserServiceClient {
             userStub
                     .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
                     .cancelAccountDeletionRequest(grpcRequest);
+        } catch (StatusRuntimeException ex) {
+            throw mapException(ex);
+        }
+    }
+
+    public boolean isUserActive(String identityUserId) {
+        GetUserProfileByIdentityRequest grpcRequest = GetUserProfileByIdentityRequest.newBuilder()
+                .setIdentityUserId(identityUserId)
+                .build();
+        try {
+            GetUserProfileByIdentityResponse response = userStub
+                    .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                    .getUserProfileByIdentity(grpcRequest);
+            return response.getIsActive();
         } catch (StatusRuntimeException ex) {
             throw mapException(ex);
         }

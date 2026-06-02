@@ -1,11 +1,11 @@
-import type { ReactNode } from "react"
+import type { FormEvent, ReactNode } from "react"
 import { Search } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader"
 import { AdminSimpleTable } from "@/components/admin/AdminSimpleTable"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 interface AdminDataPageTemplateProps<T> {
   title: string
@@ -16,11 +16,14 @@ interface AdminDataPageTemplateProps<T> {
   columns: Array<{
     key: string
     title: string
-    render: (row: T) => ReactNode
+    render: (row: T, index: number) => ReactNode
   }>
   actionLabel?: string
   onAction?: () => void
-  onExport?: () => void
+  searchValue?: string
+  searchPlaceholder?: string
+  onSearchValueChange?: (value: string) => void
+  onSearch?: () => void
 }
 
 export function AdminDataPageTemplate<T>({
@@ -32,8 +35,16 @@ export function AdminDataPageTemplate<T>({
   columns,
   actionLabel = "Làm mới",
   onAction,
-  onExport,
+  searchValue = "",
+  searchPlaceholder = "Tìm kiếm...",
+  onSearchValueChange,
+  onSearch,
 }: AdminDataPageTemplateProps<T>) {
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    onSearch?.()
+  }
+
   return (
     <div className="space-y-4">
       <AdminPageHeader
@@ -48,16 +59,26 @@ export function AdminDataPageTemplate<T>({
             <p className="font-semibold text-slate-900">{tableTitle}</p>
             <p className="text-sm text-slate-500">{tableDescription}</p>
           </div>
-          <Badge variant="secondary">Dữ liệu mẫu</Badge>
+          <Badge variant="secondary">Dữ liệu hệ thống</Badge>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+        <form
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]"
+          onSubmit={handleSearchSubmit}
+        >
           <div className="relative">
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Tìm kiếm..." />
+            <Input
+              className="pl-9"
+              placeholder={searchPlaceholder}
+              value={searchValue}
+              onChange={(event) => onSearchValueChange?.(event.target.value)}
+            />
           </div>
-          <Button variant="outline" onClick={onExport}>Xuất CSV</Button>
-        </div>
+          <Button type="submit" variant="outline">
+            Tìm kiếm
+          </Button>
+        </form>
       </section>
 
       <AdminSimpleTable columns={columns} rows={rows} />

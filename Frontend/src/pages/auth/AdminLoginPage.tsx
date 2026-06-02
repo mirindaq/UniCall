@@ -69,12 +69,12 @@ export function AdminLoginPage() {
     event.preventDefault()
 
     if (!isValidVietnamPhoneForBackend(loginData.phoneNumber)) {
-      toast.error("So dien thoai khong hop le.")
+      toast.error("Số điện thoại không hợp lệ.")
       return
     }
 
     if (!loginData.password.trim()) {
-      toast.error("Vui long nhap mat khau.")
+      toast.error("Vui lòng nhập mật khẩu.")
       return
     }
 
@@ -89,7 +89,7 @@ export function AdminLoginPage() {
       })
       const profile = await userService.getMyProfile({ forceRefresh: true })
       setAuthenticated(profile.data.identityUserId)
-      toast.success(response.message || "Dang nhap admin thanh cong")
+      toast.success(response.message || "Đăng nhập admin thành công")
       window.location.replace(adminDashboardUrl)
     } catch (error) {
       try {
@@ -98,7 +98,7 @@ export function AdminLoginPage() {
         // ignore logout errors and clear local state anyway
       }
       clearAuthenticated()
-      toast.error(extractErrorMessage(error, "Dang nhap admin that bai."))
+      toast.error(extractErrorMessage(error, "Đăng nhập admin thất bại."))
       window.history.replaceState(null, "", AUTH_PATH.ADMIN_LOGIN)
     } finally {
       setIsSubmitting(false)
@@ -117,7 +117,7 @@ export function AdminLoginPage() {
           </div>
           <p className="mt-3 text-4xl font-bold tracking-tight">UniCall Admin</p>
           <p className="mt-2 text-sm text-slate-600">
-            Cong dang nhap rieng danh cho quan tri vien he thong.
+            Cổng đăng nhập riêng dành cho quản trị viên hệ thống.
           </p>
         </div>
 
@@ -136,7 +136,7 @@ export function AdminLoginPage() {
 
             <form className="space-y-4" onSubmit={handleLogin}>
               <div className="space-y-2">
-                <Label htmlFor="admin-phone-local">So dien thoai admin</Label>
+                <Label htmlFor="admin-phone-local">Số điện thoại admin</Label>
                 <div className="flex gap-2">
                   <div className="flex h-11 w-[90px] items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-sm font-medium text-slate-700">
                     VN +84
@@ -146,7 +146,7 @@ export function AdminLoginPage() {
                     type="tel"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder="Nhap so dien thoai"
+                    placeholder="Nhập số điện thoại"
                     value={loginLocalPhone}
                     onChange={(event) => {
                       const localPhone = normalizePhoneInput(event.target.value)
@@ -163,11 +163,11 @@ export function AdminLoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="admin-password">Mat khau</Label>
+                <Label htmlFor="admin-password">Mật khẩu</Label>
                 <Input
                   id="admin-password"
                   type="password"
-                  placeholder="Nhap mat khau admin"
+                  placeholder="Nhập mật khẩu admin"
                   value={loginData.password}
                   onChange={(event) =>
                     setLoginData((prev) => ({
@@ -185,18 +185,18 @@ export function AdminLoginPage() {
                 className="h-11 w-full bg-sky-700 text-white hover:bg-sky-800"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Dang dang nhap..." : "Dang nhap admin"}
+                {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập admin"}
               </Button>
             </form>
 
             <div className="mt-5 text-center text-sm text-slate-600">
-              <span>Dang nhap nguoi dung thong thuong? </span>
+              <span>Đăng nhập người dùng thông thường? </span>
               <button
                 type="button"
                 onClick={() => navigate(AUTH_PATH.LOGIN)}
                 className="font-semibold text-sky-700 hover:text-sky-800"
               >
-                Ve trang user login
+                Về trang user login
               </button>
             </div>
           </CardContent>

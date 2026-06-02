@@ -74,7 +74,7 @@ axiosClient.interceptors.response.use(
     const status = error.response.status
 
     if (status === 403) {
-      toast.error("Khong co quyen truy cap")
+      toast.error("Không có quyền truy cập")
       return Promise.reject(error)
     }
 

@@ -2,6 +2,7 @@ package iuh.fit.post_service.services.impl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -126,7 +127,11 @@ public class PostServiceImpl implements PostService {
     int safePage = Math.max(page, 1);
     int safeLimit = Math.max(1, Math.min(limit, 50));
 
-    Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
+    Pageable pageable = PageRequest.of(
+        safePage - 1,
+        safeLimit,
+        SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc")
+    );
 
     return postRepository.findByAuthorIdAndStatus(authorId, PostStatus.ACTIVE, pageable);
   }
@@ -137,7 +142,11 @@ public class PostServiceImpl implements PostService {
     int safePage = Math.max(page, 1);
     int safeLimit = Math.max(1, Math.min(limit, 50));
 
-    Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
+    Pageable pageable = PageRequest.of(
+        safePage - 1,
+        safeLimit,
+        SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc")
+    );
 
     if (userId == null || userId.isBlank()) {
       return postRepository.findByStatus(PostStatus.ACTIVE, pageable);
@@ -168,20 +177,47 @@ public class PostServiceImpl implements PostService {
 
   @Override
   @Transactional(readOnly = true)
-  public Page<Post> getAllPostsForAdmin(int page, int limit, String keyword) {
+  public Page<Post> getAllPostsForAdmin(
+      int page,
+      int limit,
+      String keyword,
+      List<String> authorIds
+  ) {
     int safePage = Math.max(page, 1);
     int safeLimit = Math.max(1, Math.min(limit, 50));
     Pageable pageable = PageRequest.of(safePage - 1, safeLimit);
 
     return postRepository.findAll((root, query, cb) -> {
+      List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
       if (keyword != null && !keyword.isBlank()) {
-        String like = "%" + keyword.toLowerCase() + "%";
-        return cb.or(
-          cb.like(cb.lower(root.get("content")), like),
-          cb.like(cb.lower(root.get("authorId")), like)
-        );
+        String normalizedKeyword = keyword.trim().toLowerCase(Locale.ROOT);
+        String like = "%" + normalizedKeyword + "%";
+        predicates.add(cb.like(cb.lower(root.get("content")), like));
+
+        if ("active".contains(normalizedKeyword) || "dang hien thi".contains(normalizedKeyword)
+            || "đang hiển thị".contains(normalizedKeyword)) {
+          predicates.add(cb.equal(root.get("status"), PostStatus.ACTIVE));
+        }
+        if ("hidden".contains(normalizedKeyword) || "da an".contains(normalizedKeyword)
+            || "đã ẩn".contains(normalizedKeyword)) {
+          predicates.add(cb.equal(root.get("status"), PostStatus.HIDDEN));
+        }
+        if ("deleted".contains(normalizedKeyword) || "bi go".contains(normalizedKeyword)
+            || "bị gỡ".contains(normalizedKeyword)) {
+          predicates.add(cb.equal(root.get("status"), PostStatus.DELETED));
+        }
       }
-      return cb.conjunction();
+
+      if (authorIds != null && !authorIds.isEmpty()) {
+        predicates.add(root.get("authorId").in(authorIds));
+      }
+
+      if (predicates.isEmpty()) {
+        return cb.conjunction();
+      }
+
+      return cb.or(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
     }, pageable);
   }
 

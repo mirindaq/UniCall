@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 interface Column<T> {
   key: string
   title: string
-  render: (row: T) => ReactNode
+  render: (row: T, index: number) => ReactNode
 }
 
 interface AdminSimpleTableProps<T> {
@@ -28,7 +28,7 @@ export function AdminSimpleTable<T>({ columns, rows }: AdminSimpleTableProps<T>)
           {rows.map((row, index) => (
             <TableRow key={index}>
               {columns.map((column) => (
-                <TableCell key={column.key}>{column.render(row)}</TableCell>
+                <TableCell key={column.key}>{column.render(row, index)}</TableCell>
               ))}
             </TableRow>
           ))}

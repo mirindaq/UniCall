@@ -21,7 +21,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
@@ -33,6 +37,7 @@ public class KeycloakIdentityClient {
             "super_admin",
             "super-admin"
     );
+    private static final Pattern JWT_SUBJECT_PATTERN = Pattern.compile("\"sub\"\\s*:\\s*\"([^\"]+)\"");
     private final WebClient keycloakWebClient;
 
     @Value("${app.security.keycloak.realm}")
@@ -396,6 +401,32 @@ public class KeycloakIdentityClient {
         } catch (WebClientResponseException.BadRequest | WebClientResponseException.Unauthorized e) {
             throw new UnauthenticatedException("Refresh token is invalid or expired");
         }
+    }
+
+    public String extractSubjectFromAccessToken(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new UnauthenticatedException("Missing access token from identity provider");
+        }
+
+        String[] tokenParts = accessToken.split("\\.");
+        if (tokenParts.length < 2) {
+            throw new UnauthenticatedException("Access token is invalid");
+        }
+
+        try {
+            String payload = new String(
+                    Base64.getUrlDecoder().decode(tokenParts[1]),
+                    StandardCharsets.UTF_8
+            );
+            Matcher matcher = JWT_SUBJECT_PATTERN.matcher(payload);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // handled below as an invalid token
+        }
+
+        throw new UnauthenticatedException("Access token is invalid");
     }
 
     public void revokeRefreshToken(String refreshToken) {

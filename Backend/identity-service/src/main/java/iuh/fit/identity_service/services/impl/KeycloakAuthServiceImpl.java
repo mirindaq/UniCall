@@ -77,6 +77,11 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     }
 
     @Override
+    public String extractSubjectFromAccessToken(String accessToken) {
+        return keycloakIdentityClient.extractSubjectFromAccessToken(accessToken);
+    }
+
+    @Override
     public void revokeRefreshToken(String refreshToken) {
         keycloakIdentityClient.revokeRefreshToken(refreshToken);
     }

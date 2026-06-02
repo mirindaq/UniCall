@@ -3,22 +3,23 @@ import type { AxiosError } from "axios"
 import { Loader2, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
-import { authService } from "@/services/auth/auth.service"
-import { userService } from "@/services/user/user.service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAuth } from "@/contexts/auth-context"
 import { ADMIN_PATH } from "@/constants/admin"
-import type { LoginRequest } from "@/types/auth"
+import { useAuth } from "@/contexts/auth-context"
+import { authService } from "@/services/auth/auth.service"
+import { userService } from "@/services/user/user.service"
 import type { ResponseError } from "@/types/api-response"
+import type { LoginRequest } from "@/types/auth"
 
 export function AdminAuthPage() {
   const { setAuthenticated, clearAuthenticated } = useAuth()
   const [loginData, setLoginData] = useState<LoginRequest>({
     phoneNumber: "",
     password: "",
+    firebaseIdToken: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 

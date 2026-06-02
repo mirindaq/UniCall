@@ -10,8 +10,8 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/unicall}
   datasource:
     url: ${USER_DB_URL:jdbc:mysql://localhost:3306/unicall_user_service?createDatabaseIfNotExist=true}
-    username: ${POST_DB_USERNAME:root}
-    password: ${POST_DB_PASSWORD:12345}
+    username: ${POST_DB_USERNAME:springstudent}
+    password: ${POST_DB_PASSWORD:springstudent}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:

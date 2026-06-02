@@ -6,8 +6,8 @@ spring:
 
   datasource:
     url: ${FRIEND_DB_URL:jdbc:mysql://localhost:3306/unicall_friend_service?createDatabaseIfNotExist=true}
-    username: ${FRIEND_DB_USERNAME:root}
-    password: ${FRIEND_DB_PASSWORD:12345}
+    username: ${FRIEND_DB_USERNAME:springstudent}
+    password: ${FRIEND_DB_PASSWORD:springstudent}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:

@@ -1,4 +1,5 @@
 /Backend/.idea
 /unicall-keycloak.json
 /unicall-export.json
-/Backend/.env
+/Backend/.envBackend/identity-service/src/main/resources/*firebase-adminsdk*.json
+**/target/

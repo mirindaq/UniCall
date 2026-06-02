@@ -6,6 +6,7 @@ import { AdminStatCard } from "@/components/admin/AdminStatCard"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@/hooks/useQuery"
 import { userService } from "@/services/user/user.service"
+import type { PageResponse, ResponseSuccess } from "@/types/api-response"
 import type { AdminManagedUser, AdminStat } from "@/types/admin"
 
 const DASHBOARD_PAGE_SIZE = 100
@@ -30,7 +31,10 @@ async function fetchAllAdminUsers() {
     )
 
     items = items.concat(
-      remainingResponses.flatMap((response) => response.data.items)
+      remainingResponses.flatMap(
+        (response: ResponseSuccess<PageResponse<AdminManagedUser>>) =>
+          response.data.items
+      )
     )
   }
 
@@ -48,7 +52,7 @@ export function AdminDashboardPage() {
     isRefetching,
   } = useQuery(fetchAllAdminUsers, {
     onError: () => {
-      toast.error("Khong the tai thong ke admin")
+      toast.error("Không thể tải thống kê admin")
     },
   })
 
@@ -62,30 +66,30 @@ export function AdminDashboardPage() {
     return [
       {
         key: "total-users",
-        label: "Tong tai khoan",
+        label: "Tổng tài khoản",
         value: totalUsers.toString(),
-        delta: "Du lieu thuc tu he thong",
+        delta: "Dữ liệu thực từ hệ thống",
         trend: "neutral",
       },
       {
         key: "active-users",
-        label: "Tai khoan hoat dong",
+        label: "Tài khoản hoạt động",
         value: activeUsers.toString(),
-        delta: "Dang su dung binh thuong",
+        delta: "Đang sử dụng bình thường",
         trend: "up",
       },
       {
         key: "blocked-users",
-        label: "Tai khoan bi chan",
+        label: "Tài khoản bị chặn",
         value: blockedUsers.toString(),
-        delta: "Can theo doi neu tang nhanh",
+        delta: "Cần theo dõi nếu tăng nhanh",
         trend: blockedUsers > 0 ? "down" : "neutral",
       },
       {
         key: "pending-deletion",
-        label: "Cho xoa tai khoan",
+        label: "Chờ xóa tài khoản",
         value: pendingDeletionUsers.toString(),
-        delta: "Dang cho xu ly xoa",
+        delta: "Đang chờ xử lý xóa",
         trend: pendingDeletionUsers > 0 ? "down" : "neutral",
       },
     ]
@@ -94,11 +98,11 @@ export function AdminDashboardPage() {
   return (
     <div className="space-y-4">
       <AdminPageHeader
-        title="Bang dieu khien quan tri"
-        description="Tong quan nhanh tinh trang tai khoan nguoi dung."
+        title="Bảng điều khiển quản trị"
+        description="Tổng quan nhanh tình trạng tài khoản người dùng."
         action={
           <Button onClick={() => void refetch()} disabled={isLoading || isRefetching}>
-            {isLoading || isRefetching ? "Dang tai..." : "Lam moi"}
+            {isLoading || isRefetching ? "Đang tải..." : "Làm mới"}
           </Button>
         }
       />

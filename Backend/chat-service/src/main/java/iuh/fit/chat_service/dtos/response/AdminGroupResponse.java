@@ -15,12 +15,14 @@ public class AdminGroupResponse {
   private String ownerName;
   private Integer memberCount;
   private Boolean isPrivate;
+  private Boolean memberApprovalEnabled;
   private Integer pendingCount;
   private LocalDateTime createdAt;
 
   public static AdminGroupResponse from(String id, String name, String ownerId, String ownerName,
                                         Integer memberCount, Boolean isPrivate,
-                                        Integer pendingCount, LocalDateTime createdAt) {
+                                        Boolean memberApprovalEnabled, Integer pendingCount,
+                                        LocalDateTime createdAt) {
     return AdminGroupResponse.builder()
         .id(id)
         .name(name)
@@ -28,6 +30,7 @@ public class AdminGroupResponse {
         .ownerName(ownerName != null ? ownerName : ownerId)
         .memberCount(memberCount != null ? memberCount : 0)
         .isPrivate(isPrivate != null ? isPrivate : false)
+        .memberApprovalEnabled(memberApprovalEnabled != null ? memberApprovalEnabled : false)
         .pendingCount(pendingCount != null ? pendingCount : 0)
         .createdAt(createdAt)
         .build();

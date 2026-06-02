@@ -1,5 +1,6 @@
 package iuh.fit.post_service.controllers;
 
+import iuh.fit.post_service.clients.GrpcUserServiceClient;
 import iuh.fit.post_service.services.PostService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,10 @@ import iuh.fit.post_service.services.PostLikeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping("${api.prefix:/api/v1}/posts")
 @RequiredArgsConstructor
@@ -42,6 +47,7 @@ public class PostController {
 
   private final PostService postService;
   private final PostLikeService postLikeService;
+  private final GrpcUserServiceClient grpcUserServiceClient;
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<ResponseSuccess<PostResponse>> createPost(
@@ -182,15 +188,22 @@ public class PostController {
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String userRole,
       @RequestParam(name = "page", defaultValue = "1") int page,
       @RequestParam(name = "limit", defaultValue = "20") int limit,
+      @RequestParam(name = "authorIds", required = false) String authorIds,
       @RequestParam(name = "keyword", required = false) String keyword) {
 
     requireAdminRole(userRole);
-    Page<Post> postPage = postService.getAllPostsForAdmin(page, limit, keyword);
+    Page<Post> postPage = postService.getAllPostsForAdmin(
+        page,
+        limit,
+        keyword,
+        parseAuthorIds(authorIds)
+    );
+    Map<String, String> authorNameCache = new HashMap<>();
     PageResponse<AdminPostResponse> data = PageResponse.fromPage(postPage,
         post -> AdminPostResponse.from(
             post.getId(),
             post.getAuthorId(),
-            null,
+            resolveAuthorName(post.getAuthorId(), authorNameCache),
             post.getContent(),
             post.getStatus(),
             0,
@@ -199,6 +212,28 @@ public class PostController {
 
     return ResponseEntity.ok(
         new ResponseSuccess<>(HttpStatus.OK, "Get admin posts success", data)
+    );
+  }
+
+  private List<String> parseAuthorIds(String rawAuthorIds) {
+    if (rawAuthorIds == null || rawAuthorIds.isBlank()) {
+      return List.of();
+    }
+    return java.util.Arrays.stream(rawAuthorIds.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .distinct()
+        .toList();
+  }
+
+  private String resolveAuthorName(String authorId, Map<String, String> authorNameCache) {
+    if (authorId == null || authorId.isBlank()) {
+      return null;
+    }
+    return authorNameCache.computeIfAbsent(authorId, key ->
+        grpcUserServiceClient.getUserProfile(key)
+            .map(GrpcUserServiceClient.UserProfileResult::displayName)
+            .orElse(key)
     );
   }
 

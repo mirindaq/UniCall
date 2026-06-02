@@ -111,6 +111,10 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Admin accounts must use the admin login endpoint");
         }
         grpcUserServiceClient.cancelDeletionRequest(identityUserId);
+        if (!grpcUserServiceClient.isUserActive(identityUserId)) {
+            keycloakAuthService.revokeRefreshToken(tokens.getRefreshToken());
+            throw new UnauthorizedException("Tài khoản đã bị khóa");
+        }
 
         return new LoginResult(
                 List.of(
@@ -133,6 +137,11 @@ public class AuthServiceImpl implements AuthService {
                 : tokenResponse.getRefreshToken();
         if (tokenResponse.getAccessToken() == null || tokenResponse.getAccessToken().isBlank()) {
             throw new UnauthenticatedException("Missing access token from identity provider");
+        }
+        String identityUserId = keycloakAuthService.extractSubjectFromAccessToken(tokenResponse.getAccessToken());
+        if (!grpcUserServiceClient.isUserActive(identityUserId)) {
+            keycloakAuthService.revokeRefreshToken(rotatedRefreshToken);
+            throw new UnauthorizedException("Tài khoản đã bị khóa");
         }
 
         return new RefreshResult(

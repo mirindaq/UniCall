@@ -4,6 +4,8 @@ import iuh.fit.post_service.dtos.request.CreatePostRequest;
 import iuh.fit.post_service.dtos.request.UpdatePostRequest;
 import org.springframework.data.domain.Page;
 
+import java.util.List;
+
 public interface PostService {
   iuh.fit.post_service.entities.Post createPost(String authorId, CreatePostRequest request);
 
@@ -21,7 +23,12 @@ public interface PostService {
 
   iuh.fit.post_service.enums.ReactionType getUserReactionType(Long postId, String userId);
 
-  Page<iuh.fit.post_service.entities.Post> getAllPostsForAdmin(int page, int limit, String keyword);
+  Page<iuh.fit.post_service.entities.Post> getAllPostsForAdmin(
+      int page,
+      int limit,
+      String keyword,
+      List<String> authorIds
+  );
 
   void hidePostForAdmin(Long postId);
 

@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: iuh.fit.task_service.TaskServiceApplicationTests
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.298 s -- in iuh.fit.task_service.TaskServiceApplicationTests
