@@ -94,7 +94,8 @@ export function UserLayout() {
 
   const isOnChatRoute = location.pathname.startsWith(`${USER_PATH.ROOT}/${USER_PATH.CHAT}`)
   const globalCall = useConversationCall({
-    currentUserId: isOnChatRoute ? null : identityUserId,
+    currentUserId: identityUserId,
+    enableSignalSubscription: !isOnChatRoute,
   })
 
   useEffect(() => {

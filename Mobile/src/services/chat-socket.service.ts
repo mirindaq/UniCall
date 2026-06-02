@@ -20,30 +20,26 @@ const MOBILE_CLIENT_TYPE = 'mobile';
 const parseMessage = (raw: IMessage): ChatMessageResponse => JSON.parse(raw.body) as ChatMessageResponse;
 const parseUserEvent = (raw: IMessage): UserRealtimeEvent => JSON.parse(raw.body) as UserRealtimeEvent;
 
-type MobileWebSocketCtor = new (
-  url: string,
-  protocols?: string | string[],
-  options?: { headers?: Record<string, string> }
-) => WebSocket;
+const CHAT_WS_PORT = process.env.EXPO_PUBLIC_CHAT_WS_PORT?.trim() || '8083';
 
+/** SockJS: http + chat-service port (mặc định 8083), ví dụ http://13.212.109.211:8083/ws */
 const buildChatStompBrokerUrl = () => {
   const baseUrl = ((axiosClient.defaults.baseURL as string) || '').replace(/\/+$/, '');
+  const defaultLocal = `http://localhost:${CHAT_WS_PORT}${API_WS_PREFIXES.chat}`;
+
   if (!baseUrl) {
-    return 'http://localhost:8083/ws';
+    return defaultLocal;
   }
 
   try {
     const parsed = new URL(baseUrl);
-    // Mobile connect trực tiếp tới chat-service port 8083 (SockJS)
-    return `${parsed.protocol}//${parsed.hostname}:8083/ws`;
+    return `http://${parsed.hostname}:${CHAT_WS_PORT}${API_WS_PREFIXES.chat}`;
   } catch {
-    // Fallback: extract host from baseUrl string
-    const hostMatch = baseUrl.match(/https?:\/\/([^:\/]+)/);
+    const hostMatch = baseUrl.match(/https?:\/\/([^/:]+)/i);
     if (hostMatch) {
-      const protocol = baseUrl.startsWith('https') ? 'https:' : 'http:';
-      return `${protocol}//${hostMatch[1]}:8083/ws`;
+      return `http://${hostMatch[1]}:${CHAT_WS_PORT}${API_WS_PREFIXES.chat}`;
     }
-    return 'http://localhost:8083/ws';
+    return defaultLocal;
   }
 };
 
@@ -80,17 +76,6 @@ const waitForConnected = async (timeoutMs = 5000) => {
   return false;
 };
 
-const buildSocketAuthHeaders = async (): Promise<Record<string, string>> => {
-  const accessToken = await authTokenStore.get();
-  const headers: Record<string, string> = {
-    'X-Client-Type': MOBILE_CLIENT_TYPE,
-  };
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
-  }
-  return headers;
-};
-
 export const chatSocketService = {
   getClient: () => sharedClient,
   waitForConnected,
@@ -111,17 +96,23 @@ export const chatSocketService = {
 
     const baseURL = buildChatStompBrokerUrl();
     const accessToken = await authTokenStore.get();
-    const brokerURL = accessToken ? `${baseURL}?access_token=${accessToken}` : baseURL;
-    console.log('[UniCall Mobile] Connecting to SockJS URL (with token):', baseURL + '?access_token=***');
+    const brokerURL = accessToken
+      ? `${baseURL}?access_token=${encodeURIComponent(accessToken)}`
+      : baseURL;
+    const connectHeaders: Record<string, string> = {
+      'X-Client-Type': MOBILE_CLIENT_TYPE,
+    };
+    if (accessToken) {
+      connectHeaders.Authorization = `Bearer ${accessToken}`;
+    }
+    console.log('[UniCall Mobile] SockJS:', `${baseURL}?access_token=***`);
 
     const client = new Client({
-      // SockJS WebSocket factory - tương thích tốt với React Native
       webSocketFactory: () => {
         console.log('[UniCall Mobile] Creating SockJS connection');
         return new SockJS(brokerURL) as any;
       },
-      // Token đã gửi qua query param, không cần trong STOMP headers
-      connectHeaders: {},
+      connectHeaders,
       reconnectDelay: 5000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
@@ -258,7 +249,7 @@ export const chatSocketService = {
         conversationId,
         callId,
         type,
-        audioOnly: extras?.audioOnly ?? true,
+        ...(extras?.audioOnly !== undefined ? { audioOnly: extras.audioOnly } : {}),
         targetUserIds: extras?.targetUserIds,
         sdp: extras?.sdp,
         candidate: extras?.candidate,

@@ -110,11 +110,20 @@ export function GlobalCallOverlay() {
   const startedAt = activeCall.startedAt ?? 0;
   const callDurationLabel =
     startedAt > 0 ? formatDuration((Date.now() - startedAt) / 1000) : null;
+  const showRemoteAudio =
+    activeCall.audioOnly &&
+    Boolean(remoteStreamURL) &&
+    RTCView &&
+    (phase === 'in-call' || phase === 'connecting');
+  const isOneToOneVideo =
+    !activeCall.audioOnly && !activeCall.isGroupCall && Boolean(RTCView);
+
   return (
-    <View className="absolute inset-0 z-50 bg-black/70">
-      <View className="flex-1 items-center justify-center px-4 pb-8 pt-14">
+    <View className="absolute inset-0 z-50 bg-black">
+      <View className="flex-1">
         {!activeCall.audioOnly && RTCView && activeCall.isGroupCall ? (
-          <View className="w-full max-w-3xl rounded-2xl bg-slate-900 p-2">
+          <View className="flex-1 justify-center px-2 pb-28 pt-14">
+          <View className="w-full max-w-3xl self-center rounded-2xl bg-slate-900 p-2">
             <View className="flex-row flex-wrap justify-between gap-y-2">
               {visibleGroupMembers.map((member, index) => {
                 const showRemote = index === 0 && Boolean(remoteStreamURL);
@@ -205,8 +214,9 @@ export function GlobalCallOverlay() {
               ) : null}
             </View>
           </View>
-        ) : !activeCall.audioOnly && RTCView ? (
-          <View className="relative h-full w-full max-w-3xl">
+          </View>
+        ) : isOneToOneVideo ? (
+          <View className="flex-1">
             {remoteStreamURL ? (
               <RTCView
                 key={`${remoteStreamRenderKey}-${remoteStreamURL}`}
@@ -215,16 +225,25 @@ export function GlobalCallOverlay() {
                 mirror={false}
                 zOrder={0}
                 surfaceView={false}
-                style={{ height: '100%', width: '100%', borderRadius: 16, backgroundColor: '#000' }}
+                style={{ flex: 1, width: '100%', backgroundColor: '#000' }}
               />
             ) : (
-              <View className="h-full w-full items-center justify-center rounded-2xl bg-slate-900">
-                <Text className="text-sm text-slate-200">Đang chờ video đối phương...</Text>
+              <View className="flex-1 items-center justify-center bg-slate-900">
+                {activeCall.peerAvatar ? (
+                  <Image source={{ uri: activeCall.peerAvatar }} className="h-28 w-28 rounded-full" />
+                ) : (
+                  <View className="h-28 w-28 items-center justify-center rounded-full bg-slate-600">
+                    <Text className="text-2xl font-bold text-white">
+                      {activeCall.peerName.slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <Text className="mt-4 text-sm text-slate-300">Đang chờ video đối phương...</Text>
               </View>
             )}
 
             {localStreamURL ? (
-              <View className="absolute bottom-24 right-4 h-40 w-28 overflow-hidden rounded-xl border border-white/40 bg-black">
+              <View className="absolute bottom-28 right-4 h-44 w-32 overflow-hidden rounded-2xl border-2 border-white/50 bg-black shadow-lg">
                 <RTCView
                   streamURL={localStreamURL}
                   objectFit="cover"
@@ -237,26 +256,40 @@ export function GlobalCallOverlay() {
             ) : null}
           </View>
         ) : (
-          <View className="items-center">
+          <View className="flex-1 items-center justify-center px-4 pb-28 pt-14">
             {activeCall.peerAvatar ? (
-              <Image source={{ uri: activeCall.peerAvatar }} className="h-24 w-24 rounded-full" />
+              <Image source={{ uri: activeCall.peerAvatar }} className="h-28 w-28 rounded-full" />
             ) : (
-              <View className="h-24 w-24 items-center justify-center rounded-full bg-slate-400">
-                <Text className="text-xl font-bold text-white">{activeCall.peerName.slice(0, 2).toUpperCase()}</Text>
+              <View className="h-28 w-28 items-center justify-center rounded-full bg-slate-600">
+                <Text className="text-2xl font-bold text-white">
+                  {activeCall.peerName.slice(0, 2).toUpperCase()}
+                </Text>
               </View>
             )}
           </View>
         )}
 
-        <View className="absolute top-14 items-center">
+        {showRemoteAudio ? (
+          <RTCView
+            key={`audio-${remoteStreamRenderKey}-${remoteStreamURL}`}
+            streamURL={remoteStreamURL!}
+            objectFit="cover"
+            mirror={false}
+            zOrder={0}
+            surfaceView={false}
+            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, left: 0, top: 0 }}
+          />
+        ) : null}
+
+        <View className="absolute left-0 right-0 top-14 items-center px-4">
           <Text className="text-xl font-semibold text-white">{activeCall.peerName}</Text>
-          <Text className="mt-1 text-sm text-slate-200">{statusMessage ?? title}</Text>
+          <Text className="mt-1 text-center text-sm text-slate-200">{statusMessage ?? title}</Text>
           {callDurationLabel && phase === 'in-call' ? (
-            <Text className="mt-1 text-sm text-slate-200">{callDurationLabel}</Text>
+            <Text className="mt-1 text-sm text-slate-300">{callDurationLabel}</Text>
           ) : null}
         </View>
 
-        <View className="absolute bottom-8 flex-row items-center gap-4">
+        <View className="absolute bottom-8 left-0 right-0 flex-row items-center justify-center gap-4">
           {phase === 'incoming' ? (
             <>
               <Pressable className="h-14 w-14 items-center justify-center rounded-full bg-red-500" onPress={() => void rejectIncomingCall()}>

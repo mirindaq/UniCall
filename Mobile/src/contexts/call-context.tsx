@@ -10,6 +10,7 @@ import React, {
 import Toast from "react-native-toast-message";
 
 import { authTokenStore } from "@/configurations/axios.config";
+import { WEBRTC_ICE_SERVERS } from "@/constants/call";
 import { chatService } from "@/services/chat.service";
 import { chatSocketService } from "@/services/chat-socket.service";
 import { userService } from "@/services/user.service";
@@ -19,14 +20,15 @@ import type {
   UserRealtimeEvent,
 } from "@/types/chat";
 
-const WEBRTC_ICE_SERVERS = [
-  {
-    urls: "stun:stun.relay.metered.ca:80",
-  },
-];
 const RING_TIMEOUT_MS = 15_000;
-const CONNECTING_TIMEOUT_MS = 20_000;
+const CONNECTING_TIMEOUT_MS = 30_000;
 const CALL_DEBUG_ENABLED = true;
+
+const createRtcConfiguration = () => ({
+  iceServers: WEBRTC_ICE_SERVERS,
+  iceCandidatePoolSize: 10,
+  bundlePolicy: "max-bundle" as const,
+});
 
 const callDebugLog = (...args: unknown[]) => {
   if (!CALL_DEBUG_ENABLED) {
@@ -79,6 +81,8 @@ type PendingIncomingOffer = {
   fromUserId: string;
   sdp?: string;
   audioOnly: boolean;
+  /** true = cuộc gọi nhóm/SFU (OFFER không có SDP); false = 1-1 P2P */
+  isGroupCall: boolean;
 };
 
 type CallContextValue = {
@@ -190,6 +194,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
     if (!globalAny.navigator) {
       globalAny.navigator = {};
+    }
+    if (!globalAny.navigator.userAgent) {
+      globalAny.navigator.userAgent = "react-native";
+    }
+    if (!globalAny.navigator.product) {
+      globalAny.navigator.product = "ReactNative";
     }
     if (!globalAny.navigator.mediaDevices) {
       globalAny.navigator.mediaDevices = webRtc.mediaDevices;
@@ -495,13 +505,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   const createPeerConnection = useCallback(
     (conversationId: string, callId: string, audioOnly: boolean) => {
+      configureLiveKitGlobals();
       const webRtc = ensureWebRtcModule();
       if (!webRtc) {
         throw new Error("react-native-webrtc is missing");
       }
 
       const { RTCPeerConnection } = webRtc;
-      const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS });
+      const pc = new RTCPeerConnection(createRtcConfiguration());
       const { MediaStream } = webRtc;
       const inboundStream = new MediaStream();
       remoteStreamRef.current = inboundStream;
@@ -586,6 +597,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         });
         setRemoteStreamURL(remoteUrl);
         setRemoteStreamRenderKey((value) => value + 1);
+        if (
+          phaseRef.current === "connecting" ||
+          phaseRef.current === "outgoing"
+        ) {
+          markConnected();
+        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -596,11 +613,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (
-          state === "failed" ||
-          state === "disconnected" ||
-          state === "closed"
-        ) {
+        if (state === "failed" || state === "closed") {
           resetCall();
         }
       };
@@ -612,11 +625,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           markConnected();
           return;
         }
-        if (
-          state === "failed" ||
-          state === "disconnected" ||
-          state === "closed"
-        ) {
+        if (state === "failed" || state === "closed") {
           resetCall();
         }
       };
@@ -641,6 +650,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     [
       clearConnectingTimeout,
       clearRingTimeout,
+      configureLiveKitGlobals,
       ensureWebRtcModule,
       resetCall,
       sendSignal,
@@ -766,7 +776,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           peerUserId,
           audioOnly,
         });
-        await chatSocketService.connect();
+
+        cleanupPeerConnection();
+        localRelayCandidateCountRef.current = 0;
+        remoteRelayCandidateCountRef.current = 0;
 
         setStatusMessage(null);
         setPhase("outgoing");
@@ -784,12 +797,24 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             : [],
         });
 
+        const ensureSignalingSocket = async () => {
+          await chatSocketService.connect();
+          const ready = await chatSocketService.waitForConnected();
+          if (!ready) {
+            throw new Error("Call signaling socket is not connected");
+          }
+        };
+
         let offerPayloadSdp: string | undefined;
         if (isGroupCall) {
+          await ensureSignalingSocket();
           await connectSfuRoom(conversationId, callId, audioOnly);
         } else {
           const pc = createPeerConnection(conversationId, callId, audioOnly);
-          const localStream = await ensureLocalStream(audioOnly);
+          const [, localStream] = await Promise.all([
+            ensureSignalingSocket(),
+            ensureLocalStream(audioOnly),
+          ]);
           attachLocalTracks(pc, localStream, audioOnly);
 
           const offer = await pc.createOffer({
@@ -797,8 +822,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             offerToReceiveVideo: !audioOnly,
           });
           await pc.setLocalDescription(offer);
-          const localOfferSdp = pc.localDescription?.sdp ?? offer.sdp ?? "";
-          if (!localOfferSdp) {
+          const localOfferSdp =
+            pc.localDescription?.sdp ?? offer.sdp ?? "";
+          if (!localOfferSdp.trim()) {
             throw new Error("Cannot create valid offer sdp");
           }
           offerPayloadSdp = localOfferSdp;
@@ -884,7 +910,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         });
         await chatSocketService.connect();
 
-        const isGroupCall = !offer.audioOnly;
+        const isGroupCall = offer.isGroupCall;
         let acceptPayloadSdp: string | undefined;
         if (isGroupCall) {
           await connectSfuRoom(
@@ -968,7 +994,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                 peerUserId: offer.fromUserId,
                 peerName: offer.fromUserId,
                 audioOnly: offer.audioOnly,
-                isGroupCall: offer.audioOnly === false,
+                isGroupCall: offer.isGroupCall,
                 joinedUserIds: Array.from(
                   new Set([
                     offer.fromUserId,
@@ -1230,17 +1256,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (signal.type === "OFFER") {
-        const isGroupOffer = signal.audioOnly === false;
+        const isGroupOffer = !signal.sdp?.trim();
         if (
-          !myIdentityUserIdRef.current ||
-          signal.toUserId !== myIdentityUserIdRef.current ||
-          (!isGroupOffer && !signal.sdp)
+          myIdentityUserIdRef.current &&
+          signal.toUserId !== myIdentityUserIdRef.current
         ) {
-          callDebugLog("signal:offer-ignored-invalid-target-or-sdp", {
+          callDebugLog("signal:offer-ignored-invalid-target", {
             callId: signal.callId,
-            hasSdp: Boolean(signal.sdp),
             myId: myIdentityUserIdRef.current,
             toUserId: signal.toUserId,
+          });
+          return;
+        }
+        if (!isGroupOffer && !signal.sdp?.trim()) {
+          callDebugLog("signal:offer-ignored-missing-sdp", {
+            callId: signal.callId,
           });
           return;
         }
@@ -1269,6 +1299,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           fromUserId: signal.fromUserId,
           sdp: signal.sdp,
           audioOnly: signal.audioOnly,
+          isGroupCall: isGroupOffer,
         };
 
         setPhase("incoming");
@@ -1280,7 +1311,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           peerName: signal.fromUserId,
           peerAvatar: null,
           audioOnly: signal.audioOnly,
-          isGroupCall: signal.audioOnly === false,
+          isGroupCall: isGroupOffer,
           joinedUserIds: [signal.fromUserId],
         });
 
@@ -1311,11 +1342,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const current = activeCallRef.current;
       if (!current || current.callId !== signal.callId) {
-        if (
-          signal.type === "ICE_CANDIDATE" &&
-          signal.candidate &&
-          signal.audioOnly !== false
-        ) {
+        if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
           callDebugLog("signal:ice-buffered-no-active-call", {
             callId: signal.callId,
           });
