@@ -18,6 +18,9 @@ public class PageResponse<T> {
     private int limit;
     private long totalItem;
 
+    public PageResponse(int page, int limit, int size, List<T> data) {
+    }
+
     public static <E, R> PageResponse<R> fromPage(
             Page<E> page,
             Function<E, R> mapper

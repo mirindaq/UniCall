@@ -26,7 +26,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
     @Value("${app.bootstrap.admin.enabled:true}")
     private boolean adminBootstrapEnabled;
 
-    @Value("${app.bootstrap.admin.phone-number:0900000000}")
+    @Value("${app.bootstrap.admin.phone-number:+8400000000}")
     private String adminPhoneNumber;
 
     @Value("${app.bootstrap.admin.email:admin@unicall.local}")
@@ -41,7 +41,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
     @Value("${app.bootstrap.admin.password:Admin@123}")
     private String adminPassword;
 
-    @Value("${app.bootstrap.admin.role:admin}")
+    @Value("${app.bootstrap.admin.role:ADMIN}")
     private String adminRole;
 
     @Override
@@ -55,8 +55,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
                 adminEmail,
                 adminFirstName,
                 adminLastName,
-                adminPassword
-        );
+                adminPassword);
         keycloakIdentityClient.ensureRealmRoleExists(adminRole);
         keycloakIdentityClient.assignRealmRoleIfMissing(identityUserId, adminRole);
 
@@ -98,8 +97,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
                 log.warn(
                         "Admin bootstrap could not create profile on attempt {}/{}. Retrying...",
                         attempt,
-                        PROFILE_SYNC_MAX_ATTEMPTS
-                );
+                        PROFILE_SYNC_MAX_ATTEMPTS);
                 sleepBeforeRetry();
             }
         }

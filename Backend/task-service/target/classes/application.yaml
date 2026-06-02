@@ -8,9 +8,10 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:admin123}
+  mongodb:
+    uri: ${TASK_MONGODB_URI:mongodb://localhost:27017/unicall_task_service}
   data:
     mongodb:
-      uri: ${TASK_MONGODB_URI:mongodb://localhost:27017/unicall_task_service}
       auto-index-creation: true
 
 server:

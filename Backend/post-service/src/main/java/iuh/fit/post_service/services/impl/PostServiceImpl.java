@@ -29,151 +29,177 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
-    
-    private final PostRepository postRepository;
-    private final PostLikeRepository postLikeRepository;
-    private final FileUploadService fileUploadService;
-    
-    @Override
-    @Transactional
-    public Post createPost(String authorId, CreatePostRequest request) {
-        if (authorId == null || authorId.isBlank()) {
-            throw new InvalidParamException("Author ID is required");
-        }
-        
-        // Upload files if any
-        List<String> mediaUrls = new ArrayList<>();
-        if (request.getFiles() != null && !request.getFiles().isEmpty()) {
-            mediaUrls = fileUploadService.uploadFiles(request.getFiles());
-        }
-        
-        // Validate that either content or media is provided
-        if ((request.getContent() == null || request.getContent().isBlank()) && mediaUrls.isEmpty()) {
-            throw new InvalidParamException("Post must have content or media");
-        }
-        
-        Post post = Post.builder()
-                .authorId(authorId)
-                .content(request.getContent())
-                .mediaUrls(mediaUrls)
-                .privacy(request.getPrivacy())
-                .status(PostStatus.ACTIVE)
-                .likeCount(0L)
-                .commentCount(0L)
-                .build();
-        
-        return postRepository.save(post);
+  private final PostRepository postRepository;
+  private final PostLikeRepository postLikeRepository;
+  private final FileUploadService fileUploadService;
+
+  @Override
+  @Transactional
+  public Post createPost(String authorId, CreatePostRequest request) {
+    if (authorId == null || authorId.isBlank()) {
+      throw new InvalidParamException("Author ID is required");
     }
-    
-    @Override
-    @Transactional
-    public Post updatePost(String authorId, Long postId, UpdatePostRequest request) {
-        if (authorId == null || authorId.isBlank()) {
-            throw new InvalidParamException("Author ID is required");
-        }
-        
-        Post post = getPostById(postId);
-        
-        // Check if user is the author
-        if (!post.getAuthorId().equals(authorId)) {
-            throw new UnauthorizedException("You are not authorized to update this post");
-        }
-        
-        // Update fields if provided
-        if (request.getContent() != null) {
-            post.setContent(request.getContent());
-        }
-        
-        if (request.getMediaUrls() != null) {
-            post.setMediaUrls(request.getMediaUrls());
-        }
-        
-        if (request.getPrivacy() != null) {
-            post.setPrivacy(request.getPrivacy());
-        }
-        
-        return postRepository.save(post);
+
+    List<String> mediaUrls = new ArrayList<>();
+    if (request.getFiles() != null && !request.getFiles().isEmpty()) {
+      mediaUrls = fileUploadService.uploadFiles(request.getFiles());
     }
-    
-    @Override
-    @Transactional
-    public void deletePost(String authorId, Long postId) {
-        if (authorId == null || authorId.isBlank()) {
-            throw new InvalidParamException("Author ID is required");
-        }
-        
-        Post post = getPostById(postId);
-        
-        // Check if user is the author
-        if (!post.getAuthorId().equals(authorId)) {
-            throw new UnauthorizedException("You are not authorized to delete this post");
-        }
-        
-        // Soft delete
-        post.setStatus(PostStatus.DELETED);
-        postRepository.save(post);
+
+    if ((request.getContent() == null || request.getContent().isBlank()) && mediaUrls.isEmpty()) {
+      throw new InvalidParamException("Post must have content or media");
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public Post getPostById(Long postId) {
-        if (postId == null) {
-            throw new InvalidParamException("Post ID is required");
-        }
-        
-        return postRepository.findByIdAndStatus(postId, PostStatus.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+    Post post = Post.builder()
+        .authorId(authorId)
+        .content(request.getContent())
+        .mediaUrls(mediaUrls)
+        .privacy(request.getPrivacy())
+        .status(PostStatus.ACTIVE)
+        .likeCount(0L)
+        .commentCount(0L)
+        .build();
+
+    return postRepository.save(post);
+  }
+
+  @Override
+  @Transactional
+  public Post updatePost(String authorId, Long postId, UpdatePostRequest request) {
+    if (authorId == null || authorId.isBlank()) {
+      throw new InvalidParamException("Author ID is required");
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public Page<Post> getPostsByAuthor(String authorId, int page, int limit, String sortBy) {
-        if (authorId == null || authorId.isBlank()) {
-            throw new InvalidParamException("Author ID is required");
-        }
-        
-        int safePage = Math.max(page, 1);
-        int safeLimit = Math.max(1, Math.min(limit, 50));
-        
-        Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
-        
-        return postRepository.findByAuthorIdAndStatus(authorId, PostStatus.ACTIVE, pageable);
+
+    Post post = getPostById(postId);
+
+    if (!post.getAuthorId().equals(authorId)) {
+      throw new UnauthorizedException("You are not authorized to update this post");
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public Page<Post> getFeedPosts(String userId, int page, int limit, String sortBy) {
-        int safePage = Math.max(page, 1);
-        int safeLimit = Math.max(1, Math.min(limit, 50));
-        
-        Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
-        
-        if (userId == null || userId.isBlank()) {
-            // Guest view: only PUBLIC posts
-            return postRepository.findByStatus(PostStatus.ACTIVE, pageable);
-        }
-        
-        // User view: PUBLIC posts + user's own posts
-        return postRepository.findFeedPosts(PostStatus.ACTIVE, PostPrivacy.PUBLIC, userId, pageable);
+
+    if (request.getContent() != null) {
+      post.setContent(request.getContent());
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public boolean isPostReactedByUser(Long postId, String userId) {
-        if (userId == null || userId.isBlank()) {
-            return false;
-        }
-        return postLikeRepository.existsByPostIdAndUserId(postId, userId);
+    if (request.getMediaUrls() != null) {
+      post.setMediaUrls(request.getMediaUrls());
     }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public ReactionType getUserReactionType(Long postId, String userId) {
-        if (userId == null || userId.isBlank()) {
-            return null;
-        }
-        return postLikeRepository.findByPostIdAndUserId(postId, userId)
-                .map(PostLike::getReactionType)
-                .orElse(null);
+    if (request.getPrivacy() != null) {
+      post.setPrivacy(request.getPrivacy());
     }
+
+    return postRepository.save(post);
+  }
+
+  @Override
+  @Transactional
+  public void deletePost(String authorId, Long postId) {
+    if (authorId == null || authorId.isBlank()) {
+      throw new InvalidParamException("Author ID is required");
+    }
+
+    Post post = getPostById(postId);
+
+    if (!post.getAuthorId().equals(authorId)) {
+      throw new UnauthorizedException("You are not authorized to delete this post");
+    }
+
+    post.setStatus(PostStatus.DELETED);
+    postRepository.save(post);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Post getPostById(Long postId) {
+    if (postId == null) {
+      throw new InvalidParamException("Post ID is required");
+    }
+
+    return postRepository.findByIdAndStatus(postId, PostStatus.ACTIVE)
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<Post> getPostsByAuthor(String authorId, int page, int limit, String sortBy) {
+    if (authorId == null || authorId.isBlank()) {
+      throw new InvalidParamException("Author ID is required");
+    }
+
+    int safePage = Math.max(page, 1);
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+
+    Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
+
+    return postRepository.findByAuthorIdAndStatus(authorId, PostStatus.ACTIVE, pageable);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<Post> getFeedPosts(String userId, int page, int limit, String sortBy) {
+    int safePage = Math.max(page, 1);
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+
+    Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
+
+    if (userId == null || userId.isBlank()) {
+      return postRepository.findByStatus(PostStatus.ACTIVE, pageable);
+    }
+
+    return postRepository.findFeedPosts(PostStatus.ACTIVE, PostPrivacy.PUBLIC, userId, pageable);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public boolean isPostReactedByUser(Long postId, String userId) {
+    if (userId == null || userId.isBlank()) {
+      return false;
+    }
+    return postLikeRepository.existsByPostIdAndUserId(postId, userId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public ReactionType getUserReactionType(Long postId, String userId) {
+    if (userId == null || userId.isBlank()) {
+      return null;
+    }
+    return postLikeRepository.findByPostIdAndUserId(postId, userId)
+        .map(PostLike::getReactionType)
+        .orElse(null);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<Post> getAllPostsForAdmin(int page, int limit, String keyword) {
+    int safePage = Math.max(page, 1);
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    Pageable pageable = PageRequest.of(safePage - 1, safeLimit);
+
+    return postRepository.findAll((root, query, cb) -> {
+      if (keyword != null && !keyword.isBlank()) {
+        String like = "%" + keyword.toLowerCase() + "%";
+        return cb.or(
+          cb.like(cb.lower(root.get("content")), like),
+          cb.like(cb.lower(root.get("authorId")), like)
+        );
+      }
+      return cb.conjunction();
+    }, pageable);
+  }
+
+  @Override
+  @Transactional
+  public void hidePostForAdmin(Long postId) {
+    Post post = postRepository.findById(postId)
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+    post.setStatus(PostStatus.HIDDEN);
+    postRepository.save(post);
+  }
+
+  @Override
+  @Transactional
+  public void restorePostForAdmin(Long postId) {
+    Post post = postRepository.findById(postId)
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+    post.setStatus(PostStatus.ACTIVE);
+    postRepository.save(post);
+  }
 }

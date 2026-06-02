@@ -5,8 +5,8 @@ spring:
     name: notification-service
   datasource:
     url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/unicall_notification_service?createDatabaseIfNotExist=true}
-    username: ${NOTIFICATION_DB_USERNAME:springstudent}
-    password: ${NOTIFICATION_DB_PASSWORD:springstudent}
+    username: ${NOTIFICATION_DB_USERNAME:root}
+    password: ${NOTIFICATION_DB_PASSWORD:12345}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:

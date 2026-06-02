@@ -851,7 +851,12 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
-    private String resolveMemberLabel(List<ParticipantInfo> participantInfos, String identityUserId) {
+    @Override
+public List<Conversation> getAllGroupsForAdmin() {
+    return conversationRepository.findByTypeOrderByDateCreateDesc(ConversationType.GROUP);
+}
+
+private String resolveMemberLabel(List<ParticipantInfo> participantInfos, String identityUserId) {
         if (identityUserId == null || identityUserId.isBlank()) {
             return "";
         }
