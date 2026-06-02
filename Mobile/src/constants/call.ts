@@ -1,3 +1,19 @@
+/** URL LiveKit công khai từ thiết bị (vd. wss://host:7880). Ghi đè URL backend trả về (thường localhost). */
+export const resolveLiveKitServerUrl = (backendUrl: string): string => {
+  const override = process.env.EXPO_PUBLIC_LIVEKIT_URL?.trim();
+  const raw = (override || backendUrl || '').trim();
+  if (!raw) {
+    return raw;
+  }
+  if (raw.startsWith('https://')) {
+    return `wss://${raw.slice(8)}`;
+  }
+  if (raw.startsWith('http://')) {
+    return `ws://${raw.slice(7)}`;
+  }
+  return raw;
+};
+
 /** Đồng bộ với Frontend/src/constants/call.ts để P2P mobile ↔ web qua NAT. */
 export const WEBRTC_ICE_SERVERS = [
   {

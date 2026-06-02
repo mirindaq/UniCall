@@ -10,7 +10,10 @@ import React, {
 import Toast from "react-native-toast-message";
 
 import { authTokenStore } from "@/configurations/axios.config";
-import { WEBRTC_ICE_SERVERS } from "@/constants/call";
+import {
+  resolveLiveKitServerUrl,
+  WEBRTC_ICE_SERVERS,
+} from "@/constants/call";
 import { chatService } from "@/services/chat.service";
 import { chatSocketService } from "@/services/chat-socket.service";
 import { userService } from "@/services/user.service";
@@ -95,6 +98,8 @@ type CallContextValue = {
   localStreamURL: string | null;
   remoteStreamURL: string | null;
   remoteStreamRenderKey: number;
+  groupParticipantStreamURLs: Record<string, string>;
+  myIdentityUserId: string | null;
   startAudioCall: (params: StartCallParams) => Promise<void>;
   startVideoCall: (params: StartCallParams) => Promise<void>;
   joinGroupCallFromConversation: (conversationId: string) => Promise<boolean>;
@@ -120,6 +125,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [localStreamURL, setLocalStreamURL] = useState<string | null>(null);
   const [remoteStreamURL, setRemoteStreamURL] = useState<string | null>(null);
   const [remoteStreamRenderKey, setRemoteStreamRenderKey] = useState(0);
+  const [groupParticipantStreamURLs, setGroupParticipantStreamURLs] =
+    useState<Record<string, string>>({});
   const [myIdentityUserId, setMyIdentityUserId] = useState<string | null>(null);
 
   const phaseRef = useRef<CallPhase>("idle");
@@ -131,6 +138,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const pendingIncomingOfferRef = useRef<PendingIncomingOffer | null>(null);
   const pendingIceCandidatesRef = useRef<any[]>([]);
   const sfuRoomRef = useRef<any>(null);
+  const sfuParticipantStreamsRef = useRef<Map<string, any>>(new Map());
   const usingSfuCallRef = useRef(false);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -271,21 +279,135 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const publishGroupParticipantStreamURLs = useCallback(() => {
+    const next: Record<string, string> = {};
+    sfuParticipantStreamsRef.current.forEach((stream, participantId) => {
+      const streamURL = stream?.toURL?.();
+      if (streamURL) {
+        next[participantId] = streamURL;
+      }
+    });
+    setGroupParticipantStreamURLs(next);
+  }, []);
+
+  const clearSfuParticipantStreams = useCallback(() => {
+    sfuParticipantStreamsRef.current.clear();
+    setGroupParticipantStreamURLs({});
+  }, []);
+
   const cleanupSfuRoom = useCallback(() => {
     const room = sfuRoomRef.current;
     sfuRoomRef.current = null;
     usingSfuCallRef.current = false;
+    clearSfuParticipantStreams();
     if (room) {
-      room.disconnect?.(true);
+      try {
+        room.disconnect?.(true);
+      } catch (error) {
+        callDebugLog("sfu:disconnect-failed", toErrorLog(error));
+      }
     }
-  }, []);
+  }, [clearSfuParticipantStreams]);
+
+  const loadGroupCallMembers = useCallback(
+    async (
+      conversationId: string,
+    ): Promise<{
+      members: CallMember[];
+      title: string | null;
+      avatar: string | null;
+    }> => {
+      const response = await chatService.listConversations();
+      const conversation = (response.data ?? []).find(
+        (item) => item.idConversation === conversationId,
+      );
+      if (!conversation) {
+        return { members: [], title: null, avatar: null };
+      }
+
+      const members = await Promise.all(
+        conversation.participantInfos.map(async (participant) => {
+          try {
+            const profileResponse = await userService.getProfileByIdentityUserId(
+              participant.idAccount,
+            );
+            const profile = profileResponse.data;
+            const name =
+              `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
+              participant.idAccount;
+            return {
+              id: participant.idAccount,
+              name,
+              avatar: profile.avatar ?? null,
+            };
+          } catch {
+            return {
+              id: participant.idAccount,
+              name: participant.idAccount,
+              avatar: null,
+            };
+          }
+        }),
+      );
+
+      return {
+        members,
+        title: conversation.name?.trim() || null,
+        avatar: conversation.avatar ?? null,
+      };
+    },
+    [],
+  );
+
+  const waitForLiveKitConnected = useCallback(
+    (room: any, liveKit: any, timeoutMs = 20_000) =>
+      new Promise<void>((resolve, reject) => {
+        const { RoomEvent, ConnectionState } = liveKit;
+        const isConnected = () => {
+          const state = room?.state;
+          return (
+            state === ConnectionState?.Connected ||
+            state === "connected" ||
+            state === 3
+          );
+        };
+        if (isConnected()) {
+          resolve();
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          room.off(RoomEvent.Connected, onConnected);
+          room.off(RoomEvent.Disconnected, onDisconnected);
+          reject(new Error("LiveKit connection timeout"));
+        }, timeoutMs);
+
+        const onConnected = () => {
+          clearTimeout(timer);
+          room.off(RoomEvent.Connected, onConnected);
+          room.off(RoomEvent.Disconnected, onDisconnected);
+          resolve();
+        };
+
+        const onDisconnected = () => {
+          clearTimeout(timer);
+          room.off(RoomEvent.Connected, onConnected);
+          room.off(RoomEvent.Disconnected, onDisconnected);
+          reject(new Error("LiveKit disconnected before connected"));
+        };
+
+        room.on(RoomEvent.Connected, onConnected);
+        room.on(RoomEvent.Disconnected, onDisconnected);
+      }),
+    [],
+  );
 
   const connectSfuRoom = useCallback(
     async (
       conversationId: string,
       callId: string,
       audioOnly: boolean,
-      startWithCameraOff = false
+      startWithCameraOff = false,
     ) => {
       const webRtc = configureLiveKitGlobals();
       if (!webRtc) {
@@ -298,12 +420,24 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const sfuTokenResponse = await chatService.createConversationSfuToken(
         conversationId,
-        callId
+        callId,
       );
       const sfuToken = sfuTokenResponse.data;
       if (!sfuToken?.url || !sfuToken?.token) {
         throw new Error("SFU token payload is invalid");
       }
+
+      const liveKitServerUrl = resolveLiveKitServerUrl(sfuToken.url);
+      if (!liveKitServerUrl) {
+        throw new Error("LiveKit server URL is missing");
+      }
+
+      callDebugLog("sfu:connect", {
+        conversationId,
+        callId,
+        backendUrl: sfuToken.url,
+        liveKitServerUrl,
+      });
 
       cleanupSfuRoom();
       remoteStreamRef.current = null;
@@ -322,39 +456,96 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return remoteStreamRef.current;
       };
 
-      room.on(RoomEvent.TrackSubscribed, (track: any) => {
-        if (
-          track?.kind !== Track.Kind.Video &&
-          track?.kind !== Track.Kind.Audio
-        ) {
-          return;
+      const ensureParticipantStream = (participantId: string) => {
+        let stream = sfuParticipantStreamsRef.current.get(participantId);
+        if (!stream) {
+          stream = new webRtc.MediaStream();
+          sfuParticipantStreamsRef.current.set(participantId, stream);
         }
-        const mediaTrack = track?.mediaStreamTrack;
-        if (!mediaTrack) {
-          return;
-        }
-        const remoteStream = ensureRemoteStream();
-        const exists = remoteStream
+        return stream;
+      };
+
+      const addTrackToStream = (stream: any, mediaTrack: any) => {
+        const exists = stream
           .getTracks?.()
           ?.some((item: any) => item.id === mediaTrack.id);
         if (!exists) {
-          remoteStream.addTrack(mediaTrack);
+          stream.addTrack(mediaTrack);
         }
-        setRemoteStreamURL(remoteStream.toURL?.() ?? null);
-        setRemoteStreamRenderKey((value) => value + 1);
-      });
+      };
 
-      room.on(RoomEvent.TrackUnsubscribed, (track: any) => {
-        const mediaTrack = track?.mediaStreamTrack;
-        const remoteStream = remoteStreamRef.current;
-        if (!mediaTrack || !remoteStream) {
-          return;
-        }
-        remoteStream.removeTrack(mediaTrack);
-        const hasTracks = (remoteStream.getTracks?.() ?? []).length > 0;
-        setRemoteStreamURL(hasTracks ? remoteStream.toURL?.() ?? null : null);
-        setRemoteStreamRenderKey((value) => value + 1);
-      });
+      room.on(
+        RoomEvent.TrackSubscribed,
+        (track: any, _publication: any, participant: any) => {
+          if (
+            track?.kind !== Track.Kind.Video &&
+            track?.kind !== Track.Kind.Audio
+          ) {
+            return;
+          }
+          const mediaTrack = track?.mediaStreamTrack;
+          if (!mediaTrack) {
+            return;
+          }
+
+          if (participant?.isLocal) {
+            syncLocalPreviewFromSfuRoom(webRtc, room);
+            return;
+          }
+
+          const participantId = participant?.identity;
+          if (!participantId) {
+            return;
+          }
+
+          const participantStream = ensureParticipantStream(participantId);
+          addTrackToStream(participantStream, mediaTrack);
+          publishGroupParticipantStreamURLs();
+
+          const remoteStream = ensureRemoteStream();
+          addTrackToStream(remoteStream, mediaTrack);
+          setRemoteStreamURL(remoteStream.toURL?.() ?? null);
+          setRemoteStreamRenderKey((value) => value + 1);
+        },
+      );
+
+      room.on(
+        RoomEvent.TrackUnsubscribed,
+        (track: any, _publication: any, participant: any) => {
+          const mediaTrack = track?.mediaStreamTrack;
+          if (!mediaTrack) {
+            return;
+          }
+
+          if (participant?.isLocal) {
+            syncLocalPreviewFromSfuRoom(webRtc, room);
+            return;
+          }
+
+          const participantId = participant?.identity;
+          const participantStream = participantId
+            ? sfuParticipantStreamsRef.current.get(participantId)
+            : null;
+          if (participantStream) {
+            participantStream.removeTrack(mediaTrack);
+            if ((participantStream.getTracks?.() ?? []).length === 0) {
+              sfuParticipantStreamsRef.current.delete(participantId);
+            }
+            publishGroupParticipantStreamURLs();
+          }
+
+          const remoteStream = remoteStreamRef.current;
+          if (!remoteStream) {
+            return;
+          }
+          remoteStream.removeTrack(mediaTrack);
+          const hasTracks = (remoteStream.getTracks?.() ?? []).length > 0;
+          setRemoteStreamURL(
+            hasTracks ? (remoteStream.toURL?.() ?? null) : null,
+          );
+          setRemoteStreamRenderKey((value) => value + 1);
+        },
+      );
       room.on(RoomEvent.ParticipantConnected, () => {
         updateJoinedIdsFromSfuRoom();
       });
@@ -364,11 +555,22 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       room.on(RoomEvent.Reconnected, () => {
         updateJoinedIdsFromSfuRoom();
       });
+      room.on(RoomEvent.LocalTrackPublished, () => {
+        syncLocalPreviewFromSfuRoom(webRtc, room);
+      });
+      room.on(RoomEvent.LocalTrackUnpublished, () => {
+        syncLocalPreviewFromSfuRoom(webRtc, room);
+      });
 
-      await room.connect(sfuToken.url, sfuToken.token);
+      await room.connect(liveKitServerUrl, sfuToken.token, {
+        rtcConfig: {
+          iceServers: WEBRTC_ICE_SERVERS,
+        },
+      });
+      await waitForLiveKitConnected(room, liveKit);
       await room.localParticipant.setMicrophoneEnabled(true);
       await room.localParticipant.setCameraEnabled(
-        !audioOnly && !startWithCameraOff
+        !audioOnly && !startWithCameraOff,
       );
 
       syncLocalPreviewFromSfuRoom(webRtc, room);
@@ -378,9 +580,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       cleanupSfuRoom,
       configureLiveKitGlobals,
       ensureLiveKitModule,
+      publishGroupParticipantStreamURLs,
       syncLocalPreviewFromSfuRoom,
       updateJoinedIdsFromSfuRoom,
-    ]
+      waitForLiveKitConnected,
+    ],
   );
 
   const closeWithMessage = useCallback(
@@ -809,6 +1013,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         if (isGroupCall) {
           await ensureSignalingSocket();
           await connectSfuRoom(conversationId, callId, audioOnly);
+          setPhase("in-call");
+          setActiveCall((prev) =>
+            prev && prev.callId === callId
+              ? {
+                  ...prev,
+                  startedAt: prev.startedAt ?? Date.now(),
+                }
+              : prev,
+          );
         } else {
           const pc = createPeerConnection(conversationId, callId, audioOnly);
           const [, localStream] = await Promise.all([
@@ -913,11 +1126,26 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         const isGroupCall = offer.isGroupCall;
         let acceptPayloadSdp: string | undefined;
         if (isGroupCall) {
+          setPhase("connecting");
+          const groupMeta = await loadGroupCallMembers(offer.conversationId);
+          setActiveCall((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  members:
+                    prev.members && prev.members.length > 0
+                      ? prev.members
+                      : groupMeta.members,
+                  peerName: groupMeta.title ?? prev.peerName,
+                  peerAvatar: groupMeta.avatar ?? prev.peerAvatar,
+                }
+              : prev,
+          );
           await connectSfuRoom(
             offer.conversationId,
             offer.callId,
             offer.audioOnly,
-            startWithCameraOff
+            startWithCameraOff,
           );
         } else {
           const webRtc = ensureWebRtcModule();
@@ -1015,6 +1243,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           type: "error",
           text1: "Không thể nhận cuộc gọi",
         });
+        resetCall();
       }
     },
     [
@@ -1024,6 +1253,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       ensureLocalStream,
       ensureWebRtcModule,
       flushPendingIceCandidates,
+      loadGroupCallMembers,
+      resetCall,
       sendSignal,
     ],
   );
@@ -1088,6 +1319,22 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   }, [resetCall, sendSignal]);
 
   const toggleMicrophone = useCallback(() => {
+    const nextEnabled = !micEnabled;
+    const room = sfuRoomRef.current;
+    if (usingSfuCallRef.current && room?.localParticipant) {
+      void room.localParticipant
+        .setMicrophoneEnabled(nextEnabled)
+        .then(() => {
+          const webRtc = ensureWebRtcModule();
+          if (webRtc) {
+            syncLocalPreviewFromSfuRoom(webRtc, room);
+          }
+          setMicEnabled(nextEnabled);
+        })
+        .catch(() => undefined);
+      return;
+    }
+
     const stream = localStreamRef.current;
     if (!stream) {
       return;
@@ -1096,18 +1343,34 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (audioTracks.length === 0) {
       return;
     }
-    const nextEnabled = !audioTracks[0].enabled;
     audioTracks.forEach((track: any) => {
       track.enabled = nextEnabled;
     });
     setMicEnabled(nextEnabled);
-  }, []);
+  }, [ensureWebRtcModule, micEnabled, syncLocalPreviewFromSfuRoom]);
 
   const toggleCamera = useCallback(() => {
     const current = activeCallRef.current;
     if (!current || current.audioOnly) {
       return;
     }
+
+    const nextEnabled = !cameraEnabled;
+    const room = sfuRoomRef.current;
+    if (usingSfuCallRef.current && room?.localParticipant) {
+      void room.localParticipant
+        .setCameraEnabled(nextEnabled)
+        .then(() => {
+          const webRtc = ensureWebRtcModule();
+          if (webRtc) {
+            syncLocalPreviewFromSfuRoom(webRtc, room);
+          }
+          setCameraEnabled(nextEnabled);
+        })
+        .catch(() => undefined);
+      return;
+    }
+
     const stream = localStreamRef.current;
     if (!stream) {
       return;
@@ -1116,12 +1379,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (videoTracks.length === 0) {
       return;
     }
-    const nextEnabled = !videoTracks[0].enabled;
     videoTracks.forEach((track: any) => {
       track.enabled = nextEnabled;
     });
     setCameraEnabled(nextEnabled);
-  }, []);
+  }, [cameraEnabled, ensureWebRtcModule, syncLocalPreviewFromSfuRoom]);
 
   const logPeerStats = useCallback((tag: string) => {
     const pc = peerConnectionRef.current;
@@ -1308,34 +1570,54 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           conversationId: signal.conversationId,
           callId: signal.callId,
           peerUserId: signal.fromUserId,
-          peerName: signal.fromUserId,
+          peerName: isGroupOffer ? "Cuộc gọi nhóm" : signal.fromUserId,
           peerAvatar: null,
           audioOnly: signal.audioOnly,
           isGroupCall: isGroupOffer,
           joinedUserIds: [signal.fromUserId],
         });
 
-        void userService
-          .getProfileByIdentityUserId(signal.fromUserId)
-          .then((response) => {
-            if (!mounted) {
-              return;
-            }
-            const profile = response.data;
-            const name =
-              `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
-              signal.fromUserId;
-            setActiveCall((prev) =>
-              prev && prev.callId === signal.callId
-                ? {
-                    ...prev,
-                    peerName: name,
-                    peerAvatar: profile.avatar ?? null,
-                  }
-                : prev,
-            );
-          })
-          .catch(() => undefined);
+        if (isGroupOffer) {
+          void loadGroupCallMembers(signal.conversationId)
+            .then(({ members, title, avatar }) => {
+              if (!mounted) {
+                return;
+              }
+              setActiveCall((prev) =>
+                prev && prev.callId === signal.callId
+                  ? {
+                      ...prev,
+                      members,
+                      peerName: title ?? prev.peerName,
+                      peerAvatar: avatar ?? prev.peerAvatar,
+                    }
+                  : prev,
+              );
+            })
+            .catch(() => undefined);
+        } else {
+          void userService
+            .getProfileByIdentityUserId(signal.fromUserId)
+            .then((response) => {
+              if (!mounted) {
+                return;
+              }
+              const profile = response.data;
+              const name =
+                `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
+                signal.fromUserId;
+              setActiveCall((prev) =>
+                prev && prev.callId === signal.callId
+                  ? {
+                      ...prev,
+                      peerName: name,
+                      peerAvatar: profile.avatar ?? null,
+                    }
+                  : prev,
+              );
+            })
+            .catch(() => undefined);
+        }
 
         return;
       }
@@ -1565,6 +1847,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       localStreamURL,
       remoteStreamURL,
       remoteStreamRenderKey,
+      groupParticipantStreamURLs,
+      myIdentityUserId,
       startAudioCall,
       startVideoCall,
       joinGroupCallFromConversation,
@@ -1581,8 +1865,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       activeCall,
       cameraEnabled,
       endCurrentCall,
+      groupParticipantStreamURLs,
       localStreamURL,
       micEnabled,
+      myIdentityUserId,
       phase,
       rejectIncomingCall,
       remoteStreamURL,
