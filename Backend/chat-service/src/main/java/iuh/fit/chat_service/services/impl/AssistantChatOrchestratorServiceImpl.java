@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -51,6 +52,7 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
     private static final int DEFAULT_PAGE = 1;
     private static final int MAX_TOOL_STEPS = 3;
     private static final int HISTORY_LIMIT = 20;
+    private static final String INTENT_ROUTER_FUNCTION = "classify_assistant_intent";
     private static final Pattern TASK_ID_PATTERN = Pattern.compile("\\b[a-fA-F0-9]{24}\\b|\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\b");
     private static final Pattern DATE_PATTERN = Pattern.compile("\\b\\d{4}-\\d{2}-\\d{2}\\b|\\b\\d{2}/\\d{2}/\\d{4}\\b");
 
@@ -168,139 +170,346 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         contents.add(contentWithText("user", question));
 
         List<ChatAssistantTool> toolsUsed = new ArrayList<>();
-        ChatAssistantIntent resolvedIntent = ChatAssistantIntent.UNKNOWN;
+        ChatAssistantIntent resolvedIntent = classifyIntent(contents, question);
+        IntentToolPolicy policy = intentPolicy(resolvedIntent);
         Object lastToolData = null;
-        String finalAnswer = null;
+        String executionStatus = "NO_TOOL";
 
-        for (int step = 0; step < MAX_TOOL_STEPS; step++) {
-            log.debug("AI agent step={} requesterId={} questionLength={}", step + 1, requesterId, question.length());
-            JsonNode selectorResponse = callGeminiGenerateContent(
-                    contents,
-                    agentToolSelectorSystemPrompt(),
-                    buildGeminiToolSelectorDeclarations(),
-                    autoFunctionCallingConfig()
-            );
-            if (selectorResponse == null) {
-                log.warn("AI agent step={} selector got null response from Gemini", step + 1);
-                break;
-            }
+        log.info(
+                "AI agent intent routed: requesterId={}, threadId={}, intent={}, primaryTool={}",
+                requesterId,
+                threadId,
+                resolvedIntent,
+                policy == null || policy.primaryTool() == null ? null : policy.primaryTool().getCode()
+        );
 
-            JsonNode selectorCandidate = firstCandidate(selectorResponse);
-            if (selectorCandidate == null) {
-                break;
-            }
-
-            JsonNode selectorModelContent = selectorCandidate.path("content");
-            if (!selectorModelContent.isObject()) {
-                break;
-            }
-
-            FunctionCallRequest selectedToolCall = extractFunctionCall(selectorModelContent);
-            if (selectedToolCall == null) {
-                finalAnswer = extractTextFromContent(selectorModelContent);
-                log.debug(
-                        "AI agent step={} selector produced final text length={}",
-                        step + 1,
-                        finalAnswer == null ? 0 : finalAnswer.length()
-                );
-                break;
-            }
-            ChatAssistantTool selectedTool = parseTool(selectedToolCall.name());
-            if (selectedTool == null) {
-                finalAnswer = "Mình chưa hỗ trợ thao tác này. Bạn thử diễn đạt lại yêu cầu cụ thể hơn.";
-                log.warn("AI agent step={} selected unsupported tool name={}", step + 1, selectedToolCall.name());
-                break;
-            }
-
-            JsonNode argsResponse = callGeminiGenerateContent(
-                    contents,
-                    agentToolArgsSystemPrompt(selectedTool),
-                    buildGeminiSingleToolDeclaration(selectedTool),
-                    forceSingleFunctionCallingConfig(selectedTool.getCode())
-            );
-            if (argsResponse == null) {
-                log.warn("AI agent step={} args-builder got null response from Gemini", step + 1);
-                break;
-            }
-            JsonNode argsCandidate = firstCandidate(argsResponse);
-            if (argsCandidate == null) {
-                break;
-            }
-            JsonNode argsModelContent = argsCandidate.path("content");
-            if (!argsModelContent.isObject()) {
-                break;
-            }
-            FunctionCallRequest functionCall = extractFunctionCall(argsModelContent);
-            if (functionCall == null) {
-                log.warn("AI agent step={} args-builder did not return functionCall for tool={}", step + 1, selectedTool.getCode());
-                functionCall = new FunctionCallRequest(selectedTool.getCode(), Map.of());
-            }
+        if (policy != null && policy.primaryTool() != null) {
+            FunctionCallRequest functionCall = buildToolArgs(contents, policy.primaryTool(), question);
+            functionCall = normalizeFunctionCall(functionCall, policy.primaryTool(), question);
             log.info(
-                    "AI agent functionCall step={}: name={}, args={}",
-                    step + 1,
+                    "AI agent functionCall by intent: intent={}, name={}, args={}",
+                    resolvedIntent,
                     functionCall.name(),
                     functionCall.arguments()
             );
 
-            ToolExecutionResult toolExecution = executeToolCall(requesterId, threadId, question, functionCall);
-            if (toolExecution.tool() != null) {
-                toolsUsed.add(toolExecution.tool());
-                resolvedIntent = inferIntentByTool(toolExecution.tool());
-            }
-            lastToolData = toolExecution.data();
-            log.info(
-                    "AI agent functionResult step={}: tool={}, success={}, dataType={}",
-                    step + 1,
-                    toolExecution.tool(),
-                    toolExecution.functionResponse().get("success"),
-                    lastToolData == null ? "null" : lastToolData.getClass().getSimpleName()
-            );
-
-            contents.add(modelContentToMap(selectorModelContent));
-            contents.add(modelContentToMap(argsModelContent));
-            contents.add(contentWithFunctionResponse(functionCall.name(), toolExecution));
-        }
-
-        ToolExecutionResult correctiveToolExecution = tryCorrectTaskActionAfterToolRun(
-                requesterId,
-                threadId,
-                question,
-                toolsUsed
-        );
-        if (correctiveToolExecution != null && correctiveToolExecution.tool() != null) {
-            toolsUsed.add(correctiveToolExecution.tool());
-            resolvedIntent = inferIntentByTool(correctiveToolExecution.tool());
-            lastToolData = correctiveToolExecution.data();
-            finalAnswer = buildFallbackAnswer(question, resolvedIntent, lastToolData);
-        }
-
-        if (toolsUsed.isEmpty()) {
-            ToolExecutionResult fallbackToolExecution = tryRuleBasedTaskTool(requesterId, threadId, question);
-            if (fallbackToolExecution == null || fallbackToolExecution.tool() == null) {
-                fallbackToolExecution = tryRuleBasedChatTool(requesterId, question);
-            }
-            if (fallbackToolExecution != null && fallbackToolExecution.tool() != null) {
-                toolsUsed.add(fallbackToolExecution.tool());
-                resolvedIntent = inferIntentByTool(fallbackToolExecution.tool());
-                ChatAssistantIntent overrideIntent = readIntentFromFallbackData(fallbackToolExecution.data());
-                if (overrideIntent != null) {
-                    resolvedIntent = overrideIntent;
+            List<MissingField> missingFields = validateBusinessRequiredParams(resolvedIntent, functionCall.arguments());
+            if (!missingFields.isEmpty()) {
+                executionStatus = "MISSING_REQUIRED_PARAMS";
+                lastToolData = buildMissingFieldsContext(resolvedIntent, policy, missingFields, functionCall.arguments());
+                log.info("AI agent primary tool skipped: intent={}, missingFields={}", resolvedIntent, missingFields);
+            } else {
+                ToolExecutionResult toolExecution = executeToolCall(requesterId, threadId, question, functionCall);
+                if (toolExecution.tool() != null) {
+                    toolsUsed.add(toolExecution.tool());
                 }
-                lastToolData = fallbackToolExecution.data();
-                finalAnswer = buildFallbackAnswer(question, resolvedIntent, lastToolData);
+                lastToolData = toolExecution.data();
+                Object success = toolExecution.functionResponse().get("success");
+                executionStatus = Boolean.FALSE.equals(success) ? "TOOL_ERROR" : "SUCCESS";
+                log.info(
+                        "AI agent functionResult by intent: tool={}, success={}, dataType={}",
+                        toolExecution.tool(),
+                        success,
+                        lastToolData == null ? "null" : lastToolData.getClass().getSimpleName()
+                );
             }
         }
 
-        if (!StringUtils.hasText(finalAnswer)) {
-            finalAnswer = buildFallbackAnswer(question, resolvedIntent, lastToolData);
-            log.warn("AI agent fallback answer used: intent={}, questionLength={}", resolvedIntent, question.length());
+        String finalAnswer = buildAiFinalAnswer(question, resolvedIntent, policy, executionStatus, lastToolData);
+        return new AgentRunResult(finalAnswer, resolvedIntent, toolsUsed, lastToolData, toolsUsed.size());
+    }
+
+    private ChatAssistantIntent classifyIntent(List<Map<String, Object>> contents, String question) {
+        JsonNode response = callGeminiGenerateContent(
+                contents,
+                intentRouterSystemPrompt(),
+                buildGeminiIntentRouterDeclarations(),
+                forceSingleFunctionCallingConfig(INTENT_ROUTER_FUNCTION)
+        );
+        if (response == null) {
+            log.warn("AI intent router got null response, using UNKNOWN intent: questionLength={}", question.length());
+            return ChatAssistantIntent.UNKNOWN;
         }
-        if (toolsUsed.isEmpty()) {
-            resolvedIntent = inferIntentWithoutTool(question, finalAnswer);
-            log.debug("AI agent inferred intent without tool: {}", resolvedIntent);
+        JsonNode candidate = firstCandidate(response);
+        if (candidate != null) {
+            FunctionCallRequest functionCall = extractFunctionCall(candidate.path("content"));
+            ChatAssistantIntent intent = parseIntent(readString(functionCall == null ? null : functionCall.arguments(), "intent"));
+            if (intent != null) {
+                return intent;
+            }
+            String text = extractTextFromContent(candidate.path("content"));
+            intent = parseIntent(text);
+            if (intent != null) {
+                return intent;
+            }
+        }
+        log.warn("AI intent router failed, using UNKNOWN intent: questionLength={}", question.length());
+        return ChatAssistantIntent.UNKNOWN;
+    }
+
+    private FunctionCallRequest buildToolArgs(List<Map<String, Object>> contents, ChatAssistantTool primaryTool, String question) {
+        JsonNode argsResponse = callGeminiGenerateContent(
+                contents,
+                agentToolArgsSystemPrompt(primaryTool),
+                buildGeminiSingleToolDeclaration(primaryTool),
+                forceSingleFunctionCallingConfig(primaryTool.getCode())
+        );
+        if (argsResponse == null) {
+            return new FunctionCallRequest(primaryTool.getCode(), Map.of());
+        }
+        JsonNode argsCandidate = firstCandidate(argsResponse);
+        if (argsCandidate == null || !argsCandidate.path("content").isObject()) {
+            return new FunctionCallRequest(primaryTool.getCode(), Map.of());
+        }
+        FunctionCallRequest functionCall = extractFunctionCall(argsCandidate.path("content"));
+        if (functionCall == null) {
+            return new FunctionCallRequest(primaryTool.getCode(), Map.of());
+        }
+        return functionCall;
+    }
+
+    private FunctionCallRequest normalizeFunctionCall(FunctionCallRequest functionCall, ChatAssistantTool expectedTool, String question) {
+        Map<String, Object> args = new LinkedHashMap<>();
+        if (functionCall != null && functionCall.arguments() != null) {
+            args.putAll(functionCall.arguments());
+        }
+        if (expectedTool == ChatAssistantTool.TASK_CREATE_TASK) {
+            putIfMissing(args, "title", extractTaskNameHint(question));
+            putIfMissing(args, "groupNameHint", extractGroupNameHint(question));
+            putIfMissing(args, "startDate", extractStartDateHint(question));
+            putIfMissing(args, "dueDate", extractDueDateHint(question));
+            putIfMissing(args, "priority", extractPriorityHint(question));
+            if (readStringListWithAliases(args, "assigneeNameHints", "assigneeNames", "assignees").isEmpty()) {
+                List<String> assigneeNameHints = extractAssigneeNameHints(question);
+                if (!assigneeNameHints.isEmpty()) {
+                    args.put("assigneeNameHints", assigneeNameHints);
+                }
+            }
+        }
+        return new FunctionCallRequest(expectedTool.getCode(), args);
+    }
+
+    private void putIfMissing(Map<String, Object> args, String key, String value) {
+        if (!StringUtils.hasText(value) || args == null) {
+            return;
+        }
+        if (!StringUtils.hasText(readString(args, key))) {
+            args.put(key, value);
+        }
+    }
+
+    private IntentToolPolicy intentPolicy(ChatAssistantIntent intent) {
+        if (intent == null) {
+            return new IntentToolPolicy(ChatAssistantIntent.UNKNOWN, null, List.of(), List.of(), List.of(), "Không xác định được intent.");
+        }
+        return switch (intent) {
+            case LIST_CONVERSATIONS -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_LIST_MY_CONVERSATIONS, List.of(), List.of(), List.of(), "Lấy danh sách hội thoại.");
+            case LIST_MESSAGES -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_GET_CONVERSATION_MESSAGES, List.of(), List.of(), List.of("conversationId hoặc conversationNameHint"), "Lấy tin nhắn theo hội thoại.");
+            case SEARCH_KEYWORD -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_SEARCH_KEYWORD, List.of(), List.of("keyword"), List.of("conversationId hoặc conversationNameHint"), "Tìm keyword trong hội thoại.");
+            case SEARCH_SEMANTIC -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_SEMANTIC_SEARCH_CONVERSATION, List.of(), List.of("query"), List.of("conversationId hoặc conversationNameHint"), "Tìm ngữ nghĩa trong hội thoại.");
+            case SEARCH_MY_CHAT_SPACE -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_SEMANTIC_SEARCH_MY_SPACE, List.of(), List.of("query"), List.of(), "Tìm ngữ nghĩa toàn bộ không gian chat.");
+            case FIND_WHO_SAID -> new IntentToolPolicy(intent, ChatAssistantTool.CHAT_FIND_WHO_SAID, List.of(), List.of("query"), List.of(), "Tìm ai đã nói nội dung tương ứng.");
+            case TASK_LIST_GROUPS -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_GROUPS, List.of(), List.of(), List.of(), "Lấy danh sách nhóm task của user.");
+            case TASK_FIND_BY_NAME -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_FIND_TASKS_BY_NAME, List.of(ChatAssistantTool.TASK_LIST_MY_GROUPS), List.of("taskNameHint"), List.of(), "Tìm task theo tên.");
+            case TASK_LIST_GROUP_ITEMS -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_GROUP_TASKS, List.of(ChatAssistantTool.TASK_LIST_MY_GROUPS), List.of(), List.of("groupId hoặc groupNameHint"), "Lấy task trong nhóm.");
+            case TASK_CREATE -> new IntentToolPolicy(
+                    intent,
+                    ChatAssistantTool.TASK_CREATE_TASK,
+                    List.of(ChatAssistantTool.TASK_LIST_MY_GROUPS),
+                    List.of("title"),
+                    List.of("groupId hoặc groupNameHint"),
+                    "Tạo task. AI schema chỉ require title; business execution cần groupId hoặc groupNameHint để insert."
+            );
+            case TASK_UPDATE -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_UPDATE_TASK, List.of(ChatAssistantTool.TASK_FIND_TASKS_BY_NAME, ChatAssistantTool.TASK_LIST_MY_GROUPS), List.of(), List.of("taskId hoặc taskNameHint"), "Cập nhật task.");
+            case TASK_DELETE -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_DELETE_TASK, List.of(ChatAssistantTool.TASK_FIND_TASKS_BY_NAME), List.of(), List.of("taskId hoặc taskNameHint"), "Xóa task.");
+            case TASK_DETAIL -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_GET_TASK_DETAIL, List.of(ChatAssistantTool.TASK_FIND_TASKS_BY_NAME), List.of(), List.of("taskId hoặc taskNameHint"), "Lấy chi tiết task.");
+            case TASK_COMMENT_CREATE -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_ADD_TASK_COMMENT, List.of(ChatAssistantTool.TASK_FIND_TASKS_BY_NAME), List.of("content"), List.of("taskId hoặc taskNameHint"), "Thêm comment vào task.");
+            case TASK_COMMENT_LIST -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_TASK_COMMENTS, List.of(ChatAssistantTool.TASK_FIND_TASKS_BY_NAME), List.of(), List.of("taskId hoặc taskNameHint"), "Liệt kê comment của task.");
+            case TASK_LIST_MY_ITEMS -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_TASKS, List.of(), List.of(), List.of(), "Lấy task của tôi.");
+            case TASK_LIST_OVERDUE -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_OVERDUE_TASKS, List.of(), List.of(), List.of(), "Lấy task trễ hạn.");
+            case TASK_LIST_DUE_SOON -> new IntentToolPolicy(intent, ChatAssistantTool.TASK_LIST_MY_DUE_SOON_TASKS, List.of(), List.of(), List.of(), "Lấy task sắp đến hạn.");
+            default -> new IntentToolPolicy(intent, null, List.of(), List.of(), List.of(), "Intent không cần tool hoặc chưa có policy tool.");
+        };
+    }
+
+    private List<MissingField> validateBusinessRequiredParams(ChatAssistantIntent intent, Map<String, Object> args) {
+        List<MissingField> missingFields = new ArrayList<>();
+        if (intent == ChatAssistantIntent.TASK_CREATE) {
+            if (!StringUtils.hasText(readString(args, "title"))) {
+                missingFields.add(new MissingField("title", "tên task", "Cần tên task để tạo task mới"));
+            }
+            if (!StringUtils.hasText(readString(args, "groupId"))
+                    && !StringUtils.hasText(readString(args, "groupNameHint"))) {
+                missingFields.add(new MissingField("groupNameHint", "nhóm task", "Cần nhóm task để tạo task mới"));
+            }
+        }
+        return missingFields;
+    }
+
+    private Map<String, Object> buildMissingFieldsContext(
+            ChatAssistantIntent intent,
+            IntentToolPolicy policy,
+            List<MissingField> missingFields,
+            Map<String, Object> knownParams
+    ) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("intent", intent == null ? ChatAssistantIntent.UNKNOWN.name() : intent.name());
+        context.put("executionStatus", "MISSING_REQUIRED_PARAMS");
+        context.put("primaryTool", policy == null || policy.primaryTool() == null ? null : policy.primaryTool().getCode());
+        context.put("missingFields", missingFields.stream()
+                .map(field -> Map.of(
+                        "field", field.field(),
+                        "label", field.label(),
+                        "reason", field.reason()
+                ))
+                .toList());
+        context.put("knownParams", knownParams == null ? Map.of() : knownParams);
+        return context;
+    }
+
+    private String buildAiFinalAnswer(
+            String question,
+            ChatAssistantIntent intent,
+            IntentToolPolicy policy,
+            String executionStatus,
+            Object contextData
+    ) {
+        if (intent == ChatAssistantIntent.AI_CAPABILITIES) {
+            return buildCapabilitiesAnswer();
         }
 
-        return new AgentRunResult(finalAnswer, resolvedIntent, toolsUsed, lastToolData, toolsUsed.size());
+        List<Map<String, Object>> answerContents = new ArrayList<>();
+        Map<String, Object> answerContext = new LinkedHashMap<>();
+        answerContext.put("intent", intent == null ? ChatAssistantIntent.UNKNOWN.name() : intent.name());
+        answerContext.put("executionStatus", firstNonBlank(executionStatus, "NO_TOOL"));
+        answerContext.put("primaryTool", policy == null || policy.primaryTool() == null ? null : policy.primaryTool().getCode());
+        answerContext.put("resolverTools", policy == null ? List.of() : policy.resolverTools().stream().map(ChatAssistantTool::getCode).toList());
+        answerContext.put("capabilities", intent == ChatAssistantIntent.AI_CAPABILITIES ? assistantCapabilitiesContext() : null);
+        answerContext.put("toolResultOrMissingFieldContext", contextData);
+        answerContents.add(contentWithText("user", question));
+        answerContents.add(contentWithText("user", "Context nội bộ backend:\n" + toJsonForPrompt(answerContext)));
+        JsonNode response = callGeminiGenerateContent(
+                answerContents,
+                finalAnswerSystemPrompt(),
+                List.of(),
+                Map.of()
+        );
+        if (response == null) {
+            return buildSafetyAnswer(intent, executionStatus, contextData);
+        }
+        JsonNode candidate = firstCandidate(response);
+        String answer = candidate == null ? null : extractTextFromContent(candidate.path("content"));
+        if (StringUtils.hasText(answer)) {
+            return answer.trim();
+        }
+        return buildSafetyAnswer(intent, executionStatus, contextData);
+    }
+
+    private String toJsonForPrompt(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception ex) {
+            return String.valueOf(value);
+        }
+    }
+
+    private String buildSafetyAnswer(ChatAssistantIntent intent, String executionStatus, Object contextData) {
+        if ("MISSING_REQUIRED_PARAMS".equals(executionStatus) && contextData instanceof Map<?, ?> map) {
+            Object rawMissingFields = map.get("missingFields");
+            if (rawMissingFields instanceof List<?> missingFields && !missingFields.isEmpty()) {
+                String labels = missingFields.stream()
+                        .map(item -> item instanceof Map<?, ?> fieldMap ? asString(fieldMap.get("label")) : null)
+                        .filter(StringUtils::hasText)
+                        .distinct()
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("dữ liệu cần thiết");
+                return "Mình cần bạn bổ sung " + labels + " để tiếp tục.";
+            }
+        }
+        if ("TOOL_ERROR".equals(executionStatus) && contextData instanceof Map<?, ?> map) {
+            String hint = asString(map.get("hint"));
+            if (StringUtils.hasText(hint)) {
+                return hint;
+            }
+        }
+        if (intent == ChatAssistantIntent.SMALL_TALK) {
+            return "Chào bạn, mình có thể giúp gì cho bạn?";
+        }
+        if (intent == ChatAssistantIntent.AI_CAPABILITIES) {
+            return buildCapabilitiesAnswer();
+        }
+        return "Mình chưa tạo được câu trả lời phù hợp. Bạn thử diễn đạt rõ hơn giúp mình nhé.";
+    }
+
+    private String buildCapabilitiesAnswer() {
+        return """
+                Mình có thể hỗ trợ bạn các tính năng sau:
+
+                Hội thoại:
+                - Liệt kê hội thoại: "Liệt kê các hội thoại của tôi".
+                - Lấy tin nhắn hội thoại: "Lấy tin nhắn trong hội thoại Nhóm KTPM".
+                - Tìm tin nhắn theo từ khóa: "Tìm tin nhắn có từ khóa deadline trong hội thoại Nhóm KTPM".
+                - Tìm kiếm ngữ nghĩa trong một hội thoại: "Tìm các tin nhắn nói về nộp bài trong hội thoại Nhóm KTPM".
+                - Tìm kiếm ngữ nghĩa toàn bộ chat: "Tìm trong tất cả hội thoại nội dung liên quan API đăng nhập".
+                - Tìm ai đã nói nội dung nào: "Ai đã nói họp lúc 9h?".
+                - Tóm tắt hội thoại: "Tóm tắt hội thoại Nhóm KTPM trong 3 ngày gần đây".
+
+                Task:
+                - Liệt kê nhóm task: "Liệt kê các nhóm task của tôi".
+                - Liệt kê task trong nhóm: "Liệt kê task trong nhóm Task KTPM".
+                - Liệt kê task của tôi: "Liệt kê task của tôi".
+                - Tìm task theo tên: "Tìm task tên API đăng nhập".
+                - Tạo task: "Tạo task với tên API đăng nhập, deadline ngày mai, ưu tiên HIGH và thuộc nhóm Task KTPM".
+                - Cập nhật task: "Cập nhật task API đăng nhập deadline ngày mai và ưu tiên HIGH".
+                - Xóa task: "Xóa task API đăng nhập".
+                - Xem chi tiết task: "Xem chi tiết task API đăng nhập".
+                - Thêm comment task: "Thêm comment vào task API đăng nhập: Đã hoàn thành phần login".
+                - Liệt kê comment task: "Liệt kê comment của task API đăng nhập".
+                - Liệt kê task trễ hạn: "Liệt kê các task trễ hạn của tôi".
+                - Liệt kê task sắp đến hạn: "Liệt kê các task sắp đến hạn của tôi".
+                """.trim();
+    }
+
+    private Map<String, Object> assistantCapabilitiesContext() {
+        Map<String, Object> capabilities = new LinkedHashMap<>();
+        capabilities.put("conversation", List.of(
+                capability(ChatAssistantIntent.LIST_CONVERSATIONS, "Liệt kê hội thoại", "Liệt kê các hội thoại của tôi"),
+                capability(ChatAssistantIntent.LIST_MESSAGES, "Lấy tin nhắn hội thoại", "Lấy tin nhắn trong hội thoại Nhóm KTPM"),
+                capability(ChatAssistantIntent.SEARCH_KEYWORD, "Tìm tin nhắn theo từ khóa", "Tìm tin nhắn có từ khóa deadline trong hội thoại Nhóm KTPM"),
+                capability(ChatAssistantIntent.SEARCH_SEMANTIC, "Tìm kiếm ngữ nghĩa trong một hội thoại", "Tìm các tin nhắn nói về nộp bài trong hội thoại Nhóm KTPM"),
+                capability(ChatAssistantIntent.SEARCH_MY_CHAT_SPACE, "Tìm kiếm ngữ nghĩa toàn bộ chat", "Tìm trong tất cả hội thoại nội dung liên quan API đăng nhập"),
+                capability(ChatAssistantIntent.FIND_WHO_SAID, "Tìm ai đã nói nội dung nào", "Ai đã nói họp lúc 9h?"),
+                capability(ChatAssistantIntent.SUMMARIZE_CONVERSATION, "Tóm tắt hội thoại", "Tóm tắt hội thoại Nhóm KTPM trong 3 ngày gần đây")
+        ));
+        capabilities.put("task", List.of(
+                capability(ChatAssistantIntent.TASK_LIST_GROUPS, "Liệt kê nhóm task", "Liệt kê các nhóm task của tôi"),
+                capability(ChatAssistantIntent.TASK_LIST_GROUP_ITEMS, "Liệt kê task trong nhóm", "Liệt kê task trong nhóm Task KTPM"),
+                capability(ChatAssistantIntent.TASK_LIST_MY_ITEMS, "Liệt kê task của tôi", "Liệt kê task của tôi"),
+                capability(ChatAssistantIntent.TASK_FIND_BY_NAME, "Tìm task theo tên", "Tìm task tên API đăng nhập"),
+                capability(ChatAssistantIntent.TASK_CREATE, "Tạo task", "Tạo task với tên API đăng nhập, deadline ngày mai, ưu tiên HIGH và thuộc nhóm Task KTPM"),
+                capability(ChatAssistantIntent.TASK_UPDATE, "Cập nhật task", "Cập nhật task API đăng nhập deadline ngày mai và ưu tiên HIGH"),
+                capability(ChatAssistantIntent.TASK_DELETE, "Xóa task", "Xóa task API đăng nhập"),
+                capability(ChatAssistantIntent.TASK_DETAIL, "Xem chi tiết task", "Xem chi tiết task API đăng nhập"),
+                capability(ChatAssistantIntent.TASK_COMMENT_CREATE, "Thêm comment task", "Thêm comment vào task API đăng nhập: Đã hoàn thành phần login"),
+                capability(ChatAssistantIntent.TASK_COMMENT_LIST, "Liệt kê comment task", "Liệt kê comment của task API đăng nhập"),
+                capability(ChatAssistantIntent.TASK_LIST_OVERDUE, "Liệt kê task trễ hạn", "Liệt kê các task trễ hạn của tôi"),
+                capability(ChatAssistantIntent.TASK_LIST_DUE_SOON, "Liệt kê task sắp đến hạn", "Liệt kê các task sắp đến hạn của tôi")
+        ));
+        capabilities.put("responseRules", List.of(
+                "Chia câu trả lời thành 2 nhóm: Hội thoại và Task.",
+                "Liệt kê đủ các tính năng theo intent.",
+                "Mỗi tính năng phải có ví dụ câu user có thể gửi.",
+                "Không thêm tính năng chung chung ngoài danh sách."
+        ));
+        return capabilities;
+    }
+
+    private Map<String, Object> capability(ChatAssistantIntent intent, String feature, String example) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("intent", intent.name());
+        item.put("feature", feature);
+        item.put("example", example);
+        return item;
     }
 
     private ToolExecutionResult executeToolCall(String requesterId, String threadId, String question, FunctionCallRequest functionCall) {
@@ -407,10 +616,13 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
                         firstNonBlank(readString(args, "title"), question),
                         readString(args, "description"),
                         readStringList(args, "assigneeIds"),
-                        readStringListWithAliases(args, "assigneeNameHints", "assigneeNames", "assignees"),
-                        readString(args, "startDate"),
-                        readString(args, "dueDate"),
-                        readString(args, "priority")
+                        mergeDistinct(
+                                readStringListWithAliases(args, "assigneeNameHints", "assigneeNames", "assignees"),
+                                extractAssigneeNameHints(question)
+                        ),
+                        firstNonBlank(readString(args, "startDate"), extractStartDateHint(question)),
+                        firstNonBlank(readString(args, "dueDate"), extractDueDateHint(question)),
+                        firstNonBlank(readString(args, "priority"), extractPriorityHint(question))
                 );
                 case TASK_UPDATE_TASK -> {
                     Boolean completedFromQuestion = extractCompletedHint(question);
@@ -580,20 +792,21 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         ));
         functionDeclarations.add(functionDeclaration(
                 ChatAssistantTool.TASK_CREATE_TASK.getCode(),
-                "Tạo task mới trong một nhóm task",
+                "Tạo task mới. AI schema chỉ bắt buộc title; các field khác optional, backend sẽ resolve nếu có hint. Business execution cần groupId hoặc groupNameHint để insert.",
                 Map.ofEntries(
-                        Map.entry("groupId", stringProperty("ID nhóm task")),
-                        Map.entry("groupNameHint", stringProperty("Tên nhóm gợi ý nếu không có ID")),
-                        Map.entry("columnId", stringProperty("ID cột task")),
-                        Map.entry("columnNameHint", stringProperty("Tên cột gợi ý nếu chưa có columnId")),
-                        Map.entry("title", stringProperty("Tiêu đề task")),
-                        Map.entry("description", stringProperty("Mô tả task")),
-                        Map.entry("assigneeIds", stringArrayProperty("Danh sách userId được gán")),
-                        Map.entry("assigneeNameHints", stringArrayProperty("Danh sách tên người được gán, ưu tiên dùng trường này thay vì ID")),
-                        Map.entry("startDate", stringProperty("Ngày bắt đầu (ISO hoặc yyyy-MM-dd)")),
-                        Map.entry("dueDate", stringProperty("Ngày hết hạn (ISO hoặc yyyy-MM-dd)")),
-                        Map.entry("priority", stringProperty("Ưu tiên: LOW|MEDIUM|HIGH|URGENT"))
-                )
+                        Map.entry("groupId", stringProperty("ID nhóm task. Optional, ưu tiên nếu đã biết.")),
+                        Map.entry("groupNameHint", stringProperty("Tên nhóm task để backend resolve groupId nếu chưa có ID. Optional ở schema, nhưng cần để thực thi khi không có groupId.")),
+                        Map.entry("columnId", stringProperty("ID cột/status. Optional.")),
+                        Map.entry("columnNameHint", stringProperty("Tên cột/status để backend resolve columnId. Optional.")),
+                        Map.entry("title", stringProperty("Tên task cần tạo. Bắt buộc.")),
+                        Map.entry("description", stringProperty("Mô tả task. Optional.")),
+                        Map.entry("assigneeIds", stringArrayProperty("Danh sách userId được gán. Optional, ưu tiên nếu đã biết.")),
+                        Map.entry("assigneeNameHints", stringArrayProperty("Danh sách tên user để backend resolve assigneeIds. Optional.")),
+                        Map.entry("startDate", stringProperty("Ngày bắt đầu dạng ISO/yyyy-MM-dd hoặc ngôn ngữ tự nhiên. Optional.")),
+                        Map.entry("dueDate", stringProperty("Deadline dạng ISO/yyyy-MM-dd hoặc ngôn ngữ tự nhiên như ngày mai. Optional.")),
+                        Map.entry("priority", stringProperty("Ưu tiên: LOW|MEDIUM|HIGH|URGENT. Optional."))
+                ),
+                List.of("title")
         ));
         functionDeclarations.add(functionDeclaration(
                 ChatAssistantTool.TASK_UPDATE_TASK.getCode(),
@@ -722,6 +935,21 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         return List.of(Map.of("functionDeclarations", List.of(declaration)));
     }
 
+    private List<Map<String, Object>> buildGeminiIntentRouterDeclarations() {
+        return List.of(Map.of(
+                "functionDeclarations",
+                List.of(functionDeclaration(
+                        INTENT_ROUTER_FUNCTION,
+                        "Phân loại message của user thành đúng 1 ChatAssistantIntent enum.",
+                        Map.of(
+                                "intent", stringProperty("Một giá trị enum ChatAssistantIntent, ví dụ TASK_CREATE, TASK_LIST_GROUPS, SMALL_TALK, UNKNOWN"),
+                                "reason", stringProperty("Lý do ngắn gọn để debug nội bộ")
+                        ),
+                        List.of("intent")
+                ))
+        ));
+    }
+
     private Map<String, Object> findFunctionDeclarationByCode(String toolCode) {
         if (!StringUtils.hasText(toolCode)) {
             return null;
@@ -765,14 +993,27 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
     }
 
     private Map<String, Object> functionDeclaration(String name, String description, Map<String, Object> properties) {
-        return Map.of(
-                "name", name,
-                "description", description,
-                "parameters", Map.of(
-                        "type", "OBJECT",
-                        "properties", properties
-                )
-        );
+        return functionDeclaration(name, description, properties, List.of());
+    }
+
+    private Map<String, Object> functionDeclaration(
+            String name,
+            String description,
+            Map<String, Object> properties,
+            List<String> required
+    ) {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("type", "OBJECT");
+        parameters.put("properties", properties == null ? Map.of() : properties);
+        if (required != null && !required.isEmpty()) {
+            parameters.put("required", required);
+        }
+
+        Map<String, Object> declaration = new LinkedHashMap<>();
+        declaration.put("name", name);
+        declaration.put("description", description);
+        declaration.put("parameters", parameters);
+        return declaration;
     }
 
     private Map<String, Object> stringProperty(String description) {
@@ -849,6 +1090,35 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         }
     }
 
+    private String intentRouterSystemPrompt() {
+        return """
+                Bạn là UniCall AI Assistant Intent Router.
+                Nhiệm vụ duy nhất:
+                - Đọc message user và phân loại thành đúng 1 enum ChatAssistantIntent.
+                - PHẢI gọi function classify_assistant_intent.
+                - Chỉ trả intent, không chọn tool, không trả lời user ở bước này.
+                - Nếu là thao tác dữ liệu task/chat thì chọn intent thao tác tương ứng, không chọn GENERAL_QA.
+                - Nếu user chỉ chào hỏi/xã giao thì chọn SMALL_TALK.
+                - Nếu user hỏi AI làm được gì thì chọn AI_CAPABILITIES.
+                - Nếu không chắc thì chọn UNKNOWN.
+
+                Danh sách intent hợp lệ:
+                AI_CAPABILITIES, SMALL_TALK, GENERAL_QA,
+                LIST_CONVERSATIONS, LIST_MESSAGES, SEARCH_KEYWORD, SEARCH_SEMANTIC, SEARCH_MY_CHAT_SPACE, FIND_WHO_SAID,
+                TASK_LIST_GROUPS, TASK_FIND_BY_NAME, TASK_LIST_GROUP_ITEMS,
+                TASK_CREATE, TASK_UPDATE, TASK_DELETE, TASK_DETAIL,
+                TASK_COMMENT_CREATE, TASK_COMMENT_LIST,
+                TASK_LIST_MY_ITEMS, TASK_LIST_OVERDUE, TASK_LIST_DUE_SOON,
+                SUMMARIZE_CONVERSATION, UNKNOWN.
+
+                Ví dụ:
+                - "Tạo task API đăng nhập" -> TASK_CREATE
+                - "Liệt kê nhóm task của tôi" -> TASK_LIST_GROUPS
+                - "Task nào sắp đến hạn" -> TASK_LIST_DUE_SOON
+                - "Ai nói họp lúc 9h" -> FIND_WHO_SAID
+                """;
+    }
+
     private String agentToolSelectorSystemPrompt() {
         return """
                 Bạn là UniCall AI Assistant.
@@ -876,6 +1146,44 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
                 - Trả tham số đúng kiểu JSON (boolean/number/string/array).
                 Tool bắt buộc: %s
                 """.formatted(toolCode);
+    }
+
+    private String finalAnswerSystemPrompt() {
+        return """
+                Bạn là UniCall AI Assistant.
+                Nhiệm vụ:
+                - Chỉ viết message cuối cùng cho user bằng tiếng Việt tự nhiên.
+                - Không in JSON.
+                - Không nhắc tên intent.
+                - Không nhắc tên tool.
+                - Không nhắc "tool data" hoặc dữ liệu nội bộ backend.
+                - Không hỏi xác nhận thao tác create/update/delete.
+                - Nếu executionStatus là SUCCESS thì tóm tắt kết quả đã xử lý.
+                - Nếu executionStatus là MISSING_REQUIRED_PARAMS thì hỏi user bổ sung đúng field còn thiếu, nói rõ thiếu trường nào.
+                - Nếu thiếu nhóm task khi tạo task, hãy nói cần biết task thuộc nhóm task nào.
+                - Nếu executionStatus là TOOL_ERROR thì giải thích lỗi ngắn gọn theo context.
+                - Nếu dữ liệu là danh sách thì trả lời bằng câu dễ đọc, ưu tiên liệt kê tên chính.
+                - Nếu user hỏi khả năng/tính năng AI, hãy dùng capabilities trong context và chia thành 2 nhóm: Hội thoại và Task.
+                - Không bịa dữ liệu ngoài context.
+                """;
+    }
+
+    private ChatAssistantIntent parseIntent(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String normalized = raw.trim().toUpperCase(Locale.ROOT);
+        for (ChatAssistantIntent intent : ChatAssistantIntent.values()) {
+            if (intent.name().equals(normalized)) {
+                return intent;
+            }
+        }
+        for (ChatAssistantIntent intent : ChatAssistantIntent.values()) {
+            if (normalized.contains(intent.name())) {
+                return intent;
+            }
+        }
+        return null;
     }
 
     private ChatAssistantIntent inferIntentByTool(ChatAssistantTool tool) {
@@ -1665,6 +1973,12 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         String trimmed = question.trim();
         String lower = trimmed.toLowerCase(Locale.ROOT);
 
+        Matcher namedTask = Pattern.compile("(?i)(?:tên|ten|title|name)\\s*(?:là|la|:)?\\s*[\"']([^\"']+)[\"']").matcher(trimmed);
+        if (namedTask.find()) {
+            String value = namedTask.group(1);
+            return StringUtils.hasText(value) ? value.trim() : null;
+        }
+
         Matcher quotedAfterTask = Pattern.compile("(?i)\\btask\\s*[\"']([^\"']+)[\"']").matcher(trimmed);
         if (quotedAfterTask.find()) {
             String value = quotedAfterTask.group(1);
@@ -1806,8 +2120,14 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             return null;
         }
         String normalized = question.toLowerCase(Locale.ROOT);
-        if (!containsAny(normalized, "deadline", "đến ngày", "den ngay", "due")) {
+        if (!containsAny(normalized, "deadline", "hạn", "han", "đến ngày", "den ngay", "due")) {
             return null;
+        }
+        if (containsAny(normalized, "ngày mai", "ngay mai", "tomorrow")) {
+            return LocalDate.now().plusDays(1).toString();
+        }
+        if (containsAny(normalized, "hôm nay", "hom nay", "today")) {
+            return LocalDate.now().toString();
         }
         Matcher matcher = DATE_PATTERN.matcher(question);
         return matcher.find() ? matcher.group() : null;
@@ -1918,7 +2238,16 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         String normalized = question.toLowerCase(Locale.ROOT);
         int idx = normalized.indexOf("gán cho user");
         if (idx < 0) {
+            idx = normalized.indexOf("gắn cho user");
+        }
+        if (idx < 0) {
             idx = normalized.indexOf("gan cho user");
+        }
+        if (idx < 0) {
+            idx = normalized.indexOf("gan cho");
+        }
+        if (idx < 0) {
+            idx = normalized.indexOf("gắn cho");
         }
         if (idx < 0) {
             idx = normalized.indexOf("assign cho");
@@ -1931,20 +2260,23 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
         }
 
         String remainder = question.substring(idx).trim();
-        String afterUser = remainder.replaceFirst("(?i).*?(gán cho user|gan cho user|assign cho|assign to)", "").trim();
+        String afterUser = remainder.replaceFirst("(?i).*?(gán cho user|gắn cho user|gan cho user|gan cho|gắn cho|assign cho|assign to)", "").trim();
         if (!StringUtils.hasText(afterUser)) {
             return List.of();
         }
         String lower = afterUser.toLowerCase(Locale.ROOT);
         int cut = -1;
-        for (String stop : new String[]{" deadline", " đến ngày", " den ngay", " mô tả", " mo ta", " ưu tiên ", " uu tien ", " cột ", " cot ", ","}) {
+        for (String stop : new String[]{" deadline", " đến ngày", " den ngay", " mô tả", " mo ta", " ưu tiên ", " uu tien ", " cột ", " cot ", " và ", " va ", " thuộc ", " thuoc ", ","}) {
             int stopIdx = lower.indexOf(stop);
             if (stopIdx > 0 && (cut < 0 || stopIdx < cut)) {
                 cut = stopIdx;
             }
         }
         String name = cut > 0 ? afterUser.substring(0, cut).trim() : afterUser.trim();
-        if ((name.startsWith("\"") && name.endsWith("\"")) || (name.startsWith("'") && name.endsWith("'"))) {
+        String quoted = extractQuotedText(name);
+        if (StringUtils.hasText(quoted)) {
+            name = quoted;
+        } else if ((name.startsWith("\"") && name.endsWith("\"")) || (name.startsWith("'") && name.endsWith("'"))) {
             name = name.substring(1, name.length() - 1).trim();
         }
 
@@ -2470,6 +2802,23 @@ public class AssistantChatOrchestratorServiceImpl implements AssistantChatOrches
             List<ChatAssistantTool> toolsUsed,
             Object lastToolData,
             int toolLoopSteps
+    ) {
+    }
+
+    private record IntentToolPolicy(
+            ChatAssistantIntent intent,
+            ChatAssistantTool primaryTool,
+            List<ChatAssistantTool> resolverTools,
+            List<String> requiredParams,
+            List<String> businessRequiredParams,
+            String schemaNotes
+    ) {
+    }
+
+    private record MissingField(
+            String field,
+            String label,
+            String reason
     ) {
     }
 

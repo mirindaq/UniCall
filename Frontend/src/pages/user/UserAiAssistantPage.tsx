@@ -1,4 +1,4 @@
-import { Bot, CornerDownLeft, Loader2, Sparkles, Wrench } from "lucide-react"
+import { Bot, CornerDownLeft, Loader2, Sparkles } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import ReactMarkdown from "react-markdown"
@@ -10,9 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { assistantService } from "@/services/assistant/assistant.service"
 import type {
   AssistantAskResponse,
-  AssistantIntent,
   AssistantThreadMessageResponse,
-  AssistantToolCode,
 } from "@/types/assistant"
 import { generateUuid } from "@/utils/uuid.util"
 
@@ -23,9 +21,6 @@ type AssistantMessageItem = {
   role: AssistantMessageRole
   content: string
   createdAt: string
-  intent?: AssistantIntent
-  toolsUsed?: AssistantToolCode[]
-  data?: unknown
 }
 
 function formatTime(value: string) {
@@ -42,9 +37,6 @@ function toAssistantMessage(response: AssistantAskResponse): AssistantMessageIte
     role: "assistant",
     content: response.answer || "Mình chưa có câu trả lời phù hợp.",
     createdAt: new Date().toISOString(),
-    intent: response.intent,
-    toolsUsed: response.toolsUsed,
-    data: response.data,
   }
 }
 
@@ -58,9 +50,6 @@ function fromHistoryMessage(message: AssistantThreadMessageResponse): AssistantM
     role: toUiRole(message.role),
     content: message.content || "",
     createdAt: message.createdAt || new Date().toISOString(),
-    intent: message.intent,
-    toolsUsed: message.toolsUsed,
-    data: message.data,
   }
 }
 
@@ -222,34 +211,6 @@ export function UserAiAssistantPage() {
                   ) : (
                     <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
                   )}
-
-                  {message.role === "assistant" && message.intent ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                        Intent: {message.intent}
-                      </span>
-                      {message.toolsUsed && message.toolsUsed.length > 0
-                        ? message.toolsUsed.map((tool) => (
-                            <span
-                              key={`${message.id}-${tool}`}
-                              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700"
-                            >
-                              <Wrench className="size-3.5" />
-                              {tool}
-                            </span>
-                          ))
-                        : null}
-                    </div>
-                  ) : null}
-
-                  {message.role === "assistant" && message.data ? (
-                    <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                      <summary className="cursor-pointer text-xs font-medium text-slate-600">Dữ liệu tool</summary>
-                      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all text-xs text-slate-600">
-                        {JSON.stringify(message.data, null, 2)}
-                      </pre>
-                    </details>
-                  ) : null}
 
                   <p
                     className={`mt-2 text-[11px] ${
