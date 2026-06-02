@@ -1,7 +1,7 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
-import { CALL_RING_TIMEOUT_MS, WEBRTC_ICE_SERVERS } from "@/constants/call"
+import { CALL_RING_TIMEOUT_MS, createRtcConfiguration } from "@/constants/call"
 import { useAuth } from "@/contexts/auth-context"
 import { chatService } from "@/services/chat/chat.service"
 import { createCallMediaAdapter } from "@/services/call/adapters/call-media-adapter.factory"
@@ -22,6 +22,7 @@ type ActiveCall = {
   peerUserId?: string
   audioOnly: boolean
   joinedUserIds?: string[]
+  invitedUserIds?: string[]
   startedAt?: number
   ringingStartedAt?: number
 }
@@ -40,6 +41,8 @@ type UseConversationCallOptions = {
   currentUserId?: string | null
   peerUserId?: string | null
   isBlocked?: boolean
+  /** false = không subscribe CALL_SIGNAL (tránh trùng listener với hook khác) */
+  enableSignalSubscription?: boolean
 }
 
 type StartVideoCallOptions = {
@@ -86,6 +89,7 @@ export function useConversationCall({
   currentUserId,
   peerUserId,
   isBlocked = false,
+  enableSignalSubscription = true,
 }: UseConversationCallOptions) {
   const { isAuthenticated } = useAuth()
   const [phase, setPhase] = useState<CallPhase>("idle")
@@ -307,9 +311,27 @@ export function useConversationCall({
   const createPeerConnection = useCallback(
     (signalConversationId: string, callId: string, audioOnly: boolean) => {
       cleanupPeerConnection()
-      const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS })
+      const pc = new RTCPeerConnection(createRtcConfiguration())
       const inboundStream = new MediaStream()
       setRemoteStream(inboundStream)
+
+      const promoteToInCall = () => {
+        const currentPhase = phaseRef.current
+        if (currentPhase !== "connecting" && currentPhase !== "outgoing") {
+          return
+        }
+        clearRingTimeout()
+        setStatusMessage(null)
+        setPhase("in-call")
+        setActiveCall((prev) =>
+          prev && prev.startedAt == null
+            ? {
+                ...prev,
+                startedAt: Date.now(),
+              }
+            : prev
+        )
+      }
 
       pc.ontrack = (event) => {
         const sourceStream = event.streams[0]
@@ -320,6 +342,7 @@ export function useConversationCall({
               inboundStream.addTrack(track)
             }
           })
+          promoteToInCall()
           return
         }
 
@@ -327,6 +350,7 @@ export function useConversationCall({
         if (!exists) {
           inboundStream.addTrack(event.track)
         }
+        promoteToInCall()
       }
       pc.onicecandidate = (event) => {
         if (!event.candidate) {
@@ -342,26 +366,20 @@ export function useConversationCall({
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState
         if (state === "connected") {
-          clearRingTimeout()
-          setPhase("in-call")
-          setActiveCall((prev) =>
-            prev && prev.startedAt == null
-              ? {
-                  ...prev,
-                  startedAt: Date.now(),
-                }
-              : prev
-          )
+          promoteToInCall()
           return
         }
-        if (
-          state === "failed" ||
-          state === "disconnected" ||
-          state === "closed"
-        ) {
+        if (state === "failed" || state === "closed") {
           queueMicrotask(() => {
             resetCall()
           })
+        }
+      }
+
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState
+        if (state === "connected" || state === "completed") {
+          promoteToInCall()
         }
       }
 
@@ -480,6 +498,7 @@ export function useConversationCall({
           peerUserId: peerUserId ?? undefined,
           audioOnly,
           joinedUserIds: currentUserId ? [currentUserId] : [],
+          invitedUserIds: isGroupConversation ? targetUserIds : undefined,
           ringingStartedAt: Date.now(),
         })
 
@@ -827,7 +846,10 @@ export function useConversationCall({
   }, [startIncomingRingtone])
 
   useEffect(() => {
-    if (!isAuthenticated || !currentUserId) {
+    if (!isAuthenticated || !currentUserId || !enableSignalSubscription) {
+      if (!enableSignalSubscription) {
+        return
+      }
       queueMicrotask(() => {
         resetCall()
       })
@@ -1001,6 +1023,7 @@ export function useConversationCall({
   }, [
     clearRingTimeout,
     currentUserId,
+    enableSignalSubscription,
     flushPendingIceCandidates,
     isAuthenticated,
     isGroupConversation,

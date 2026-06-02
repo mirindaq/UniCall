@@ -15,16 +15,27 @@ interface ContactsTabsProps {
 
 export function ContactsTabs({ activeTab, onChange }: ContactsTabsProps) {
   return (
-    <View className="border-b border-slate-200 bg-white">
+    <View className="border-b border-slate-100 bg-white px-2">
       <View className="flex-row">
         {CONTACTS_TABS.map((tab) => {
           const isActive = tab.key === activeTab;
           return (
-            <Pressable key={tab.key} className="flex-1 items-center py-3" onPress={() => onChange(tab.key)}>
-              <Text allowFontScaling={false} className={`text-[16px] ${isActive ? 'font-semibold text-slate-900' : 'text-slate-400'}`}>
+            <Pressable
+              key={tab.key}
+              className="flex-1 items-center py-3"
+              onPress={() => onChange(tab.key)}>
+              <Text
+                allowFontScaling={false}
+                className={`text-[15px] ${
+                  isActive ? 'font-semibold text-[#1e98f3]' : 'font-medium text-slate-400'
+                }`}>
                 {tab.label}
               </Text>
-              <View className={`mt-2 h-1 w-[52px] rounded-full ${isActive ? 'bg-[#1e98f3]' : 'bg-transparent'}`} />
+              <View
+                className={`mt-2 h-0.5 w-12 rounded-full ${
+                  isActive ? 'bg-[#1e98f3]' : 'bg-transparent'
+                }`}
+              />
             </Pressable>
           );
         })}
@@ -32,4 +43,3 @@ export function ContactsTabs({ activeTab, onChange }: ContactsTabsProps) {
     </View>
   );
 }
-

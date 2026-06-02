@@ -13,6 +13,7 @@ import type { MockConversation } from '@/mock/chat-conversations';
 import { chatSocketService } from '@/services/chat-socket.service';
 import { chatService } from '@/services/chat.service';
 import type { ConversationResponse } from '@/types/chat';
+import { buildMockAvatar } from '@/utils/chat-avatar';
 
 export default function MessagesScreen() {
   const router = useRouter();
@@ -98,12 +99,6 @@ export default function MessagesScreen() {
     () =>
       conversations.map((conversation) => {
         const name = conversation.name?.trim() || 'Cuộc trò chuyện';
-        const fallback = name
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((word) => word[0]?.toUpperCase() ?? '')
-          .join('') || 'C';
         const date = conversation.dateUpdateMessage ? new Date(conversation.dateUpdateMessage) : null;
         const timeLabel =
           date && !Number.isNaN(date.getTime())
@@ -115,11 +110,7 @@ export default function MessagesScreen() {
           name,
           preview: conversation.lastMessageContent || 'Chưa có tin nhắn',
           timeLabel,
-          avatar: {
-            type: 'initials',
-            value: fallback,
-            backgroundColor: '#94a3b8',
-          },
+          avatar: buildMockAvatar(name, conversation.idConversation),
           avatarUrl: conversation.avatar ?? null,
         };
         return item;
@@ -128,7 +119,7 @@ export default function MessagesScreen() {
   );
 
   return (
-    <View className="flex-1 bg-[#f3f4f6]">
+    <View className="flex-1 bg-slate-50">
       <AppStatusBarBlue />
       <SafeAreaView edges={['top']} className="bg-[#1e98f3]" />
       <MessagesHeader
@@ -144,6 +135,7 @@ export default function MessagesScreen() {
         <FlatList
           data={uiConversations}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 12 }}
           renderItem={({ item }) => (
             <ConversationListItem
               conversation={item}

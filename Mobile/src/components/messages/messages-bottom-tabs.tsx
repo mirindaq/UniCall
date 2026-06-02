@@ -41,6 +41,9 @@ const getTabLabel = (key: TabKey) => {
   return '';
 };
 
+const ACTIVE = '#1e98f3';
+const INACTIVE = '#94a3b8';
+
 export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTabsProps) {
   const router = useRouter();
 
@@ -71,29 +74,39 @@ export function MessagesBottomTabs({ activeTab = 'messages' }: MessagesBottomTab
   };
 
   return (
-    <View className="border-t border-slate-300 bg-white px-4 pb-2 pt-1.5">
+    <View className="border-t border-slate-100 bg-white px-2 pb-1.5 pt-2 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]">
       <View className="flex-row items-start justify-between">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
-            <Pressable key={tab.key} className="flex-1 items-center" onPress={() => handleTabPress(tab.key)}>
-              <View className="relative h-8 items-center justify-center">
-                <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={24} color={isActive ? '#1d9bf0' : '#4b5563'} />
+            <Pressable
+              key={tab.key}
+              className="flex-1 items-center py-0.5"
+              onPress={() => handleTabPress(tab.key)}>
+              <View
+                className={`relative h-9 w-9 items-center justify-center rounded-2xl ${
+                  isActive ? 'bg-sky-50' : ''
+                }`}>
+                <Ionicons
+                  name={isActive ? tab.activeIcon : tab.icon}
+                  size={23}
+                  color={isActive ? ACTIVE : INACTIVE}
+                />
                 {tab.badgeText ? (
-                  <View className="absolute -right-3 -top-2 rounded-full bg-red-500 px-2 py-0.5">
-                    <Text allowFontScaling={false} className="text-xs font-semibold text-white">
+                  <View className="absolute -right-2 -top-1 rounded-full bg-red-500 px-1.5 py-0.5">
+                    <Text allowFontScaling={false} className="text-[10px] font-semibold text-white">
                       {tab.badgeText}
                     </Text>
                   </View>
                 ) : null}
               </View>
-              <View className="mt-1 h-[18px] items-center justify-center">
-                <Text
-                  allowFontScaling={false}
-                  className={`text-[11px] ${isActive ? 'font-semibold text-[#1d9bf0]' : 'text-transparent'}`}>
-                  {getTabLabel(tab.key)}
-                </Text>
-              </View>
+              <Text
+                allowFontScaling={false}
+                className={`mt-0.5 text-[10px] ${
+                  isActive ? 'font-semibold text-[#1e98f3]' : 'text-slate-400'
+                }`}>
+                {getTabLabel(tab.key)}
+              </Text>
             </Pressable>
           );
         })}

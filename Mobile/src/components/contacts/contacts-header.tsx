@@ -9,19 +9,22 @@ type ContactsHeaderProps = {
 
 export function ContactsHeader({ onPressSearch, onPressAddFriend }: ContactsHeaderProps) {
   return (
-    <View className="bg-[#1e98f3] px-5 pb-3.5 pt-2">
-      <View className="flex-row items-center">
-        <Pressable onPress={onPressSearch} className="mr-2 h-10 w-10 items-center justify-center rounded-full">
-          <Ionicons name="search-outline" size={28} color="#ffffff" />
+    <View className="bg-[#1e98f3] px-4 pb-3 pt-2">
+      <View className="flex-row items-center gap-2">
+        <Pressable
+          onPress={onPressSearch}
+          className="h-11 flex-1 flex-row items-center rounded-full bg-white/95 px-4 shadow-sm">
+          <Ionicons name="search-outline" size={22} color="#64748b" />
+          <Text allowFontScaling={false} className="ml-2.5 flex-1 text-[16px] text-slate-500">
+            Tìm kiếm
+          </Text>
         </Pressable>
-        <Text allowFontScaling={false} className="flex-1 text-[18px] text-sky-100">
-          Tìm kiếm
-        </Text>
-        <Pressable onPress={onPressAddFriend} className="h-10 w-10 items-center justify-center rounded-full">
-          <Ionicons name="person-add-outline" size={27} color="#ffffff" />
+        <Pressable
+          onPress={onPressAddFriend}
+          className="h-10 w-10 items-center justify-center rounded-full bg-white/20">
+          <Ionicons name="person-add-outline" size={24} color="#ffffff" />
         </Pressable>
       </View>
     </View>
   );
 }
-

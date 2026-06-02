@@ -67,7 +67,8 @@ export function ChatDetailContent({
 }: ChatDetailContentProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const [inputAreaHeight, setInputAreaHeight] = React.useState(58);
+  const INPUT_BOTTOM_BUFFER = 12;
+  const [inputAreaHeight, setInputAreaHeight] = React.useState(80);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [viewerOpen, setViewerOpen] = React.useState(false);
   const [viewerIndex, setViewerIndex] = React.useState(0);
@@ -104,7 +105,13 @@ export function ChatDetailContent({
   const keyboardOffset =
     Platform.OS === 'ios' ? Math.max(0, keyboardHeight - insets.bottom) : keyboardHeight;
   const inputBottom = insets.bottom + keyboardOffset;
-  const listTopPadding = inputAreaHeight + inputBottom + 2;
+  /** Với inverted list, ListHeaderComponent nằm phía dưới (cạnh ô nhập). */
+  const listBottomInset = inputAreaHeight + inputBottom + INPUT_BOTTOM_BUFFER;
+
+  const renderListBottomSpacer = React.useCallback(
+    () => <View style={{ height: listBottomInset }} />,
+    [listBottomInset],
+  );
 
   const openImageViewer = React.useCallback(
     (targetUrl: string) => {
@@ -130,7 +137,7 @@ export function ChatDetailContent({
   };
 
   const renderItem = ({ item: message }: { item: MockChatMessage }) => (
-    <View className="mt-2">
+    <View className="mt-2.5">
       <ChatMessageRow
         message={message}
         otherAvatar={otherAvatar}
@@ -146,6 +153,7 @@ export function ChatDetailContent({
     <View className="flex-1">
       <FlatList
         ref={flatListRef}
+        style={{ flex: 1 }}
         data={messages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
@@ -156,12 +164,13 @@ export function ChatDetailContent({
           }
         }}
         onEndReachedThreshold={0.5}
+        ListHeaderComponent={renderListBottomSpacer}
         ListFooterComponent={renderFooter}
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: listTopPadding,
+          paddingTop: 10,
           paddingBottom: 14,
         }}
         maintainVisibleContentPosition={{
@@ -169,7 +178,9 @@ export function ChatDetailContent({
         }}
       />
 
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: inputBottom }}>
+      <View
+        style={{ position: 'absolute', left: 0, right: 0, bottom: inputBottom }}
+        pointerEvents="box-none">
         {isInputBlocked ? (
           <View
             className="border-t border-amber-200 bg-amber-50 px-4 py-3"
