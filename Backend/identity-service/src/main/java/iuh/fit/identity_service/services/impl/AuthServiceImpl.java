@@ -14,6 +14,7 @@ import iuh.fit.identity_service.dtos.response.auth.RegisterResponse;
 import iuh.fit.identity_service.services.AuthService;
 import iuh.fit.identity_service.services.FirebasePhoneVerificationService;
 import iuh.fit.identity_service.services.KeycloakAuthService;
+import iuh.fit.identity_service.services.LoginSessionEventPublisher;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +32,7 @@ public class AuthServiceImpl implements AuthService {
     private final KeycloakAuthService keycloakAuthService;
     private final FirebasePhoneVerificationService firebasePhoneVerificationService;
     private final GrpcUserServiceClient grpcUserServiceClient;
+    private final LoginSessionEventPublisher loginSessionEventPublisher;
 
     @Value("${app.security.cookie.secure:true}")
     private boolean cookieSecure;
@@ -95,6 +97,41 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private LoginResult doLogin(LoginRequest request, boolean requireAdminRole) {
+        AuthTokenResponse validationTokens = loginAndValidateTokens(request);
+        boolean validationSessionCleared = false;
+
+        try {
+            String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
+            boolean hasAdminRole = keycloakAuthService.hasAdminRole(identityUserId);
+            if (requireAdminRole && !hasAdminRole) {
+                throw new UnauthorizedException("Admin role is required");
+            }
+            if (!requireAdminRole && hasAdminRole) {
+                throw new UnauthorizedException("Admin accounts must use the admin login endpoint");
+            }
+
+            grpcUserServiceClient.cancelDeletionRequest(identityUserId);
+            keycloakAuthService.logoutUserSessions(identityUserId);
+            validationSessionCleared = true;
+            loginSessionEventPublisher.publishLoggedInElsewhere(identityUserId);
+            AuthTokenResponse tokens = loginAndValidateTokens(request);
+
+            return new LoginResult(
+                    List.of(
+                            createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
+                            createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
+                    ),
+                    tokens
+            );
+        } catch (RuntimeException exception) {
+            if (!validationSessionCleared) {
+                keycloakAuthService.revokeRefreshToken(validationTokens.getRefreshToken());
+            }
+            throw exception;
+        }
+    }
+
+    private AuthTokenResponse loginAndValidateTokens(LoginRequest request) {
         AuthTokenResponse tokens = keycloakAuthService.login(request.getPhoneNumber(), request.getPassword());
         if (tokens.getAccessToken() == null || tokens.getAccessToken().isBlank()) {
             throw new UnauthenticatedException("Missing access token from identity provider");
@@ -102,23 +139,7 @@ public class AuthServiceImpl implements AuthService {
         if (tokens.getRefreshToken() == null || tokens.getRefreshToken().isBlank()) {
             throw new UnauthenticatedException("Missing refresh token from identity provider");
         }
-        String identityUserId = keycloakAuthService.findIdentityUserIdByPhoneNumber(request.getPhoneNumber());
-        boolean hasAdminRole = keycloakAuthService.hasAdminRole(identityUserId);
-        if (requireAdminRole && !hasAdminRole) {
-            throw new UnauthorizedException("Admin role is required");
-        }
-        if (!requireAdminRole && hasAdminRole) {
-            throw new UnauthorizedException("Admin accounts must use the admin login endpoint");
-        }
-        grpcUserServiceClient.cancelDeletionRequest(identityUserId);
-
-        return new LoginResult(
-                List.of(
-                        createAccessCookie(tokens.getAccessToken(), tokens.getExpiresIn()),
-                        createRefreshCookie(tokens.getRefreshToken(), tokens.getRefreshExpiresIn())
-                ),
-                tokens
-        );
+        return tokens;
     }
 
     @Override

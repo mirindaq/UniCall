@@ -14,3 +14,8 @@ export const buildChatStompBrokerUrl = () => {
   const wsBase = API_BASE_URL.replace(/^http/i, (scheme) => (scheme.toLowerCase() === "https" ? "wss" : "ws"))
   return `${wsBase}${API_WS_PREFIXES.chat}`
 }
+
+export const buildIdentityStompBrokerUrl = () => {
+  const wsBase = API_BASE_URL.replace(/^http/i, (scheme) => (scheme.toLowerCase() === "https" ? "wss" : "ws"))
+  return `${wsBase}${API_WS_PREFIXES.identity}`
+}

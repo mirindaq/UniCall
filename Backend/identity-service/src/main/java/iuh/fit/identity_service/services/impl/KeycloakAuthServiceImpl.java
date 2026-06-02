@@ -80,4 +80,9 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     public void revokeRefreshToken(String refreshToken) {
         keycloakIdentityClient.revokeRefreshToken(refreshToken);
     }
+
+    @Override
+    public void logoutUserSessions(String identityUserId) {
+        keycloakIdentityClient.logoutUserSessions(identityUserId);
+    }
 }

@@ -419,6 +419,20 @@ public class KeycloakIdentityClient {
                 .block();
     }
 
+    public void logoutUserSessions(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
+
+        String adminToken = getAdminToken();
+        keycloakWebClient.post()
+                .uri("/admin/realms/{realm}/users/{id}/logout", realm, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
     private @Nullable Map<String, Object> requestToken(BodyInserters.FormInserter<String> formData) {
         BodyInserters.FormInserter<String> finalForm = formData;
         if (authClientSecret != null && !authClientSecret.isBlank()) {

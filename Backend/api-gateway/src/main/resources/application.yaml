@@ -16,6 +16,10 @@ spring:
               uri: lb://IDENTITY-SERVICE
               predicates:
                 - Path=/api/v1/auth/**
+            - id: identity-ws
+              uri: lb:ws://IDENTITY-SERVICE
+              predicates:
+                - Path=/identity-ws,/identity-ws/**
             - id: user-users
               uri: lb://USER-SERVICE
               predicates:

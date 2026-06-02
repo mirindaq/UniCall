@@ -15,4 +15,5 @@ export const API_PREFIXES = {
 
 export const API_WS_PREFIXES = {
   chat: "/ws",
+  identity: "/identity-ws",
 } as const
