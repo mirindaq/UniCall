@@ -95,7 +95,6 @@ import {
   formatChatMessageTime,
   formatChatSidebarTime,
 } from "@/utils/chat-display.util"
-import { buildGroupCallParticipantList } from "@/utils/group-call-display.util"
 import {
   extractFileNameFromFileMessage,
   getOriginalFileNameFromUrl,
@@ -2181,62 +2180,39 @@ export default function ChatWindow() {
         }
       })
   }, [currentUserId, selectedConversation, senderProfiles])
-  const isGroupCallConversation = selectedConversation?.type === "GROUP"
   const callModalGroupParticipants = useMemo(() => {
     if (!selectedConversation || selectedConversation.type !== "GROUP") {
       return []
     }
-    return buildGroupCallParticipantList({
-      joinedUserIds: conversationCall.activeCall?.joinedUserIds,
-      invitedUserIds: conversationCall.activeCall?.invitedUserIds,
-      peerUserId: conversationCall.activeCall?.peerUserId,
-      currentUserId,
-      participantInfos: selectedConversation.participantInfos,
-      profiles: senderProfiles,
-    }).map(({ id, name, avatar }) => ({ id, name, avatar }))
-  }, [
-    conversationCall.activeCall?.invitedUserIds,
-    conversationCall.activeCall?.joinedUserIds,
-    conversationCall.activeCall?.peerUserId,
-    currentUserId,
-    selectedConversation,
-    senderProfiles,
-  ])
+    const joinedUserIds = new Set(conversationCall.activeCall?.joinedUserIds ?? [])
+    const participantsToShow =
+      joinedUserIds.size > 0
+        ? selectedConversation.participantInfos.filter((participant) =>
+            joinedUserIds.has(participant.idAccount)
+          )
+        : selectedConversation.participantInfos
+
+    return participantsToShow.map((participant) => {
+      const profile = senderProfiles[participant.idAccount]
+      return {
+        id: participant.idAccount,
+        name: profile?.displayName ?? participant.idAccount,
+        avatar: profile?.avatar,
+      }
+    })
+  }, [conversationCall.activeCall?.joinedUserIds, selectedConversation, senderProfiles])
   const callModalPeerId = conversationCall.activeCall?.peerUserId ?? null
   const callModalAvatarFallback =
     peerUserId && callModalPeerId && peerUserId === callModalPeerId
       ? headerAvatar
       : undefined
   const callModalName =
-    isGroupCallConversation && selectedConversation
-      ? conversationTitle(selectedConversation)
-      : callPeerProfile?.displayName ??
-        (peerUserId && callModalPeerId && peerUserId === callModalPeerId
-          ? headerTitle
-          : callModalPeerId) ??
-        "Người dùng"
-  const callModalAvatar =
-    isGroupCallConversation && selectedConversation
-      ? conversationAvatar(selectedConversation)
-      : callPeerProfile?.avatar ?? callModalAvatarFallback
-  const callModalGroupInviterName = useMemo(() => {
-    if (!isGroupCallConversation || !callModalPeerId || !selectedConversation) {
-      return null
-    }
-    const inviter = buildGroupCallParticipantList({
-      joinedUserIds: [callModalPeerId],
-      currentUserId,
-      participantInfos: selectedConversation.participantInfos,
-      profiles: senderProfiles,
-    })[0]
-    return inviter?.name && inviter.name !== "Bạn" ? inviter.name : null
-  }, [
-    callModalPeerId,
-    currentUserId,
-    isGroupCallConversation,
-    selectedConversation,
-    senderProfiles,
-  ])
+    callPeerProfile?.displayName ??
+    (peerUserId && callModalPeerId && peerUserId === callModalPeerId
+      ? headerTitle
+      : callModalPeerId) ??
+    "Người dùng"
+  const callModalAvatar = callPeerProfile?.avatar ?? callModalAvatarFallback
 
   const handleOpenGroupVideoCallPicker = useCallback(() => {
     if (!selectedConversation || selectedConversation.type !== "GROUP") {
@@ -3395,8 +3371,7 @@ export default function ChatWindow() {
           callerName={callModalName}
           callerAvatar={callModalAvatar}
           audioOnly={conversationCall.activeCall?.audioOnly ?? true}
-          isGroupCall={isGroupCallConversation}
-          groupInviterName={callModalGroupInviterName}
+          isGroupCall={selectedConversation?.type === "GROUP"}
           groupParticipants={callModalGroupParticipants}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
@@ -3973,8 +3948,7 @@ export default function ChatWindow() {
         callerName={callModalName}
         callerAvatar={callModalAvatar}
         audioOnly={conversationCall.activeCall?.audioOnly ?? true}
-        isGroupCall={isGroupCallConversation}
-        groupInviterName={callModalGroupInviterName}
+        isGroupCall={selectedConversation?.type === "GROUP"}
         groupParticipants={callModalGroupParticipants}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
