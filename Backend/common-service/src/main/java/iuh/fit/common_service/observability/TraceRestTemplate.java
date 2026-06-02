@@ -11,7 +11,7 @@ public final class TraceRestTemplate {
     public static RestTemplate instrument(RestTemplate restTemplate) {
         restTemplate.getInterceptors().add((request, body, execution) -> {
             HttpHeaders headers = request.getHeaders();
-            if (!headers.containsKey(TraceContext.HTTP_HEADER)) {
+            if (!headers.containsHeader(TraceContext.HTTP_HEADER)) {
                 headers.set(TraceContext.HTTP_HEADER, TraceContext.currentOrCreateTraceId());
             }
             return execution.execute(request, body);
