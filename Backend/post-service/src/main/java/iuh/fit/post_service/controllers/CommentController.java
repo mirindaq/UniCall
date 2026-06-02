@@ -88,7 +88,7 @@ public class CommentController {
             @RequestHeader(value = USER_ID_HEADER, required = false) String userId,
             @PathVariable Long postId,
             @RequestParam(name = "page", defaultValue = "1") int page,
-            @RequestParam(name = "limit", defaultValue = "10") int limit,
+            @RequestParam(name = "limit", defaultValue = "5") int limit,
             @RequestParam(name = "sortBy", required = false) String sortBy) {
         
         Page<Comment> commentPage = commentService.getCommentsByPost(postId, page, limit, sortBy);

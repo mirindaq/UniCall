@@ -152,7 +152,7 @@ export function UserAiAssistantPage() {
 
   return (
     <div className="h-full w-full bg-slate-100 p-2.5 sm:p-4 md:p-6">
-      <section className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="mx-auto flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-200 bg-linear-to-r from-blue-50 via-cyan-50 to-sky-50 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">

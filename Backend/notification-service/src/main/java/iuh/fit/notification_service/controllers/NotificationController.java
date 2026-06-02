@@ -28,7 +28,7 @@ public class NotificationController {
     public ResponseEntity<ResponseSuccess<PageResponse<NotificationResponse>>> listMyNotifications(
             @RequestHeader(value = USER_ID_HEADER, required = false) String currentIdentityUserId,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int limit) {
+            @RequestParam(defaultValue = "10") int limit) {
         return ResponseEntity.ok(new ResponseSuccess<>(
                 HttpStatus.OK,
                 "Get notifications success",

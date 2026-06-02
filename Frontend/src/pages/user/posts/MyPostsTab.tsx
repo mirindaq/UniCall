@@ -137,24 +137,15 @@ export function MyPostsTab() {
       })
   }
 
-  const handleComment = (postId: number, content: string) => {
-    postService
-      .createComment({ postId, content })
-      .then(() => {
-        toast.success("Đã bình luận")
-        refetchMyPosts()
-      })
-      .catch((error) => {
-        console.error("Error commenting on post:", error)
-        toast.error("Không thể bình luận")
-      })
+  const handleComment = () => {
+    void refetchMyPosts()
   }
 
   return (
     <>
       <div className="flex h-full flex-col">
         <ScrollArea className="flex-1">
-          <div className="mx-auto max-w-2xl space-y-4 p-3 sm:p-4">
+          <div className="mx-auto space-y-4 p-3 sm:p-4">
             {/* Loading State */}
             {isLoadingPosts && (
               <div className="flex items-center justify-center py-12">

@@ -25,6 +25,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class CommentServiceImpl implements CommentService {
+    private static final int COMMENT_PAGE_SIZE = 5;
     
     private final CommentRepository commentRepository;
     private final CommentLikeRepository commentLikeRepository;
@@ -137,7 +138,7 @@ public class CommentServiceImpl implements CommentService {
         }
         
         int safePage = Math.max(page, 1);
-        int safeLimit = Math.max(1, Math.min(limit, 50));
+        int safeLimit = Math.max(1, Math.min(limit, COMMENT_PAGE_SIZE));
         
         Pageable pageable = PageRequest.of(safePage - 1, safeLimit, SortUtils.parseSort(sortBy != null ? sortBy : "createdAt:desc"));
         

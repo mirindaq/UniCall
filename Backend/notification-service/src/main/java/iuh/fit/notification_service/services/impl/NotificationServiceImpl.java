@@ -15,13 +15,15 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
+    private static final int NOTIFICATION_PAGE_SIZE = 10;
+
     private final NotificationRepository notificationRepository;
 
     @Override
     public PageResponse<NotificationResponse> listMyNotifications(String identityUserId, int page, int limit) {
         String normalizedUserId = normalizeIdentityUserId(identityUserId);
         int safePage = Math.max(page, 1);
-        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        int safeLimit = Math.min(Math.max(limit, 1), NOTIFICATION_PAGE_SIZE);
         var result = notificationRepository.findByIdentityUserIdOrderByCreatedAtDesc(
                 normalizedUserId,
                 PageRequest.of(safePage - 1, safeLimit));

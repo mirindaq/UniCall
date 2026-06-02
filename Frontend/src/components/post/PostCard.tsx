@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { MoreHorizontal, MessageCircle, Send, Edit, Trash2, Globe, Lock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,8 @@ import type { PostPrivacy, CommentResponse, ReactionResponse } from "@/types/pos
 import { postService } from "@/services/post/post.service"
 import { userService } from "@/services/user/user.service"
 import { toast } from "sonner"
+
+const COMMENT_PAGE_SIZE = 5
 
 interface PostAuthor {
   name: string
@@ -70,8 +72,13 @@ export function PostCard({
   const [reactions, setReactions] = useState<ReactionResponse[]>([])
   const [userProfiles, setUserProfiles] = useState<Record<string, { firstName: string; lastName: string; avatar?: string | null }>>({})
   const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false)
   const [isLoadingReactions, setIsLoadingReactions] = useState(false)
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [commentPage, setCommentPage] = useState(0)
+  const [commentTotalPages, setCommentTotalPages] = useState(1)
   const [myProfile, setMyProfile] = useState<any>(null)
+  const hasMoreComments = commentPage < commentTotalPages
 
   // Fetch current user profile
   useEffect(() => {
@@ -84,45 +91,61 @@ export function PostCard({
       })
   }, [])
 
+  const loadCommentAuthorProfiles = async (commentList: CommentResponse[]) => {
+    const authorIds = [...new Set(commentList.map((comment) => comment.authorId))] as string[]
+    if (authorIds.length === 0) return
+
+    const profiles = await Promise.all(
+      authorIds.map((authorId) =>
+        userService.getProfileByIdentityUserId(authorId)
+          .then((res: any) => ({ id: authorId, profile: res?.data }))
+          .catch(() => ({ id: authorId, profile: null }))
+      )
+    )
+
+    const profileMap: Record<string, any> = {}
+    profiles.forEach(({ id, profile }: { id: string; profile: any }) => {
+      if (profile) profileMap[id] = profile
+    })
+    setUserProfiles(prev => ({ ...prev, ...profileMap }))
+  }
+
+  const loadCommentsPage = useCallback(async (page: number) => {
+    if (page === 1) {
+      setIsLoadingComments(true)
+    } else {
+      setIsLoadingMoreComments(true)
+    }
+
+    try {
+      const response = await postService.getPostComments(post.id, page, COMMENT_PAGE_SIZE)
+      const pageData = response.data.data
+      const commentList = pageData.items || []
+
+      setComments(prev => {
+        if (page === 1) return commentList
+
+        const existingIds = new Set(prev.map((comment) => comment.id))
+        const nextComments = commentList.filter((comment) => !existingIds.has(comment.id))
+        return [...prev, ...nextComments]
+      })
+      setCommentPage(pageData.page || page)
+      setCommentTotalPages(Math.max(pageData.totalPage || 1, 1))
+      await loadCommentAuthorProfiles(commentList)
+    } catch (error) {
+      console.error("Error loading comments:", error)
+    } finally {
+      setIsLoadingComments(false)
+      setIsLoadingMoreComments(false)
+    }
+  }, [post.id])
+
   // Fetch comments when showComments is toggled
   useEffect(() => {
-    if (showComments && comments.length === 0) {
-      setIsLoadingComments(true)
-      postService.getPostComments(post.id, 1, 20)
-        .then(response => {
-          console.log('response comment: ', response);
-
-          const commentList = (response as any)?.data?.data?.items || []
-          setComments(commentList)
-
-
-          // Fetch user profiles for comment authors
-          const authorIds = [...new Set(commentList.map((c: CommentResponse) => c.authorId))] as string[]
-          console.log('authorIds: ', authorIds);
-
-          return Promise.all(
-            authorIds.map((authorId) =>
-              userService.getProfileByIdentityUserId(authorId)
-                .then((res: any) => ({ id: authorId, profile: res?.data }))
-                .catch(() => ({ id: authorId, profile: null }))
-            )
-          )
-        })
-        .then((profiles: any[]) => {
-          const profileMap: Record<string, any> = {}
-          profiles.forEach(({ id, profile }: { id: string; profile: any }) => {
-            if (profile) profileMap[id] = profile
-          })
-          setUserProfiles(prev => ({ ...prev, ...profileMap }))
-        })
-        .catch(error => {
-          console.error("Error loading comments:", error)
-        })
-        .finally(() => {
-          setIsLoadingComments(false)
-        })
+    if (showComments && comments.length === 0 && !isLoadingComments) {
+      void loadCommentsPage(1)
     }
-  }, [showComments, post.id, comments.length])
+  }, [showComments, comments.length, isLoadingComments, loadCommentsPage])
 
   // Fetch reactions when dialog is opened
   useEffect(() => {
@@ -168,10 +191,11 @@ export function PostCard({
   }
 
   const handleComment = async () => {
-    if (!commentText.trim()) return
+    if (!commentText.trim() || isSubmittingComment) return
 
     const content = commentText.trim()
     setCommentText("")
+    setIsSubmittingComment(true)
 
     try {
       // Call API to create comment
@@ -180,10 +204,20 @@ export function PostCard({
         content,
       })
 
-      const newComment = (response as any)?.data
+      const newComment = response.data.data
       if (newComment) {
         // Append new comment to list
         setComments(prev => [newComment, ...prev])
+        if (myProfile) {
+          setUserProfiles(prev => ({
+            ...prev,
+            [newComment.authorId]: {
+              firstName: myProfile.firstName ?? "",
+              lastName: myProfile.lastName ?? "",
+              avatar: myProfile.avatar ?? null,
+            },
+          }))
+        }
 
         // Also call parent handler if exists
         onComment?.(post.id, content)
@@ -195,6 +229,8 @@ export function PostCard({
       toast.error("Không thể bình luận")
       // Restore comment text on error
       setCommentText(content)
+    } finally {
+      setIsSubmittingComment(false)
     }
   }
 
@@ -438,14 +474,14 @@ export function PostCard({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      handleComment()
+                      void handleComment()
                     }
                   }}
                 />
                 <Button
                   size="icon"
-                  onClick={handleComment}
-                  disabled={!commentText.trim()}
+                  onClick={() => void handleComment()}
+                  disabled={!commentText.trim() || isSubmittingComment}
                   className="bg-primary hover:bg-primary/90"
                 >
                   <Send className="size-4" />
@@ -486,13 +522,26 @@ export function PostCard({
                       </div>
                       <div className="flex gap-3 mt-1 px-3 text-xs text-muted-foreground">
                         <span>{formatRelativeTime(comment.createdAt)}</span>
-                        <button className="hover:underline font-medium">Thích</button>
-                        <button className="hover:underline font-medium">Trả lời</button>
+                        {/* <button className="hover:underline font-medium">Thích</button>
+                        <button className="hover:underline font-medium">Trả lời</button> */}
                       </div>
                     </div>
                   </div>
                 )
               })}
+
+              {!isLoadingComments && hasMoreComments && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-slate-600 hover:bg-slate-100"
+                  onClick={() => void loadCommentsPage(commentPage + 1)}
+                  disabled={isLoadingMoreComments}
+                >
+                  {isLoadingMoreComments ? "Đang tải..." : "Xem thêm bình luận"}
+                </Button>
+              )}
             </div>
           </div>
         )}

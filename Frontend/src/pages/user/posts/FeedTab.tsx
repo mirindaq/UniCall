@@ -263,17 +263,8 @@ export function FeedTab() {
       })
   }
 
-  const handleComment = (postId: number, content: string) => {
-    postService
-      .createComment({ postId, content })
-      .then(() => {
-        toast.success("Đã bình luận")
-        refetchFeed()
-      })
-      .catch((error) => {
-        console.error("Error commenting on post:", error)
-        toast.error("Không thể bình luận")
-      })
+  const handleComment = () => {
+    void refetchFeed()
   }
 
   const handleEdit = (postId: number) => {
@@ -330,7 +321,7 @@ export function FeedTab() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-4 p-3 sm:p-4">
+        <div className="mx-auto space-y-4 p-3 sm:p-4">
           {/* Create Post Card */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
