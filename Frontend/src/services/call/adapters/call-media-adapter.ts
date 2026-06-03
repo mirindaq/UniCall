@@ -5,6 +5,8 @@ export type SfuJoinOptions = {
   token: string
   onRemoteStreamChanged?: (stream: MediaStream | null) => void
   onParticipantIdsChanged?: (participantIds: string[]) => void
+  onParticipantStreamsChanged?: (streams: Record<string, MediaStream>) => void
+  onLocalStreamChanged?: (stream: MediaStream | null) => void
 }
 
 export type CallJoinOptions = {
