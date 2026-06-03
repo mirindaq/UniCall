@@ -580,6 +580,23 @@ function normalizeParticipantId(value?: string | null): string | null {
   return normalized || null
 }
 
+function findSenderProfile(
+  profiles: Record<string, { displayName: string; avatar?: string }>,
+  userId: string
+) {
+  if (profiles[userId]) {
+    return profiles[userId]
+  }
+  const normalizedId = normalizeParticipantId(userId)
+  if (!normalizedId) {
+    return undefined
+  }
+  const matchedEntry = Object.entries(profiles).find(
+    ([id]) => normalizeParticipantId(id) === normalizedId
+  )
+  return matchedEntry?.[1]
+}
+
 function buildMemberMentionToken(name: string): string {
   return `@${name}`
 }
@@ -2107,6 +2124,51 @@ export default function ChatWindow() {
   }, [currentUserId, selectedConversation, senderProfiles])
 
   useEffect(() => {
+    const joinedUserIds = conversationCall.activeCall?.joinedUserIds ?? []
+    if (joinedUserIds.length === 0) {
+      return
+    }
+    const missingIds = joinedUserIds.filter((id) => {
+      if (normalizeParticipantId(id) === normalizeParticipantId(currentUserId)) {
+        return false
+      }
+      return !findSenderProfile(senderProfiles, id)
+    })
+    if (missingIds.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    void Promise.all(
+      missingIds.map(async (identityUserId) => {
+        try {
+          const response =
+            await userService.getProfileByIdentityUserId(identityUserId)
+          const profile = response.data
+          const displayName =
+            `${profile.lastName ?? ""} ${profile.firstName ?? ""}`.trim() ||
+            identityUserId
+          return [
+            identityUserId,
+            { displayName, avatar: profile.avatar ?? undefined },
+          ] as const
+        } catch {
+          return [identityUserId, { displayName: identityUserId }] as const
+        }
+      })
+    ).then((entries) => {
+      if (cancelled || entries.length === 0) {
+        return
+      }
+      setSenderProfiles((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [conversationCall.activeCall?.joinedUserIds, currentUserId, senderProfiles])
+
+  useEffect(() => {
     const peerId = conversationCall.activeCall?.peerUserId
     if (!peerId || !isAuthenticated) {
       setCallPeerProfile(null)
@@ -2184,23 +2246,39 @@ export default function ChatWindow() {
     if (!selectedConversation || selectedConversation.type !== "GROUP") {
       return []
     }
-    const joinedUserIds = new Set(conversationCall.activeCall?.joinedUserIds ?? [])
-    const participantsToShow =
-      joinedUserIds.size > 0
-        ? selectedConversation.participantInfos.filter((participant) =>
-            joinedUserIds.has(participant.idAccount)
-          )
-        : selectedConversation.participantInfos
 
-    return participantsToShow.map((participant) => {
-      const profile = senderProfiles[participant.idAccount]
+    const joinedUserIds = conversationCall.activeCall?.joinedUserIds ?? []
+    const participantIds =
+      joinedUserIds.length > 0
+        ? joinedUserIds
+        : selectedConversation.participantInfos.map(
+            (participant) => participant.idAccount
+          )
+
+    const uniqueParticipantIds = participantIds.filter(
+      (id, index, list) =>
+        list.findIndex(
+          (item) => normalizeParticipantId(item) === normalizeParticipantId(id)
+        ) === index
+    )
+
+    return uniqueParticipantIds.map((participantId) => {
+      const isSelf =
+        normalizeParticipantId(participantId) ===
+        normalizeParticipantId(currentUserId)
+      const profile = findSenderProfile(senderProfiles, participantId)
       return {
-        id: participant.idAccount,
-        name: profile?.displayName ?? participant.idAccount,
+        id: participantId,
+        name: isSelf ? "Bạn" : profile?.displayName?.trim() || participantId,
         avatar: profile?.avatar,
       }
     })
-  }, [conversationCall.activeCall?.joinedUserIds, selectedConversation, senderProfiles])
+  }, [
+    conversationCall.activeCall?.joinedUserIds,
+    currentUserId,
+    selectedConversation,
+    senderProfiles,
+  ])
   const callModalPeerId = conversationCall.activeCall?.peerUserId ?? null
   const callModalAvatarFallback =
     peerUserId && callModalPeerId && peerUserId === callModalPeerId
@@ -3373,6 +3451,9 @@ export default function ChatWindow() {
           audioOnly={conversationCall.activeCall?.audioOnly ?? true}
           isGroupCall={selectedConversation?.type === "GROUP"}
           groupParticipants={callModalGroupParticipants}
+          currentUserId={currentUserId}
+          participantStreams={conversationCall.participantStreams}
+          localStream={conversationCall.localStream}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
@@ -3382,7 +3463,6 @@ export default function ChatWindow() {
           canToggleCamera={conversationCall.canToggleCamera}
           remoteAudioRef={conversationCall.remoteAudioRef}
           remoteVideoRef={conversationCall.remoteVideoRef}
-          localVideoRef={conversationCall.localVideoRef}
           onAccept={conversationCall.acceptIncomingCall}
           onAcceptWithoutCamera={
             conversationCall.acceptIncomingCallWithoutCamera
@@ -3950,6 +4030,9 @@ export default function ChatWindow() {
         audioOnly={conversationCall.activeCall?.audioOnly ?? true}
         isGroupCall={selectedConversation?.type === "GROUP"}
         groupParticipants={callModalGroupParticipants}
+        currentUserId={currentUserId}
+        participantStreams={conversationCall.participantStreams}
+        localStream={conversationCall.localStream}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
@@ -3959,7 +4042,6 @@ export default function ChatWindow() {
         canToggleCamera={conversationCall.canToggleCamera}
         remoteAudioRef={conversationCall.remoteAudioRef}
         remoteVideoRef={conversationCall.remoteVideoRef}
-        localVideoRef={conversationCall.localVideoRef}
         onAccept={conversationCall.acceptIncomingCall}
         onAcceptWithoutCamera={conversationCall.acceptIncomingCallWithoutCamera}
         onReject={conversationCall.rejectIncomingCall}

@@ -17,9 +17,15 @@ export class SFUCallAdapter implements CallMediaAdapter {
   private localStream: MediaStream | null = null
   private remoteStream: MediaStream | null = null
   private remoteTrackIds = new Set<string>()
+  private participantStreams = new Map<string, MediaStream>()
   private onRemoteStreamChanged: ((stream: MediaStream | null) => void) | null =
     null
   private onParticipantIdsChanged: ((participantIds: string[]) => void) | null =
+    null
+  private onParticipantStreamsChanged:
+    | ((streams: Record<string, MediaStream>) => void)
+    | null = null
+  private onLocalStreamChanged: ((stream: MediaStream | null) => void) | null =
     null
 
   private rebuildLocalStream() {
@@ -41,6 +47,11 @@ export class SFUCallAdapter implements CallMediaAdapter {
       })
 
     this.localStream = stream.getTracks().length > 0 ? stream : null
+    this.emitLocalStream()
+  }
+
+  private emitLocalStream() {
+    this.onLocalStreamChanged?.(this.localStream)
   }
 
   private emitParticipantIds() {
@@ -64,6 +75,35 @@ export class SFUCallAdapter implements CallMediaAdapter {
 
   private emitRemoteStream() {
     this.onRemoteStreamChanged?.(this.remoteStream)
+  }
+
+  private emitParticipantStreams() {
+    if (!this.onParticipantStreamsChanged) {
+      return
+    }
+    const streams: Record<string, MediaStream> = {}
+    this.participantStreams.forEach((stream, participantId) => {
+      if (stream.getTracks().length > 0) {
+        streams[participantId] = stream
+      }
+    })
+    this.onParticipantStreamsChanged(streams)
+  }
+
+  private ensureParticipantStream(participantId: string) {
+    let stream = this.participantStreams.get(participantId)
+    if (!stream) {
+      stream = new MediaStream()
+      this.participantStreams.set(participantId, stream)
+    }
+    return stream
+  }
+
+  private addTrackToStream(stream: MediaStream, mediaTrack: MediaStreamTrack) {
+    const exists = stream.getTracks().some((track) => track.id === mediaTrack.id)
+    if (!exists) {
+      stream.addTrack(mediaTrack)
+    }
   }
 
   private addRemoteTrack(track: RemoteTrack) {
@@ -96,17 +136,58 @@ export class SFUCallAdapter implements CallMediaAdapter {
     this.emitRemoteStream()
   }
 
+  private addParticipantTrack(participantId: string, track: RemoteTrack) {
+    const mediaTrack = track.mediaStreamTrack
+    if (!mediaTrack) {
+      return
+    }
+    const participantStream = this.ensureParticipantStream(participantId)
+    this.addTrackToStream(participantStream, mediaTrack)
+    this.emitParticipantStreams()
+    this.addRemoteTrack(track)
+  }
+
+  private removeParticipantTrack(participantId: string, track: RemoteTrack) {
+    const mediaTrack = track.mediaStreamTrack
+    if (!mediaTrack) {
+      return
+    }
+    const participantStream = this.participantStreams.get(participantId)
+    if (participantStream) {
+      participantStream.removeTrack(mediaTrack)
+      if (participantStream.getTracks().length === 0) {
+        this.participantStreams.delete(participantId)
+      }
+      this.emitParticipantStreams()
+    }
+    this.removeRemoteTrack(track)
+  }
+
+  private clearParticipantStreams() {
+    this.participantStreams.clear()
+    this.emitParticipantStreams()
+  }
+
   private bindRoomEvents(room: Room) {
     room.on(
       RoomEvent.TrackSubscribed,
       (
         track: RemoteTrack,
         _publication: RemoteTrackPublication,
-        _participant: RemoteParticipant
+        participant: RemoteParticipant
       ) => {
-        if (track.kind === Track.Kind.Audio || track.kind === Track.Kind.Video) {
-          this.addRemoteTrack(track)
+        if (track.kind !== Track.Kind.Audio && track.kind !== Track.Kind.Video) {
+          return
         }
+        if (participant.isLocal) {
+          this.rebuildLocalStream()
+          return
+        }
+        const participantId = participant.identity
+        if (!participantId) {
+          return
+        }
+        this.addParticipantTrack(participantId, track)
       }
     )
     room.on(
@@ -114,23 +195,41 @@ export class SFUCallAdapter implements CallMediaAdapter {
       (
         track: RemoteTrack,
         _publication: RemoteTrackPublication,
-        _participant: RemoteParticipant
+        participant: RemoteParticipant
       ) => {
-        this.removeRemoteTrack(track)
+        if (participant.isLocal) {
+          this.rebuildLocalStream()
+          return
+        }
+        const participantId = participant.identity
+        if (!participantId) {
+          this.removeRemoteTrack(track)
+          return
+        }
+        this.removeParticipantTrack(participantId, track)
       }
     )
     room.on(RoomEvent.ParticipantConnected, () => {
       this.emitParticipantIds()
     })
-    room.on(RoomEvent.ParticipantDisconnected, () => {
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      this.participantStreams.delete(participant.identity)
+      this.emitParticipantStreams()
       this.emitParticipantIds()
     })
     room.on(RoomEvent.Reconnected, () => {
       this.emitParticipantIds()
     })
+    room.on(RoomEvent.LocalTrackPublished, () => {
+      this.rebuildLocalStream()
+    })
+    room.on(RoomEvent.LocalTrackUnpublished, () => {
+      this.rebuildLocalStream()
+    })
     room.on(RoomEvent.Disconnected, () => {
       this.remoteTrackIds.clear()
       this.remoteStream = null
+      this.clearParticipantStreams()
       this.emitRemoteStream()
       this.emitParticipantIds()
     })
@@ -145,6 +244,8 @@ export class SFUCallAdapter implements CallMediaAdapter {
     await this.leave()
     this.onRemoteStreamChanged = sfu.onRemoteStreamChanged ?? null
     this.onParticipantIdsChanged = sfu.onParticipantIdsChanged ?? null
+    this.onParticipantStreamsChanged = sfu.onParticipantStreamsChanged ?? null
+    this.onLocalStreamChanged = sfu.onLocalStreamChanged ?? null
 
     const room = new Room()
     this.room = room
@@ -155,6 +256,7 @@ export class SFUCallAdapter implements CallMediaAdapter {
     this.rebuildLocalStream()
     this.emitParticipantIds()
     this.emitRemoteStream()
+    this.emitParticipantStreams()
 
     return this.localStream ?? new MediaStream()
   }
@@ -165,10 +267,14 @@ export class SFUCallAdapter implements CallMediaAdapter {
     this.localStream = null
     this.remoteTrackIds.clear()
     this.remoteStream = null
+    this.clearParticipantStreams()
     this.emitRemoteStream()
+    this.emitLocalStream()
     this.emitParticipantIds()
     this.onRemoteStreamChanged = null
     this.onParticipantIdsChanged = null
+    this.onParticipantStreamsChanged = null
+    this.onLocalStreamChanged = null
 
     if (room) {
       room.disconnect(true)

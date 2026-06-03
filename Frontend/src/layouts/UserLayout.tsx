@@ -416,7 +416,7 @@ export function UserLayout() {
             canToggleCamera={globalCall.canToggleCamera}
             remoteAudioRef={globalCall.remoteAudioRef}
             remoteVideoRef={globalCall.remoteVideoRef}
-            localVideoRef={globalCall.localVideoRef}
+            localStream={globalCall.localStream}
             onAccept={globalCall.acceptIncomingCall}
             onAcceptWithoutCamera={globalCall.acceptIncomingCallWithoutCamera}
             onReject={globalCall.rejectIncomingCall}

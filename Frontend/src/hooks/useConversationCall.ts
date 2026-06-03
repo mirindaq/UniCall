@@ -94,6 +94,10 @@ export function useConversationCall({
   const [phase, setPhase] = useState<CallPhase>("idle")
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+  const [participantStreams, setParticipantStreams] = useState<
+    Record<string, MediaStream>
+  >({})
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
@@ -277,6 +281,8 @@ export function useConversationCall({
     pendingIceCandidatesRef.current = []
     pendingIncomingOfferRef.current = null
     setRemoteStream(null)
+    setLocalStream(null)
+    setParticipantStreams({})
   }, [clearCloseDelayTimeout, clearRingTimeout, stopIncomingRingtone])
 
   const resetCall = useCallback(() => {
@@ -418,10 +424,18 @@ export function useConversationCall({
                     }
                   })
                 },
+                onParticipantStreamsChanged: (streams) => {
+                  setParticipantStreams(streams)
+                },
+                onLocalStreamChanged: (streamValue) => {
+                  localStreamRef.current = streamValue
+                  setLocalStream(streamValue)
+                },
               }
             : undefined,
         })
         localStreamRef.current = stream
+        setLocalStream(stream)
         const audioTrack = stream.getAudioTracks()[0]
         const videoTrack = stream.getVideoTracks()[0]
         setMicEnabled(audioTrack ? audioTrack.enabled : true)
@@ -775,8 +789,12 @@ export function useConversationCall({
       return
     }
     const nextEnabled = !videoTracks[0].enabled
-    void mediaAdapterRef.current.toggleCamera(nextEnabled)
-    setCameraEnabled(nextEnabled)
+    void mediaAdapterRef.current.toggleCamera(nextEnabled).then(() => {
+      const updatedStream = mediaAdapterRef.current.getLocalStream()
+      localStreamRef.current = updatedStream
+      setLocalStream(updatedStream)
+      setCameraEnabled(nextEnabled)
+    })
   }, [])
 
   useEffect(() => {
@@ -1063,13 +1081,13 @@ export function useConversationCall({
     if (!localVideo) {
       return
     }
-    if ((activeCall?.audioOnly ?? true) || !localStreamRef.current) {
+    if ((activeCall?.audioOnly ?? true) || !localStream) {
       localVideo.srcObject = null
       return
     }
-    localVideo.srcObject = localStreamRef.current
+    localVideo.srcObject = localStream
     void localVideo.play().catch(() => undefined)
-  }, [activeCall?.audioOnly, phase])
+  }, [activeCall?.audioOnly, localStream, phase])
 
   useEffect(
     () => () => {
@@ -1101,6 +1119,8 @@ export function useConversationCall({
     remoteAudioRef,
     remoteVideoRef,
     localVideoRef,
+    localStream,
+    participantStreams,
     startAudioCall,
     startVideoCall,
     acceptIncomingCall,
