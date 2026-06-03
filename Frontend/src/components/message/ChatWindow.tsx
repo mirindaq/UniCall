@@ -2206,13 +2206,17 @@ export default function ChatWindow() {
     peerUserId && callModalPeerId && peerUserId === callModalPeerId
       ? headerAvatar
       : undefined
-  const callModalName =
-    callPeerProfile?.displayName ??
-    (peerUserId && callModalPeerId && peerUserId === callModalPeerId
-      ? headerTitle
-      : callModalPeerId) ??
-    "Người dùng"
-  const callModalAvatar = callPeerProfile?.avatar ?? callModalAvatarFallback
+  const isGroupCallConversation = selectedConversation?.type === "GROUP"
+  const callModalName = isGroupCallConversation
+    ? headerTitle || "Nhóm"
+    : callPeerProfile?.displayName ??
+      (peerUserId && callModalPeerId && peerUserId === callModalPeerId
+        ? headerTitle
+        : callModalPeerId) ??
+      "Người dùng"
+  const callModalAvatar = isGroupCallConversation
+    ? headerAvatar
+    : callPeerProfile?.avatar ?? callModalAvatarFallback
 
   const handleOpenGroupVideoCallPicker = useCallback(() => {
     if (!selectedConversation || selectedConversation.type !== "GROUP") {
@@ -3371,8 +3375,11 @@ export default function ChatWindow() {
           callerName={callModalName}
           callerAvatar={callModalAvatar}
           audioOnly={conversationCall.activeCall?.audioOnly ?? true}
-          isGroupCall={selectedConversation?.type === "GROUP"}
+          isGroupCall={isGroupCallConversation}
+          currentUserId={currentUserId}
           groupParticipants={callModalGroupParticipants}
+          participantMedia={conversationCall.participantMedia}
+          localStream={conversationCall.localStream}
           startedAt={conversationCall.activeCall?.startedAt}
           ringDeadlineAt={conversationCall.ringDeadlineAt}
           ringDurationMs={conversationCall.ringDurationMs}
@@ -3948,8 +3955,11 @@ export default function ChatWindow() {
         callerName={callModalName}
         callerAvatar={callModalAvatar}
         audioOnly={conversationCall.activeCall?.audioOnly ?? true}
-        isGroupCall={selectedConversation?.type === "GROUP"}
+        isGroupCall={isGroupCallConversation}
+        currentUserId={currentUserId}
         groupParticipants={callModalGroupParticipants}
+        participantMedia={conversationCall.participantMedia}
+        localStream={conversationCall.localStream}
         startedAt={conversationCall.activeCall?.startedAt}
         ringDeadlineAt={conversationCall.ringDeadlineAt}
         ringDurationMs={conversationCall.ringDurationMs}
