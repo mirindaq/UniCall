@@ -1,4 +1,5 @@
 ﻿import {
+  Expand,
   Maximize2,
   Mic,
   MicOff,
@@ -6,6 +7,7 @@
   Phone,
   PhoneCall,
   PhoneOff,
+  Shrink,
   Video,
   VideoOff,
   X,
@@ -14,6 +16,9 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import type { SfuParticipantMedia } from "@/services/call/adapters/call-media-adapter"
+
+type GroupParticipant = { id: string; name: string; avatar?: string | null }
 
 type IncomingCallPopupProps = {
   open: boolean
@@ -29,7 +34,10 @@ type IncomingCallPopupProps = {
   cameraEnabled?: boolean
   canToggleCamera?: boolean
   isGroupCall?: boolean
-  groupParticipants?: Array<{ id: string; name: string; avatar?: string | null }>
+  currentUserId?: string | null
+  groupParticipants?: GroupParticipant[]
+  participantMedia?: SfuParticipantMedia[]
+  localStream?: MediaStream | null
   remoteAudioRef?: RefObject<HTMLAudioElement | null>
   remoteVideoRef?: RefObject<HTMLVideoElement | null>
   localVideoRef?: RefObject<HTMLVideoElement | null>
@@ -47,7 +55,144 @@ const formatDuration = (seconds: number) => {
   return `${mm.toString().padStart(2, "0")}:${ss.toString().padStart(2, "0")}`
 }
 
+const normalizeId = (value?: string | null) => value?.trim().toLowerCase() ?? ""
+
+const initialsOf = (name: string) => {
+  const text = name.trim()
+  if (!text) {
+    return "U"
+  }
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase()
+  }
+  return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase()
+}
+
 type PanelPosition = { x: number; y: number }
+
+/** Renders a MediaStream into a <video>, keeping srcObject in sync. */
+function StreamVideo({
+  stream,
+  mirror = false,
+  className,
+}: {
+  stream: MediaStream | null
+  mirror?: boolean
+  className?: string
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) {
+      return
+    }
+    if (video.srcObject !== stream) {
+      video.srcObject = stream
+    }
+    if (stream) {
+      void video.play().catch(() => undefined)
+    }
+  }, [stream])
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      className={`${className ?? ""} ${mirror ? "scale-x-[-1]" : ""}`}
+    />
+  )
+}
+
+type GroupTile = {
+  participant: GroupParticipant
+  isSelf: boolean
+  stream: MediaStream | null
+  hasVideo: boolean
+}
+
+function GroupCallGrid({
+  tiles,
+  pinnedId,
+  onPin,
+  fullscreen,
+}: {
+  tiles: GroupTile[]
+  pinnedId: string | null
+  onPin: (id: string) => void
+  fullscreen: boolean
+}) {
+  const ordered = (() => {
+    if (!pinnedId) {
+      return tiles
+    }
+    const pinned = tiles.find((tile) => tile.participant.id === pinnedId)
+    if (!pinned) {
+      return tiles
+    }
+    return [pinned, ...tiles.filter((tile) => tile.participant.id !== pinnedId)]
+  })()
+
+  const count = ordered.length
+  const gridColsClass =
+    count <= 1
+      ? "grid-cols-1"
+      : count === 2
+        ? "grid-cols-2"
+        : count <= 4
+          ? "grid-cols-2"
+          : count <= 9
+            ? "grid-cols-3"
+            : "grid-cols-4"
+
+  return (
+    <div className={`grid ${gridColsClass} gap-2`}>
+      {ordered.map((tile) => {
+        const { participant, isSelf, stream, hasVideo } = tile
+        const isPinned = participant.id === pinnedId
+        return (
+          <button
+            key={participant.id}
+            type="button"
+            onClick={() => onPin(participant.id)}
+            className={`group relative aspect-video overflow-hidden rounded-xl border bg-slate-800 text-left transition ${
+              isPinned ? "border-sky-400 ring-2 ring-sky-400/60" : "border-white/15"
+            } ${fullscreen ? "min-h-[140px]" : ""}`}
+          >
+            {hasVideo && stream ? (
+              <StreamVideo
+                stream={stream}
+                mirror={isSelf}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-800">
+                <Avatar className="h-14 w-14">
+                  <AvatarImage src={participant.avatar ?? undefined} alt={participant.name} />
+                  <AvatarFallback className="bg-slate-600 text-base font-semibold text-white">
+                    {initialsOf(participant.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="px-2 text-center text-[11px] text-slate-300">
+                  {hasVideo ? "Đang tải video..." : "Đã tắt camera"}
+                </span>
+              </div>
+            )}
+
+            <div className="absolute bottom-1.5 left-1.5 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-md bg-black/60 px-2 py-0.5">
+              <span className="truncate text-[11px] font-medium text-white">
+                {isSelf ? `${participant.name} (Bạn)` : participant.name}
+              </span>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function IncomingCallPopup({
   open,
@@ -63,7 +208,10 @@ export default function IncomingCallPopup({
   cameraEnabled = true,
   canToggleCamera = false,
   isGroupCall = false,
+  currentUserId,
   groupParticipants = [],
+  participantMedia = [],
+  localStream,
   remoteAudioRef,
   remoteVideoRef,
   localVideoRef,
@@ -77,6 +225,7 @@ export default function IncomingCallPopup({
   const [elapsed, setElapsed] = useState(0)
   const [remainingMs, setRemainingMs] = useState<number | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null)
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null)
 
@@ -134,7 +283,29 @@ export default function IncomingCallPopup({
     return () => window.clearInterval(timer)
   }, [phase, ringDeadlineAt, statusMessage])
 
-  const fallback = callerName.trim().slice(0, 2).toUpperCase() || "U"
+  // Keep React state in sync with the native fullscreen status.
+  useEffect(() => {
+    const handleChange = () => {
+      setIsFullscreen(document.fullscreenElement === panelRef.current)
+    }
+    document.addEventListener("fullscreenchange", handleChange)
+    return () => document.removeEventListener("fullscreenchange", handleChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    const panel = panelRef.current
+    if (!panel) {
+      return
+    }
+    if (document.fullscreenElement === panel) {
+      void document.exitFullscreen().catch(() => undefined)
+    } else {
+      setIsMinimized(false)
+      void panel.requestFullscreen().catch(() => undefined)
+    }
+  }
+
+  const fallback = initialsOf(callerName)
   const callKind = audioOnly ? "thoại" : "video"
   const countdownPercent =
     remainingMs == null ? null : Math.max(0, Math.min(100, (remainingMs / ringDurationMs) * 100))
@@ -164,7 +335,7 @@ export default function IncomingCallPopup({
   const handleClose = phase === "incoming" ? onReject : onEnd
 
   const onDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!inCallActive) {
+    if (!inCallActive || isFullscreen) {
       return
     }
     const target = event.target as HTMLElement
@@ -231,27 +402,33 @@ export default function IncomingCallPopup({
   }
 
   const showVideoArea = !audioOnly
-  const visibleGroupParticipants = (() => {
-    if (!isGroupCall) {
-      return []
-    }
-    const unique = groupParticipants.filter((item, index, arr) =>
-      arr.findIndex((it) => it.id === item.id) === index
-    )
-    if (unique.length === 0) {
-      return []
-    }
-    const pinned = unique.find((item) => item.id === pinnedParticipantId) ?? unique[0]
-    const others = unique.filter((item) => item.id !== pinned.id)
-    return [pinned, ...others].slice(0, 4)
-  })()
-  const hiddenGroupParticipantCount = Math.max(0, groupParticipants.length - visibleGroupParticipants.length)
+
+  const mediaByIdentity = new Map(
+    participantMedia.map((item) => [normalizeId(item.identity), item])
+  )
+
+  const uniqueGroupParticipants = groupParticipants.filter(
+    (item, index, arr) => arr.findIndex((it) => it.id === item.id) === index
+  )
+
+  const groupTiles: GroupTile[] = uniqueGroupParticipants.map((participant) => {
+    const isSelf = normalizeId(participant.id) === normalizeId(currentUserId)
+    const media = mediaByIdentity.get(normalizeId(participant.id))
+    const stream = isSelf ? localStream ?? null : media?.stream ?? null
+    const hasVideo = isSelf
+      ? Boolean(localStream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled))
+      : Boolean(media?.hasVideo)
+    return { participant, isSelf, stream, hasVideo }
+  })
+
   const useFloatingPanel = phase !== "in-call" || Boolean(statusMessage)
-  const modalClassName = useFloatingPanel
-    ? "w-[360px] max-w-[calc(100vw-1rem)]"
-    : showVideoArea
-      ? "w-[min(92vw,780px)] max-w-[92vw]"
-      : "w-[360px] max-w-[calc(100vw-1rem)]"
+  const modalClassName = isFullscreen
+    ? "h-screen w-screen max-w-none rounded-none"
+    : useFloatingPanel
+      ? "w-[360px] max-w-[calc(100vw-1rem)]"
+      : showVideoArea
+        ? "w-[min(92vw,820px)] max-w-[92vw]"
+        : "w-[360px] max-w-[calc(100vw-1rem)]"
 
   if (inCallActive && isMinimized) {
     return (
@@ -282,12 +459,12 @@ export default function IncomingCallPopup({
   return (
     <div
       className={`fixed z-50 flex ${
-        useFloatingPanel
+        useFloatingPanel && !isFullscreen
           ? "bottom-4 right-4 items-end justify-end"
           : "inset-0 items-center justify-center"
       }`}
       style={
-        inCallActive && panelPosition
+        inCallActive && panelPosition && !isFullscreen
           ? {
               left: panelPosition.x,
               top: panelPosition.y,
@@ -299,17 +476,23 @@ export default function IncomingCallPopup({
     >
       <div
         ref={panelRef}
-        className={`${modalClassName} rounded-2xl border border-slate-300 bg-white shadow-2xl ring-1 ring-slate-200`}
+        className={`${modalClassName} flex flex-col overflow-hidden border border-slate-300 bg-white shadow-2xl ring-1 ring-slate-200 ${
+          isFullscreen ? "" : "rounded-2xl"
+        }`}
       >
         <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
         <div
-          className={`flex items-center justify-between px-4 pt-3 ${inCallActive ? "cursor-move select-none" : ""}`}
+          className={`flex shrink-0 items-center justify-between px-4 pt-3 ${
+            inCallActive && !isFullscreen ? "cursor-move select-none" : ""
+          }`}
           onPointerDown={onDragStart}
         >
-          <span className="text-xs font-medium text-slate-400">{inCallActive ? "Giữ để kéo" : ""}</span>
+          <span className="text-xs font-medium text-slate-400">
+            {inCallActive && !isFullscreen ? "Giữ để kéo" : ""}
+          </span>
           <div className="flex items-center gap-1">
-            {inCallActive ? (
+            {inCallActive && !isFullscreen ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -319,6 +502,18 @@ export default function IncomingCallPopup({
                 onClick={() => setIsMinimized(true)}
               >
                 <Minimize2 className="h-4 w-4" />
+              </Button>
+            ) : null}
+            {inCallActive && showVideoArea ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-slate-500 hover:text-slate-700"
+                title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+                onClick={toggleFullscreen}
+              >
+                {isFullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
               </Button>
             ) : null}
             <Button
@@ -334,49 +529,32 @@ export default function IncomingCallPopup({
           </div>
         </div>
 
-        <div className="px-6 pb-5 text-center">
-          <p className="text-sm font-medium text-slate-500">{copy.label}</p>
+        <div
+          className={`flex min-h-0 flex-1 flex-col px-6 pb-5 text-center ${
+            isFullscreen ? "justify-center overflow-y-auto" : ""
+          }`}
+        >
+          <p className="shrink-0 text-sm font-medium text-slate-500">{copy.label}</p>
 
           {showVideoArea && !useFloatingPanel && isGroupCall ? (
-            <div className="mx-auto mt-3 w-full max-w-[760px] rounded-xl bg-slate-900 p-2">
-              <div className="grid grid-cols-2 gap-2">
-                {visibleGroupParticipants.map((participant, index) => {
-                  const fallbackText = participant.name.trim().slice(0, 2).toUpperCase() || "U"
-                  const showRemote = index === 0
-                  const showLocal = index === 1
-                  return (
-                    <button
-                      key={participant.id}
-                      type="button"
-                      className="relative aspect-video overflow-hidden rounded-lg border border-white/20 text-left"
-                      onClick={() => setPinnedParticipantId(participant.id)}
-                    >
-                      {showRemote ? (
-                        <video ref={remoteVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-                      ) : showLocal ? (
-                        <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
-                      ) : participant.avatar ? (
-                        <img src={participant.avatar} alt={participant.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-slate-700 text-xl font-semibold text-white">
-                          {fallbackText}
-                        </div>
-                      )}
-                      <div className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
-                        {participant.name}
-                      </div>
-                    </button>
-                  )
-                })}
-                {hiddenGroupParticipantCount > 0 ? (
-                  <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-white/25 bg-slate-800 text-lg font-semibold text-white">
-                    +{hiddenGroupParticipantCount}
-                  </div>
-                ) : null}
-              </div>
+            <div
+              className={`mx-auto mt-3 w-full rounded-xl bg-slate-900 p-2 ${
+                isFullscreen ? "max-w-[1400px]" : "max-w-[800px]"
+              }`}
+            >
+              <GroupCallGrid
+                tiles={groupTiles}
+                pinnedId={pinnedParticipantId}
+                onPin={setPinnedParticipantId}
+                fullscreen={isFullscreen}
+              />
             </div>
           ) : showVideoArea && !useFloatingPanel ? (
-            <div className="relative mx-auto mt-3 aspect-video w-full max-h-[62vh] overflow-hidden rounded-xl bg-slate-900">
+            <div
+              className={`relative mx-auto mt-3 aspect-video w-full overflow-hidden rounded-xl bg-slate-900 ${
+                isFullscreen ? "max-h-[80vh]" : "max-h-[62vh]"
+              }`}
+            >
               <video
                 ref={remoteVideoRef}
                 autoPlay
@@ -408,12 +586,14 @@ export default function IncomingCallPopup({
             </>
           )}
 
-          <p className={`mt-2 text-sm ${statusMessage ? "text-amber-600" : "text-slate-500"}`}>{copy.subtitle}</p>
+          <p className={`mt-2 shrink-0 text-sm ${statusMessage ? "text-amber-600" : "text-slate-500"}`}>
+            {copy.subtitle}
+          </p>
           {isGroupCall && inCallActive ? (
-            <p className="mt-1 text-xs text-slate-500">Tối đa hiển thị 4 người, bấm ô để ghim lên đầu.</p>
+            <p className="mt-1 shrink-0 text-xs text-slate-500">Bấm vào ô để ghim người đó lên đầu.</p>
           ) : null}
           {countdownPercent != null ? (
-            <div className={`mx-auto mt-3 ${showVideoArea && !useFloatingPanel ? "max-w-full" : "max-w-[500px]"}`}>
+            <div className={`mx-auto mt-3 shrink-0 ${showVideoArea && !useFloatingPanel ? "max-w-full" : "max-w-[500px]"}`}>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                 <div
                   className="h-full rounded-full bg-blue-600 transition-all duration-200"
@@ -425,7 +605,7 @@ export default function IncomingCallPopup({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 border-t border-slate-200 px-5 py-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 border-t border-slate-200 px-5 py-4">
           {statusMessage ? null : phase === "incoming" ? (
             <>
               <Button

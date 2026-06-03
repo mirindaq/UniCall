@@ -5,7 +5,10 @@ import { CALL_RING_TIMEOUT_MS, createRtcConfiguration } from "@/constants/call"
 import { useAuth } from "@/contexts/auth-context"
 import { chatService } from "@/services/chat/chat.service"
 import { createCallMediaAdapter } from "@/services/call/adapters/call-media-adapter.factory"
-import type { CallMediaAdapter } from "@/services/call/adapters/call-media-adapter"
+import type {
+  CallMediaAdapter,
+  SfuParticipantMedia,
+} from "@/services/call/adapters/call-media-adapter"
 import { chatSocketService } from "@/services/chat/chat-socket.service"
 import type {
   CallSignalType,
@@ -94,6 +97,8 @@ export function useConversationCall({
   const [phase, setPhase] = useState<CallPhase>("idle")
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [participantMedia, setParticipantMedia] = useState<SfuParticipantMedia[]>([])
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
@@ -277,6 +282,8 @@ export function useConversationCall({
     pendingIceCandidatesRef.current = []
     pendingIncomingOfferRef.current = null
     setRemoteStream(null)
+    setParticipantMedia([])
+    setLocalStream(null)
   }, [clearCloseDelayTimeout, clearRingTimeout, stopIncomingRingtone])
 
   const resetCall = useCallback(() => {
@@ -418,10 +425,14 @@ export function useConversationCall({
                     }
                   })
                 },
+                onParticipantMediaChanged: (media) => {
+                  setParticipantMedia(media)
+                },
               }
             : undefined,
         })
         localStreamRef.current = stream
+        setLocalStream(stream)
         const audioTrack = stream.getAudioTracks()[0]
         const videoTrack = stream.getVideoTracks()[0]
         setMicEnabled(audioTrack ? audioTrack.enabled : true)
@@ -1101,6 +1112,8 @@ export function useConversationCall({
     remoteAudioRef,
     remoteVideoRef,
     localVideoRef,
+    participantMedia,
+    localStream,
     startAudioCall,
     startVideoCall,
     acceptIncomingCall,
