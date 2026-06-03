@@ -7,6 +7,15 @@ spring:
     web-application-type: reactive
   codec:
     max-in-memory-size: 25MB
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:3s}
+      repositories:
+        enabled: false
   cloud:
     gateway:
       server:
@@ -16,6 +25,15 @@ spring:
               uri: lb://IDENTITY-SERVICE
               predicates:
                 - Path=/api/v1/auth/**
+              filters:
+                - &apiRateLimit
+                  name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userOrIpKeyResolver}"
+                    rate-limiter: "#{@redisRateLimiter}"
+                    redis-rate-limiter.replenishRate: ${API_GATEWAY_RATE_LIMIT_REPLENISH_RATE:20}
+                    redis-rate-limiter.burstCapacity: ${API_GATEWAY_RATE_LIMIT_BURST_CAPACITY:40}
+                    redis-rate-limiter.requestedTokens: ${API_GATEWAY_RATE_LIMIT_REQUESTED_TOKENS:1}
             - id: identity-ws
               uri: lb:ws://IDENTITY-SERVICE
               predicates:
@@ -24,26 +42,38 @@ spring:
               uri: lb://USER-SERVICE
               predicates:
                 - Path=/api/v1/users/**
+              filters:
+                - *apiRateLimit
             - id: friend-friends
               uri: lb://FRIEND-SERVICE
               predicates:
                 - Path=/api/v1/friends/**
+              filters:
+                - *apiRateLimit
             - id: friend-requests
               uri: lb://FRIEND-SERVICE
               predicates:
                 - Path=/api/v1/friend-requestes/**
+              filters:
+                - *apiRateLimit
             - id: file-files
               uri: lb://FILE-SERVICE
               predicates:
                 - Path=/api/v1/files/**
+              filters:
+                - *apiRateLimit
             - id: post-posts
               uri: lb://POST-SERVICE
               predicates:
                 - Path=/api/v1/posts/**
+              filters:
+                - *apiRateLimit
             - id: post-comments
               uri: lb://POST-SERVICE
               predicates:
                 - Path=/api/v1/comments/**
+              filters:
+                - *apiRateLimit
             - id: chat-ws
               uri: lb:ws://CHAT-SERVICE
               predicates:
@@ -52,35 +82,46 @@ spring:
               uri: lb://CHAT-SERVICE
               predicates:
                 - Path=/api/v1/chat/**
+              filters:
+                - *apiRateLimit
             - id: conversation-api
               uri: lb://CHAT-SERVICE
               predicates:
                 - Path=/api/v1/conversations/**
+              filters:
+                - *apiRateLimit
             - id: ai-chat-api
               uri: lb://CHAT-SERVICE
               predicates:
                 - Path=/api/v1/ai/chat/**
+              filters:
+                - *apiRateLimit
             - id: task-api
               uri: lb://TASK-SERVICE
               predicates:
                 - Path=/api/v1/tasks/**
+              filters:
+                - *apiRateLimit
             - id: notification-api
               uri: lb://NOTIFICATION-SERVICE
               predicates:
                 - Path=/api/v1/notifications,/api/v1/notifications/**
               filters:
+                - *apiRateLimit
                 - PrefixPath=/notification-service
             - id: notification-service-legacy
               uri: lb://NOTIFICATION-SERVICE
               predicates:
                 - Path=/api-gateway/notification-service/**
               filters:
+                - *apiRateLimit
                 - StripPrefix=1
             - id: saga-orchestrator-service
               uri: lb://SAGA-ORCHESTRATOR-SERVICE
               predicates:
                 - Path=/api-gateway/saga-orchestrator-service/**
               filters:
+                - *apiRateLimit
                 - StripPrefix=1
   security:
     oauth2:

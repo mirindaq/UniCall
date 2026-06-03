@@ -66,6 +66,19 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
+  redis:
+    image: redis:7.4-alpine
+    container_name: unicall-redis
+    restart: unless-stopped
+    labels:
+      <<: *unicall-infra-labels
+      unicall.service: redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
   qdrant:
     image: qdrant/qdrant:v1.15.5
     container_name: unicall-qdrant
@@ -170,9 +183,13 @@ services:
       unicall.service: api-gateway
     env_file:
       - ./Backend/.env
+    environment:
+      REDIS_HOST: ${API_GATEWAY_REDIS_HOST:-redis}
+      REDIS_PORT: ${API_GATEWAY_REDIS_PORT:-6379}
     depends_on:
       - discovery-service
       - keycloak
+      - redis
     ports:
       - "${API_GATEWAY_PORT:-8088}:8088"
 
@@ -319,10 +336,14 @@ services:
       unicall.service: chat-service
     env_file:
       - ./Backend/.env
+    environment:
+      REDIS_HOST: ${CHAT_REDIS_HOST:-redis}
+      REDIS_PORT: ${CHAT_REDIS_PORT:-6379}
     depends_on:
       - discovery-service
       - mongodb
       - rabbitmq
+      - redis
       - qdrant
       - keycloak
       - user-service
@@ -366,6 +387,7 @@ volumes:
   mysql_data:
   mongodb_data:
   rabbitmq_data:
+  redis_data:
   qdrant_data:
   keycloak_data:
   loki_data:

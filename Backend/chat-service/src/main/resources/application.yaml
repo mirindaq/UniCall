@@ -8,6 +8,8 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:admin123}
+  cache:
+    type: redis
   mongodb:
     uri: ${CHAT_MONGODB_URI:mongodb://localhost:27017/unicall_chat_service}
 
@@ -17,6 +19,14 @@ spring:
       max-request-size: 25MB
 
   data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:3s}
+      repositories:
+        enabled: false
     mongodb:
       auto-index-creation: true
   ai:
@@ -38,6 +48,8 @@ api:
   prefix: /api/v1
 
 app:
+  cache:
+    message-search-ttl-seconds: ${CHAT_MESSAGE_SEARCH_CACHE_TTL_SECONDS:3600}
   notification:
     exchange: ${NOTIFICATION_EXCHANGE:unicall.notification.exchange}
     routing-key-prefix: ${NOTIFICATION_ROUTING_KEY_PREFIX:notification.group}
