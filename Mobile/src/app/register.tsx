@@ -44,6 +44,7 @@ const normalizePhone = (value: string) => {
 };
 
 const isValidPhoneNumber = (value: string) => /^(0|\+84)\d{9}$/.test(value);
+const minimumRegisterAge = 18;
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const formatDateISO = (date: Date) => {
@@ -59,6 +60,15 @@ const formatDateDisplay = (date: Date) => {
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
 };
+
+const getAdultBirthDateLimit = () => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - minimumRegisterAge);
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+
+const isAtLeastMinimumAge = (date: Date) => date <= getAdultBirthDateLimit();
 
 const getApiErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof AxiosError) {
@@ -114,6 +124,7 @@ export default function RegisterScreen() {
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [hasAutoSentOtp, setHasAutoSentOtp] = useState(false);
   const [pendingRegisterPayload, setPendingRegisterPayload] = useState<RegisterPayloadWithoutOtp | null>(null);
+  const adultBirthDateLimit = useMemo(() => getAdultBirthDateLimit(), []);
 
   const canSubmit = useMemo(() => {
     return (
@@ -122,6 +133,7 @@ export default function RegisterScreen() {
       lastName.trim().length > 0 &&
       firstName.trim().length > 0 &&
       dateOfBirth !== null &&
+      isAtLeastMinimumAge(dateOfBirth) &&
       password.trim().length >= 8 &&
       confirmPassword.trim().length > 0 &&
       acceptedTerm1 &&
@@ -314,6 +326,15 @@ export default function RegisterScreen() {
         type: 'error',
         text1: 'Ngày sinh chưa hợp lệ',
         text2: 'Ngày sinh phải là ngày trong quá khứ.',
+      });
+      return;
+    }
+
+    if (!isAtLeastMinimumAge(dateOfBirth)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Chưa đủ tuổi đăng ký',
+        text2: 'Bạn cần đủ 18 tuổi để đăng ký tài khoản.',
       });
       return;
     }
@@ -540,7 +561,7 @@ export default function RegisterScreen() {
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
         mode="date"
-        maximumDate={new Date(Date.now() - 24 * 60 * 60 * 1000)}
+        maximumDate={adultBirthDateLimit}
         date={dateOfBirth ?? new Date(2000, 0, 1)}
         onConfirm={(selectedDate) => {
           setDateOfBirth(selectedDate);

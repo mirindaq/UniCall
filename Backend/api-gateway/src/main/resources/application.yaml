@@ -64,7 +64,13 @@ spring:
               uri: lb://TASK-SERVICE
               predicates:
                 - Path=/api/v1/tasks/**
-            - id: notification-service
+            - id: notification-api
+              uri: lb://NOTIFICATION-SERVICE
+              predicates:
+                - Path=/api/v1/notifications,/api/v1/notifications/**
+              filters:
+                - PrefixPath=/notification-service
+            - id: notification-service-legacy
               uri: lb://NOTIFICATION-SERVICE
               predicates:
                 - Path=/api-gateway/notification-service/**

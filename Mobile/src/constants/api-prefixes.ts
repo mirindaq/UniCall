@@ -10,7 +10,7 @@ export const API_PREFIXES = {
   conversations: `${API_V1_PREFIX}/conversations`,
   tasks: `${API_V1_PREFIX}/tasks`,
   files: `${API_V1_PREFIX}/files`,
-  notifications: `/api-gateway/notification-service${API_V1_PREFIX}/notifications`,
+  notifications: `${API_V1_PREFIX}/notifications`,
 } as const;
 
 export const API_WS_PREFIXES = {

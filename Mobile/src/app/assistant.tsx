@@ -17,9 +17,7 @@ import { AppStatusBarBlue } from '@/components/ui/app-status-bar-blue';
 import { assistantService } from '@/services/assistant.service';
 import type {
   AssistantAskResponse,
-  AssistantIntent,
   AssistantThreadMessageResponse,
-  AssistantToolCode,
 } from '@/types/assistant';
 
 type AssistantMessageRole = 'user' | 'assistant';
@@ -29,9 +27,6 @@ type AssistantMessageItem = {
   role: AssistantMessageRole;
   content: string;
   createdAt: string;
-  intent?: AssistantIntent;
-  toolsUsed?: AssistantToolCode[];
-  data?: unknown;
 };
 
 const formatTime = (value: string) => {
@@ -50,9 +45,6 @@ const fromHistoryMessage = (message: AssistantThreadMessageResponse): AssistantM
   role: toUiRole(message.role),
   content: message.content || '',
   createdAt: message.createdAt || new Date().toISOString(),
-  intent: message.intent,
-  toolsUsed: message.toolsUsed,
-  data: message.data,
 });
 
 const toAssistantMessage = (response: AssistantAskResponse): AssistantMessageItem => ({
@@ -60,9 +52,6 @@ const toAssistantMessage = (response: AssistantAskResponse): AssistantMessageIte
   role: 'assistant',
   content: response.answer || 'Mình chưa có câu trả lời phù hợp.',
   createdAt: new Date().toISOString(),
-  intent: response.intent,
-  toolsUsed: response.toolsUsed,
-  data: response.data,
 });
 
 const buildLocalId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -211,21 +200,6 @@ export default function AssistantScreen() {
                   }`}>
                   {message.content}
                 </Text>
-
-                {message.role === 'assistant' && message.intent ? (
-                  <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
-                    <View className="rounded-full bg-slate-100 px-2 py-1">
-                      <Text className="text-[10px] font-semibold text-slate-600">
-                        Intent: {message.intent}
-                      </Text>
-                    </View>
-                    {(message.toolsUsed ?? []).slice(0, 2).map((tool) => (
-                      <View key={`${message.id}-${tool}`} className="rounded-full bg-blue-50 px-2 py-1">
-                        <Text className="text-[10px] font-semibold text-blue-700">{tool}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
 
                 <Text
                   className={`mt-1.5 text-[10px] ${

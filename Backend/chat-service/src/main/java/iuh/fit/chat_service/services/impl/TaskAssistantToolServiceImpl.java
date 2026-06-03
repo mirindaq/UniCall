@@ -26,6 +26,7 @@ import java.text.Normalizer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -1111,6 +1112,18 @@ public class TaskAssistantToolServiceImpl implements TaskAssistantToolService {
             return null;
         }
         String value = raw.trim();
+        String normalized = normalizeText(value);
+        if (normalized.contains("ngay mai") || normalized.contains("tomorrow")) {
+            return LocalDate.now()
+                    .plusDays(1)
+                    .atStartOfDay(ZoneId.systemDefault())
+                    .toInstant();
+        }
+        if (normalized.contains("hom nay") || normalized.contains("today")) {
+            return LocalDate.now()
+                    .atStartOfDay(ZoneId.systemDefault())
+                    .toInstant();
+        }
         try {
             return Instant.parse(value);
         } catch (DateTimeParseException ignored) {
