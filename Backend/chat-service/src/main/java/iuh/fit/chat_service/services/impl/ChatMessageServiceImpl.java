@@ -98,6 +98,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     private final MessageVectorIndexEventPublisher messageVectorIndexEventPublisher;
     private final ConversationBlockService conversationBlockService;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final CachedMessageSearchService cachedMessageSearchService;
 
     @Override
     public PageResponse<MessageResponse> listMessages(
@@ -140,14 +141,14 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             throw new InvalidParamException("keyword không được để trống");
         }
 
-        String regexKeyword = Pattern.quote(keyword.trim());
-        Page<Message> result = messageRepository.searchVisibleForParticipant(
+        String normalizedKeyword = keyword.trim().toLowerCase(Locale.ROOT);
+        return cachedMessageSearchService.searchVisibleMessages(
                 conversationId,
                 identityUserId,
-                regexKeyword,
-                PageRequest.of(page - 1, limit, Sort.by(Sort.Direction.DESC, "timeSent"))
+                normalizedKeyword,
+                page,
+                limit
         );
-        return PageResponse.fromPage(result, MessageResponse::from);
     }
 
     @Override
@@ -275,6 +276,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             conversation.setDateUpdateMessage(now);
             conversationRepository.save(conversation);
         }
+        cachedMessageSearchService.evictAll();
 
         MessageResponse dto = MessageResponse.from(saved);
         broadcastToParticipants(conversation, dto);
@@ -303,6 +305,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setPinnedAt(null);
         message.setTimeUpdate(now);
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
@@ -329,6 +332,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(now);
 
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
@@ -351,6 +355,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(now);
 
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
@@ -451,6 +456,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(LocalDateTime.now());
 
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
@@ -475,6 +481,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         message.setTimeUpdate(LocalDateTime.now());
 
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         MessageResponse dto = MessageResponse.from(saved);
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         broadcastToParticipants(conversation, dto);
@@ -599,6 +606,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         hidden.add(identityUserId);
         message.setHiddenForAccountIds(hidden);
         Message saved = messageRepository.save(message);
+        cachedMessageSearchService.evictAll();
         Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
         scheduleVectorUpsert(saved);
     }
@@ -732,6 +740,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         conversation.setLastMessageContent(buildLastMessagePreview(normalizedContent, attachments));
         conversation.setDateUpdateMessage(now);
         conversationRepository.save(conversation);
+        cachedMessageSearchService.evictAll();
 
         broadcastToParticipants(conversation, MessageResponse.from(saved));
         scheduleVectorUpsert(saved);
