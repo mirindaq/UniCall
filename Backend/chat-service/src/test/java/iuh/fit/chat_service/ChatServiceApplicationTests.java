@@ -1,13 +1,15 @@
 package iuh.fit.chat_service;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.annotation.EnableCaching;
 
-@SpringBootTest
+import static org.assertj.core.api.Assertions.assertThat;
+
 class ChatServiceApplicationTests {
 
 	@Test
-	void contextLoads() {
+	void applicationEnablesCaching() {
+		assertThat(ChatServiceApplication.class.isAnnotationPresent(EnableCaching.class)).isTrue();
 	}
 
 }

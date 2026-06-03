@@ -7,7 +7,7 @@ COPY chat-service ./chat-service
 
 RUN mvn -f common-service/pom.xml -DskipTests install && \
     mvn -f proto-common/pom.xml -DskipTests install && \
-    mvn -f chat-service/pom.xml -DskipTests package
+    mvn -f chat-service/pom.xml package
 
 RUN JAR_PATH=$(find /workspace/chat-service/target -maxdepth 1 -name "*.jar" ! -name "*.original" | head -n 1) && \
     cp "$JAR_PATH" /workspace/app.jar
