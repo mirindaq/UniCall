@@ -46,6 +46,7 @@ type ForgotPasswordFormData = {
 const VIETNAM_COUNTRY_CODE = "+84"
 
 const REGISTER_EMAIL_DOMAIN = "@gmail.com"
+const MINIMUM_REGISTER_AGE = 18
 const STRONG_PASSWORD_REGEX =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 
@@ -90,6 +91,19 @@ function toBackendVietnamPhone(phoneNumber: string) {
 
 function isValidVietnamPhoneForBackend(phoneNumber: string) {
   return /^0\d{9}$/.test(toBackendVietnamPhone(phoneNumber))
+}
+
+function formatDateInputValue(value: Date) {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, "0")
+  const day = `${value.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function getAdultBirthDateLimit() {
+  const date = new Date()
+  date.setFullYear(date.getFullYear() - MINIMUM_REGISTER_AGE)
+  return formatDateInputValue(date)
 }
 
 export function AuthPage() {
@@ -151,6 +165,7 @@ export function AuthPage() {
   const title = useMemo(() => {
     return tab === "login" ? "Đăng nhập UniCall" : "Đăng ký tài khoản UniCall"
   }, [tab])
+  const adultBirthDateLimit = useMemo(() => getAdultBirthDateLimit(), [])
 
   const isOtpBusy = isSendingOtp || isVerifyingOtp
 
@@ -417,6 +432,11 @@ export function AuthPage() {
 
     if (!registerData.dateOfBirth) {
       toast.error("Vui lòng chọn ngày sinh.")
+      return
+    }
+
+    if (registerData.dateOfBirth > adultBirthDateLimit) {
+      toast.error("Bạn cần đủ 18 tuổi để đăng ký tài khoản.")
       return
     }
 
@@ -815,6 +835,7 @@ export function AuthPage() {
                     <Input
                       id="register-date-of-birth"
                       type="date"
+                      max={adultBirthDateLimit}
                       value={registerData.dateOfBirth}
                       onChange={(event) =>
                         setRegisterData({

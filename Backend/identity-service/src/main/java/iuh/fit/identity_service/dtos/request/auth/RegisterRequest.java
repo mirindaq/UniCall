@@ -1,5 +1,6 @@
 package iuh.fit.identity_service.dtos.request.auth;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Email;
@@ -19,6 +20,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RegisterRequest {
+    private static final int MINIMUM_AGE = 18;
+
     @NotBlank(message = "Phone number is required")
     @Pattern(
             regexp = "^(0|\\+84)\\d{9}$",
@@ -52,4 +55,9 @@ public class RegisterRequest {
 
     @NotBlank(message = "Firebase OTP token is required")
     private String firebaseIdToken;
+
+    @AssertTrue(message = "User must be at least 18 years old")
+    public boolean isAtLeastMinimumAge() {
+        return dateOfBirth == null || !dateOfBirth.isAfter(LocalDate.now().minusYears(MINIMUM_AGE));
+    }
 }
